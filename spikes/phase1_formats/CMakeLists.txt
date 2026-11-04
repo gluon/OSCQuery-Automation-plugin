@@ -53,9 +53,13 @@ if(NOT EXISTS "${_juce}/.patched")
     file(REMOVE_RECURSE "${_juce}")
     file(MAKE_DIRECTORY "${_juce}")
 
+    # Bytes exactly as JUCE stores them, whatever this machine's core.autocrlf: the
+    # three files the patch touches are CRLF in JUCE's own repository, and the patch
+    # carries CRLF to match (a patch with LF context applied on Windows and failed on
+    # macOS, 2026-11-04).
     execute_process(
-        COMMAND "${GIT_EXECUTABLE}" -C "${_repo}/ThirdParty/JUCE" archive --format=tar
-                -o "${CMAKE_BINARY_DIR}/juce.tar" HEAD
+        COMMAND "${GIT_EXECUTABLE}" -c core.autocrlf=false -C "${_repo}/ThirdParty/JUCE"
+                archive --format=tar -o "${CMAKE_BINARY_DIR}/juce.tar" HEAD
         RESULT_VARIABLE _rc)
     if(_rc)
         message(FATAL_ERROR "spike: git archive of ThirdParty/JUCE failed (is the submodule checked out?)")
@@ -70,7 +74,7 @@ if(NOT EXISTS "${_juce}/.patched")
 
     # A repository of its own, so `git apply` patches this tree and not the enclosing one.
     execute_process(COMMAND "${GIT_EXECUTABLE}" init -q WORKING_DIRECTORY "${_juce}")
-    execute_process(COMMAND "${GIT_EXECUTABLE}" apply --whitespace=nowarn "${_patch}"
+    execute_process(COMMAND "${GIT_EXECUTABLE}" -c core.autocrlf=false apply --whitespace=nowarn "${_patch}"
                     WORKING_DIRECTORY "${_juce}" RESULT_VARIABLE _rc)
     if(_rc)
         message(FATAL_ERROR "spike: juce-au-ishidden.patch does not apply to the pinned JUCE")
