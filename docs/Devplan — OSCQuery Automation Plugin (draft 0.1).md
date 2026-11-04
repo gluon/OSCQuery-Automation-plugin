@@ -284,6 +284,16 @@ profile required for v1, and the reply-port convention written into the spec dra
 - Reopen sequence as the PRD states: last host:port, UUID compare, DNS-SD by UUID, then by
   `NAME`; each bound path verified for existence and `TYPE`; stale slots keep automation and stop
   sending; `tree_hash` mismatch shows a one-line notice. No automatic rebinding, ever.
+- **The target is pointed at in one place** (decided 2026-11-04, in answer to "is this where a
+  master plugin comes in"): the registry maps each device identity to its current host and port,
+  process-wide, so slots never hold an address. The Monitor's device list, and the device pane of
+  every instance, show each device the session refers to with name, UUID if any, last address and
+  reachability; the user picks a found device or types an address, and every instance follows at
+  once. Each instance writes the new address into its own chunk on the next save, and the recents
+  store keeps it per user, so a sandboxed instance with its own registry finds it too. A device
+  with a UUID is re-found over DNS-SD with no click; pointing by hand is the path for a device
+  without one, or for two devices sharing a name. This is what a master plugin would have done,
+  without a track to delete, a load order, or IPC.
 - Notifications over the websocket (`PATH_REMOVED`, `PATH_RENAMED`, `PATH_CHANGED`) mark slots
   stale live; the editor shows the old path next to the current tree with a rebind button.
 - **Export/import** of bindings as standalone JSON addressed by `host_param_id`; a small converter
@@ -294,8 +304,9 @@ profile required for v1, and the reply-port convention written into the spec dra
   `ACCESS: 1` to one client and `3` to another.
 
 **Done when:** a session saved against the mock device on one address reopens against the same
-device on another address with every slot live; a renamed path shows stale and is rebound in one
-click; an exported JSON reimports into a fresh instance identically; all of it in CI with two
+device on another address with every slot live; a session against a mock device without a UUID
+reopens with the device unreachable, is pointed at the new address once in the Monitor, and
+every instance goes live; a renamed path shows stale and is rebound in one click; an exported JSON reimports into a fresh instance identically; all of it in CI with two
 mock devices.
 
 **Needs from the author:** nothing blocking.
