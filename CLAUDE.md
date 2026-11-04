@@ -104,8 +104,11 @@ ossia, libossia or any other OSCQuery implementation.
   `../WFS_DIY_v1/Builds/VisualStudio2022/x64/Release/App/`), Chataigne, ossia score, and go.dot
   (`../go.dot`). Each serves a tree with LISTEN, so a value moved in any of them is a record
   test without a hardware controller.
-- **Other machines on the author's farm:** a Mac mini for macOS (AU, Logic if installed,
-  notarisation) and a NUC running Ubuntu for Linux. Access details from the author when a phase
-  needs them.
+- **Other machines on the author's farm**, over SSH with key auth, online when the author is at
+  home (172.22.x is the home network): `ssh macmini` (a Mac mini, `pierre-olivierboulant@172.22.1.27`,
+  seen from the work network as `POB12.local`; ctest lives in `/opt/homebrew/bin`) for macOS,
+  AU, Logic if installed, and notarisation; `ssh nuc` (`pob@172.22.1.29`, Ubuntu, gdb and
+  coredumpctl present) for Linux. The aliases are in the author's `~/.ssh/config`. Moving a
+  branch there without a push: `git bundle`, `scp`, `git fetch` from the bundle, as go.dot does.
 - `cmake`, `pluginval` and `clap-validator` are not on `PATH` here; WFS-DIY's plugin build uses
   the Visual Studio generator through `Plugin/Scripts/build-all.ps1`.
