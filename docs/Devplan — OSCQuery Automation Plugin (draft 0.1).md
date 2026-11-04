@@ -139,10 +139,14 @@ so nothing waits on it; if it lands, it is a third way to build the same shim in
 
 | Check | Where |
 | --- | --- |
-| Rename a slot while active; the automation lane name follows | Reaper, Bitwig, Live, Nuendo (VST3); Logic (AU) |
+| Rename a slot while active; the automation lane name follows | Reaper, Samplitude, Live, Bitwig, Nuendo (VST3); Logic (AU) |
 | Hide an unbound slot; it leaves the host's parameter list | Logic (AU) |
-| A stale lane after rebind: what the host shows, what the user has to do | all five |
-| pluginval at strictness 5 on the VST3, `auval` on the AU | CI |
+| A stale lane after rebind: what the host shows, what the user has to do | all six |
+| pluginval at strictness 5 on the VST3, `auval` on the AU | CI, and the Mac mini |
+
+Reaper, Samplitude and Live are on the author's Windows machine; the Mac mini on the farm
+covers AU. Bitwig and Nuendo rows are filled when a licence is at hand, and the report says
+which rows are still empty.
 
 - **One day, information only:** clone `clap-juce-extensions` into `spikes/` and try to build it
   on JUCE 9.0.5. The result goes in the report. It is not a dependency either way.
@@ -155,7 +159,8 @@ so nothing waits on it; if it lands, it is a third way to build the same shim in
 **Done when:** the report exists, the five-ID decision is written into the PRD, and the spike is
 deleted from `spikes/`.
 
-**Needs from the author:** bench access to Reaper, Bitwig, Live, Nuendo and Logic.
+**Needs from the author:** access to the Mac mini; Bitwig and Nuendo licences, or an agreed
+empty row for each until one turns up.
 
 ---
 
@@ -271,9 +276,11 @@ the HTTP host). Nothing else.
 - Test: the mock device in HTTP-only mode is told the plugin's port by the test harness and sends
   values; the lane records exactly as it does over LISTEN.
 
-**Done when:** a fader on a controller feeding WFS-DIY writes a lane in Reaper and Bitwig in
-Touch mode, the lane plays back to the device, and the loop guard counter stays at zero during
-playback; a session with 32 receiving slots shows no missed values at the device's update rate.
+**Done when:** a value moved in WFS-DIY, Chataigne, ossia score or go.dot writes a lane in
+Reaper (and Bitwig once CLAP exists, Phase 5b) in Touch mode, the lane plays back to the
+device, and the loop guard counter stays at zero during playback; a session with 32 receiving
+slots shows no missed values at the device's update rate. The three applications are the record
+sources, so no hardware controller is needed on the bench.
 
 **Needs from the author:** the gesture idle timeout default. The reply port is decided (LISTEN
 when declared, else a UDP port shown in the editor and configured on the device side).
@@ -408,9 +415,10 @@ polished; the words for the failure-state tooltips.
 - A cross-format test: a state chunk saved from the CLAP opens in the VST3 and the AU with the
   same bindings, since the chunk is format-neutral by construction.
 
-**Done when:** one Reaper session on macOS opens the plugin as CLAP, VST3 and AU with identical
-bindings; Logic and Live run the AU and record; Linux CI uploads working CLAP and VST3; all
-installers produced from a clean checkout.
+**Done when:** one Reaper session on the Mac mini opens the plugin as CLAP, VST3 and AU with
+identical bindings; Live, and Logic if it is on the Mac mini, run the AU and record; the NUC
+runs the Linux CLAP and VST3 in Reaper against a device on the farm's network; all installers
+produced from a clean checkout.
 
 **Needs from the author:** signing identities. Nuendo is decided (VST3, best-effort naming);
 this phase writes down what `kParamTitlesChanged` actually does there, in `docs/bench/`.

@@ -97,8 +97,15 @@ ossia, libossia or any other OSCQuery implementation.
 
 ## The bench, as of 2026-11-04
 
-On the author's Windows machine: Reaper and Ableton Live installed; no Bitwig, no Nuendo. A
-Release build of WFS-DIY exists at `../WFS_DIY_v1/Builds/VisualStudio2022/x64/Release/App/`.
-`cmake`, `pluginval` and `clap-validator` are not on `PATH`; WFS-DIY's plugin build uses the
-Visual Studio generator through `Plugin/Scripts/build-all.ps1`. macOS and Linux are CI only
-until the author says otherwise.
+- **Hosts on this Windows machine:** Reaper and Samplitude (both VST3), Ableton Live. No
+  Bitwig, no Nuendo.
+- **OSCQuery applications on hand**, as devices to bind, as sources to record from, and as
+  conformance subjects: WFS-DIY (a Release build at
+  `../WFS_DIY_v1/Builds/VisualStudio2022/x64/Release/App/`), Chataigne, ossia score, and go.dot
+  (`../go.dot`). Each serves a tree with LISTEN, so a value moved in any of them is a record
+  test without a hardware controller.
+- **Other machines on the author's farm:** a Mac mini for macOS (AU, Logic if installed,
+  notarisation) and a NUC running Ubuntu for Linux. Access details from the author when a phase
+  needs them.
+- `cmake`, `pluginval` and `clap-validator` are not on `PATH` here; WFS-DIY's plugin build uses
+  the Visual Studio generator through `Plugin/Scripts/build-all.ps1`.
