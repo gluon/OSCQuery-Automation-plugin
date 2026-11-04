@@ -37,7 +37,7 @@ Repository: [github.com/pob31/OSCQuery-Automation-plugin](https://github.com/pob
 | --- | --- | --- |
 | Sound designer in a DAW (Reaper, Nuendo, Live, Logic) | Writes spatial moves against a renderer during creation | Browse the renderer's tree, bind azimuth/x/y/gain per track, draw curves, hear them played back |
 | Mixing engineer with a controller | Moves objects from a fader or tablet while the DAW records | `LISTEN` feedback from the device written into automation lanes in Write/Touch/Latch |
-| Touring tech | Reopens the session at a new venue with a different renderer IP | Rebind by device UUID or name, see which slots are unresolved, fix them in one dialog |
+| Touring tech | Reopens the session at a new venue with a different renderer IP | Rebind by device name, see which slots are unresolved, fix them in one dialog |
 | Research platform (PRISM) | WFS, Ambisonics and haptic floor in one room with no shared namespace | One plugin per track driving any of the three devices, chosen from the browser |
 | Device manufacturer (Holophonix, d&b, L-Acoustics, Fletcher Machine) | Asked to add OSCQuery | A client that proves the profile works and a test matrix showing where their implementation falls short |
 | Show control (Go.dot, QLab, ossia) | Needs the same bindings outside the DAW | Bindings exported as JSON so other clients can reuse them |
@@ -48,9 +48,9 @@ Discovery happens in the plugin editor, never in the audio thread, and only when
 
 **Finding devices**
 
-- Browse `_oscjson._tcp` via DNS-SD (mDNS) on all active interfaces. Show name, host, port and, when present, the device UUID from `HOST_INFO`.
+- Browse `_oscjson._tcp` via DNS-SD (mDNS) on all active interfaces. Show the `NAME` from `HOST_INFO`, host and port.
 - Manual entry fallback: host and port typed by the user. Required, because multicast often does not cross VLANs on show networks.
-- Recent devices list, persisted in the plugin's global settings (not the session), keyed by UUID.
+- Recent devices list, persisted in the plugin's global settings (not the session), keyed by `NAME` plus last known host:port.
 - Each discovered device is probed with `GET /?HOST_INFO` before it is listed. Devices that fail the probe show as unreachable, not hidden.
 
 **Reading the tree**
@@ -63,7 +63,7 @@ Discovery happens in the plugin editor, never in the audio thread, and only when
 
 **Conformance the plugin assumes from the device (the Core profile)**
 
-1. `HOST_INFO` with `NAME`, `OSC_PORT`, `OSC_TRANSPORT`; UUID strongly recommended.
+1. `HOST_INFO` with `NAME`, `OSC_PORT`, `OSC_TRANSPORT`, as the OSCQuery proposal defines them; `NAME` stable across reboot. The profile adds no field to `HOST_INFO` (decided 2026-11-04: the proposal needs support, not a rewrite).
 2. A static tree whose paths survive reboot and session reload.
 3. `TYPE` and `RANGE` on every bindable leaf.
 
@@ -76,7 +76,7 @@ Each plugin instance owns a fixed pool of **N generic slots** (N = 32 by default
 | Slot field | Source | Notes |
 | --- | --- | --- |
 | Host parameter ID | Fixed at build time | Stable across binds, renames and sessions; automation curves attach to it |
-| Device | User choice in browser | Stored as UUID + name + last known host:port |
+| Device | User choice in browser | Stored as `NAME` + last known host:port, plus an optional identity leaf (a read-only node the user designates, such as a serial number) |
 | Path | User choice in browser | Full OSC path, with argument index for multi-argument nodes |
 | Type | From tree | `f`, `i`, `T/F`; drives the OSC type tag on send |
 | Range | From tree, user-overridable | Maps host 0–1 to device units; `RANGE` absent → user must enter min/max before the slot is active |
@@ -119,7 +119,7 @@ The plugin never changes its parameter count at runtime. It changes names, group
 
 - UDP by default to `OSC_IP:OSC_PORT` from `HOST_INFO`; TCP (SLIP-framed) when `OSC_TRANSPORT` is TCP or the node is marked `CRITICAL`.
 - **One bundle per device per audio block**, holding every changed slot from every instance in the process. Bundles are about jitter and atomicity, not raw latency: 64 tracks moving xyz become one datagram instead of 192, and the device applies x, y and z together. Bundles stay under the MTU (about 1,400 bytes, 40 to 45 three-float messages) and split beyond that.
-- **Timetags.** Devices that honour bundle timetags (WFS-DIY does; most commercial renderers do not) receive timetag = intended playback time and schedule the change themselves. A device advertises this with a `TIMETAGS` field in `HOST_INFO`; proposed as a Core profile field. Devices without it receive the immediate timetag.
+- **Timetags.** Devices that honour bundle timetags (WFS-DIY does; most commercial renderers do not) receive timetag = intended playback time and schedule the change themselves. Whether a device honours them is a per-device setting the user ticks in the Monitor, default off, since OSCQuery has no field for it and the profile adds none (decided 2026-11-04). Devices with the setting off receive the immediate timetag.
 - **No rate limit by default.** Every block that has changes is sent and the device smooths. The per-slot limiter exists as protection for lossy links or slow devices, default off.
 - A shared network thread per device across all plugin instances in the process, so 64 tracks do not open 64 sockets. Instances register with a process-wide device registry; sends from the audio thread go through a lock-free queue to a realtime-priority network thread (a few hundred microseconds). An option sends with non-blocking `sendto` directly from the audio thread for the lowest latency, at the risk of a stall on a full socket buffer; default off.
 
@@ -145,13 +145,13 @@ All bindings live in the plugin's state chunk inside the DAW session. No externa
 **State chunk (JSON, versioned)**
 
 - `version`
-- `devices[]`: `uuid`, `name`, `last_host`, `last_port`, `tree_hash` (hash of the bindable leaves at bind time)
-- `slots[]`: `host_param_id`, `device_uuid`, `path`, `arg_index`, `type`, `range`, `scaling`, `direction`, `display_name`, `range_overridden`
+- `devices[]`: `name`, `last_host`, `last_port`, `tree_hash` (hash of the bindable leaves at bind time), `identity_path` and `identity_value` (optional), `honours_timetags`, `offset_ms`
+- `slots[]`: `host_param_id`, `device_index`, `path`, `arg_index`, `type`, `range`, `scaling`, `direction`, `display_name`, `range_overridden`
 
 **Reopening a session**
 
-1. For each device, try the last host:port and compare the UUID from `HOST_INFO`.
-2. On mismatch or no answer, browse DNS-SD for the same UUID, then for the same `NAME`.
+1. For each device, try the last host:port and compare `NAME` from `HOST_INFO`, and the identity leaf's value when one is set.
+2. On mismatch or no answer, browse DNS-SD for the same `NAME`. Several candidates are told apart by the identity leaf, then by `tree_hash`; if still ambiguous, the device shows as unresolved and the user points at it once (in the Monitor or any instance's device pane), and every instance follows.
 3. Once found, verify each bound path still exists with the same `TYPE`. Missing or retyped paths mark the slot as stale; it keeps its automation but stops sending.
 4. If `tree_hash` differs, show a one-line notice in the editor so the user knows the device changed since the bind.
 
@@ -185,7 +185,7 @@ The editor has two panes and no modal dialogs: a **device browser** on the left 
 
 **Device browser**
 
-- Device list from DNS-SD plus manual entries and recents; each with name, host, UUID short form, reachability dot.
+- Device list from DNS-SD plus manual entries and recents; each with name, host, identity value when set, reachability dot.
 - Tree view of the selected device with search-as-you-type on path and `DESCRIPTION`. Leaves show type, range and unit inline; non-writable leaves are shown but marked.
 - A `Copy tree as JSON` button for bug reports to manufacturers.
 
@@ -227,11 +227,11 @@ Dates are placeholders to be set once staffing is known; order and gates are the
 
 | # | Milestone | Deliverable | Gate |
 | --- | --- | --- | --- |
-| 0 | Core profile draft | 4-page spec of `HOST_INFO`, UUID, path stability, `TYPE`/`RANGE`, `ACCESS` per client | Reviewed by Holophonix and one ossia maintainer |
+| 0 | Core profile draft | 4-page spec of `HOST_INFO` as defined, stable `NAME`, path stability, `TYPE`/`RANGE`, `ACCESS` per client | Reviewed by Holophonix and one ossia maintainer |
 | 1 | Framework decision | Spike: 8-slot CLAP + VST3 build, rename works in Reaper and Bitwig | CLAP path chosen (`clap-juce-extensions` vs native) |
 | 2 | Discovery and bind | Browser, tree model, bind, send over UDP, state chunk | WFS-DIY driven from Reaper with no typed address |
 | 3 | Record | `LISTEN` to host automation, loop guard, Write/Touch/Latch semantics | Controller moves recorded in Reaper and Bitwig |
-| 4 | Re-identification | UUID rebind, stale slots, export/import JSON | Session moved between two machines with different IPs |
+| 4 | Re-identification | Rebind by `NAME` and identity leaf, pointing once in the Monitor, stale slots, export/import JSON | Session moved between two machines with different IPs |
 | 5 | AU and Linux | AU build in Logic and Live; Linux CLAP/VST3 | Same session file opens in all three formats |
 | 6 | Conformance CLI | Core and Live checks, matrix output | Run against WFS-DIY, Holophonix, ossia, Chataigne |
 | 7 | Public beta and AES draft | v0.9 release, matrix published, draft submitted to AES standards | Manufacturers contacted with their matrix row |
@@ -243,7 +243,7 @@ Each check is pass/fail, run by the conformance CLI. Rows are devices; the publi
 | Check | Profile | What passes |
 | --- | --- | --- |
 | C1 `HOST_INFO` | Core | Answers `GET /?HOST_INFO` with `NAME`, `OSC_PORT`, `OSC_TRANSPORT` |
-| C2 Device UUID | Core | A persistent UUID in `HOST_INFO`, unchanged across reboot |
+| C2 Stable `NAME` | Core | `HOST_INFO` `NAME` unchanged across reboot, and the same as the DNS-SD instance name |
 | C3 DNS-SD | Core | Advertises `_oscjson._tcp` with the same name and port |
 | C4 Typed leaves | Core | Every writable leaf has `TYPE`; floats and ints have `RANGE` |
 | C5 Path stability | Core | Tree hash identical after reboot and after session reload |
@@ -260,7 +260,7 @@ Initial subjects: WFS-DIY, XOA/Tight-WFS, the PRISM haptic floor controller, Hol
 ## Open questions
 
 - [ ] **Reply port for devices without websocket.** The OSCQuery proposal gives no way for a client to tell the device where to send OSC feedback. Candidates: a `REPLY_PORT` query parameter on `GET`, a `/register` convention, or require the Live profile for record. This is the one gap the Core profile cannot leave open if record is a v1 feature.
-- [ ] **UUID field name.** `HOST_INFO` has no standard key for it. Propose `UUID` and check what Holophonix and ossia already emit before fixing the name.
+- [x] **UUID field name.** Closed 2026-11-04: no UUID, and no new `HOST_INFO` field of any kind. OSCQuery is itself a proposal that needs support, not a rewrite. Identity is `NAME`, the tree hash, and an optional identity leaf the user designates in the device's own tree; what that cannot resolve, the user resolves by pointing once. The same rule removes the `TIMETAGS` field.
 - [ ] **Slot count variants.** Separate plugin IDs per size (8/16/32/64/128) or one plugin with a large fixed pool and hidden slots? Hidden works in CLAP and AU, not VST3, which argues for variants.
 - [x] **Licence.** Decided 2026-11-04: GPLv3 for the plugin and the client library, matching WFS-DIY and go.dot so their OSCQuery and mDNS code is reused as is. JUCE (AGPLv3 tier) and the VST3 SDK (GPLv3 or Steinberg agreement) make an open-source binary GPL in practice regardless of the source licence, so MIT bought nothing for the plugin. Cost: manufacturers cannot bundle the library in closed firmware; they run the conformance CLI instead.
 - [ ] **JUCE CLAP status.** Verify whether JUCE has shipped native CLAP support before milestone 1; it changes the build but not the design.

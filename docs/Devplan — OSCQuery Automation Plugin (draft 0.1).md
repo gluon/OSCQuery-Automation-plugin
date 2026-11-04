@@ -8,7 +8,10 @@ will be broken into subphases as they go.
 **GPLv3** for both, replacing the PRD's MIT. Rust was considered and set aside: it removes JUCE's
 AGPL from the plugin but not the VST3 SDK's GPL, and nih-plug's static parameter model does not
 fit a plugin whose whole point is renaming parameters after bind. The PRD's licence lines are
-amended.
+amended. **Also decided the same day: the Core profile adds no field to `HOST_INFO`.** OSCQuery
+is itself a proposal that needs support, not a rewrite. No UUID, no `TIMETAGS`. Device identity
+is `NAME`, the tree hash, and an optional identity leaf the user designates in the device's own
+tree; timetag support is a per-device setting. The PRD is amended accordingly.
 
 ---
 
@@ -42,7 +45,7 @@ These change the build, not the design. Each is re-checked at the phase that dep
 | JUCE 9.0.5 is the version WFS-DIY and go.dot build on; its `juce_audio_plugin_client` has AAX, AU, LV2, Standalone, Unity and VST3 targets and **no CLAP** | `ThirdParty/JUCE` in both repos | The PRD's "native JUCE CLAP if it has landed" branch is closed for now. Phase 1 chooses between the two wrappers below. |
 | `clap-juce-extensions` documents JUCE 6, 7 and 8; JUCE 9 is not mentioned. It exposes `clap_juce_audio_processor_capabilities` and `clap_juce_parameter_capabilities` but its README does not say whether hidden flags, info rescans or `clap_host_params->clear()` are reachable | github.com/free-audio/clap-juce-extensions | Spike A in Phase 1 has to prove JUCE 9 compatibility and reach the three CLAP features the PRD counts on. |
 | `clap-wrapper` turns a native CLAP into VST3, AUv2, AUv3 and a Standalone; AAX is dual-licensed (GPL-3 or Avid's agreement) | github.com/free-audio/clap-wrapper | Spike B in Phase 1: write the plugin as a native CLAP, keep JUCE for the editor and networking, let clap-wrapper produce VST3 and AU. This is the CLAP-reference path the PRD argues for, taken literally. |
-| WFS-DIY's `HOST_INFO` emits `NAME`, `OSC_PORT`, `OSC_TRANSPORT` (UDP), `WS_PORT` and `EXTENSIONS` for ACCESS, VALUE, RANGE, DESCRIPTION, TYPE, CLIPMODE, LISTEN. No UUID, no `OSC_IP`, no mDNS announcement, `PATH_CHANGED` only (no `PATH_REMOVED`/`PATH_RENAMED`), `ACCESS` is global, not per client | `Source/Network/OSCQueryServer.cpp` in WFS-DIY | WFS-DIY as the first conformance subject fails C2, C3, C6 and L2 today. Companion work in WFS-DIY is listed per phase below. |
+| WFS-DIY's `HOST_INFO` emits `NAME`, `OSC_PORT`, `OSC_TRANSPORT` (UDP), `WS_PORT` and `EXTENSIONS` for ACCESS, VALUE, RANGE, DESCRIPTION, TYPE, CLIPMODE, LISTEN. No `OSC_IP`, no mDNS announcement, `PATH_CHANGED` only (no `PATH_REMOVED`/`PATH_RENAMED`), `ACCESS` is global, not per client | `Source/Network/OSCQueryServer.cpp` in WFS-DIY | WFS-DIY as the first conformance subject fails C3, C6 and L2 today. Companion work in WFS-DIY is listed per phase below. |
 | go.dot already has multicast DNS written in-house (`src/wfg/engine/oscquery/Mdns.{h,cpp}`, `Discovery.{h,cpp}`): a codec, a browser on every interface sharing port 5353 with the system responder, and an announcer | go.dot repo, built 2026-10-17 | The client library's DNS-SD comes from there, not from a new implementation or a platform SDK. |
 | WFS-DIY's plugin suite has `OscQueryClient` (HTTP GET, websocket LISTEN/IGNORE, `PATH_CHANGED`), `OscTransport` (UDP send incl. three-float messages), `RateLimiter`, and a *Bridge* pattern: a shared dynamic library loaded by every plugin binary with a versioned ABI | `Plugin/Source/Shared` in WFS-DIY | The library's HTTP/websocket layer starts from `OscQueryClient`; the process-wide registry starts from the Bridge pattern. |
 | WFS-DIY and go.dot are **GPL-3**; the PRD put the plugin and the library under **MIT**; JUCE 8+ is AGPLv3 or commercial, the VST3 SDK GPLv3 or Steinberg's agreement | both `LICENSE` files; juce.com; steinberg.net | An open-source binary is GPL in practice whatever the source licence says. Decided 2026-11-04: **GPLv3 for plugin and library**, so files from WFS-DIY and go.dot are copied as they are, JUCE types included. The library is not bundleable in closed firmware; manufacturers use the conformance CLI. |
@@ -74,10 +77,13 @@ their author and gain an origin line.
 **Goal:** a 4-page spec other people can review, and a repo that builds an empty plugin on three
 platforms.
 
-- **Core profile draft** in `docs/spec/core-profile-draft-0.1.md`: `HOST_INFO` fields, the UUID
-  key, path stability, `TYPE`/`RANGE` on every bindable leaf, `ACCESS` as reported to this client,
-  subtree GET, the proposed `TIMETAGS` field. Each clause maps to one check in the PRD's
-  interoperability matrix (C1–C7); the Live profile (L1–L5) is a second, shorter section.
+- **Core profile draft** in `docs/spec/core-profile-draft-0.1.md`: `HOST_INFO` fields as the
+  OSCQuery proposal defines them and nothing more, `NAME` stable across reboot and equal to the
+  DNS-SD instance name, path stability, `TYPE`/`RANGE` on every bindable leaf, `ACCESS` as
+  reported to this client, subtree GET. Each clause maps to one check in the PRD's
+  interoperability matrix (C1–C7); the Live profile (L1–L5) is a second, shorter section. The
+  draft says in one paragraph why it adds no field: a profile of the proposal is easier to adopt
+  than an amendment to it.
 - Repo scaffold: CMake, submodules pinned (JUCE 9.0.5 at the same commit as WFS-DIY,
   `juce_simpleweb`, `clap`, `clap-helpers`, and both candidate wrappers for Phase 1), GPLv3 file
   headers in go.dot's form reading `Copyright (C) 2026 Pierre-Olivier Boulant, Julien Bayle`
@@ -111,8 +117,6 @@ has gone out for review; the mock device serves a fixture tree and a test reads 
 
 - Nothing blocking. Copyright holders are decided (Pierre-Olivier Boulant, Julien Bayle). Files
   copied from WFS-DIY and go.dot keep their original header and gain a one-line origin note.
-- The UUID key name to propose (`UUID`, or whatever Holophonix and ossia already emit; the PRD
-  wants this checked before the name is fixed).
 - The two reviewers for the spec (Holophonix, one ossia maintainer).
 
 ---
@@ -183,8 +187,9 @@ above it.
   a manual host:port entry path that goes through the same probe.
 - **OSC**: messages, bundles with timetags, MTU-aware splitting, UDP and SLIP-over-TCP senders,
   a UDP receiver for the Phase 4 fallback.
-- **Recents store**: devices keyed by UUID in the per-user settings location, with the standard
-  JUCE `PropertiesFile` paths.
+- **Recents store**: devices keyed by `NAME` plus last host:port in the per-user settings
+  location, with the standard JUCE `PropertiesFile` paths; the identity leaf's path and value
+  kept alongside when set.
 - Tests against the mock device: full tree, lazy subtree, every notification, a device that
   answers `HOST_INFO` and nothing else, a device without websocket, a 10,000-leaf tree in under
   2 s (L5, measured on loopback). Serialisation tests run under `fr_FR` as well as `C` because
@@ -210,15 +215,16 @@ repo later (Phase 8 splits it).
   the last known value for arguments not being automated.
 - **State chunk**: the PRD's JSON, `version` from the first commit, a loader that reads every
   past version (fixtures kept in `tests/state/`), unknown fields preserved on round-trip.
-- **Device registry**: process-wide, one entry per device UUID, one network thread per device at
+- **Device registry**: process-wide, one entry per resolved device (`NAME` plus identity leaf
+  value, resolved to one host:port), one network thread per device at
   realtime priority, a lock-free queue from each instance's audio thread. Instances register in
   `prepareToPlay` (or the CLAP `activate`) and again whenever the host restarts the process
   (Logic's `AUHostingService` does this; WFS-DIY learnt it the hard way). If Phase 1 showed one
   binary per format, the registry is a static in that binary; if not, it is a Bridge-style shared
   library with a versioned ABI and an exact-match version check.
 - **Send path**: one bundle per device per audio block holding every changed slot from every
-  instance, split at the MTU, immediate timetag unless `HOST_INFO` advertises `TIMETAGS`, in
-  which case timetag = intended playback time plus the per-device offset. Per-slot rate limiter,
+  instance, split at the MTU, immediate timetag unless the device's *honours timetags* setting is
+  on, in which case timetag = intended playback time plus the per-device offset. Per-slot rate limiter,
   default off. TCP when `OSC_TRANSPORT` says so or the node is `CRITICAL`. The optional direct
   `sendto` from the audio thread, default off, behind a setting with a warning in its tooltip.
 - **Shims**: CLAP complete (rename, hide, module, clear); VST3 best-effort (`kParamTitlesChanged`,
@@ -281,19 +287,26 @@ profile required for v1, and the reply-port convention written into the spec dra
 
 **Goal:** a session moved between two machines with different IPs. PRD milestone 4.
 
-- Reopen sequence as the PRD states: last host:port, UUID compare, DNS-SD by UUID, then by
-  `NAME`; each bound path verified for existence and `TYPE`; stale slots keep automation and stop
-  sending; `tree_hash` mismatch shows a one-line notice. No automatic rebinding, ever.
+- Reopen sequence as the PRD states: last host:port and compare `NAME` (and the identity leaf's
+  value when set); on mismatch or silence, DNS-SD by `NAME`, candidates told apart by identity
+  leaf then `tree_hash`, else unresolved; each bound path verified for existence and `TYPE`;
+  stale slots keep automation and stop sending; `tree_hash` mismatch shows a one-line notice. No
+  automatic rebinding, ever.
+- **Identity leaf**: in the device pane the user can pick any read-only leaf of the device's tree
+  as its identity (a serial number, a hostname node, whatever the device already publishes). The
+  plugin stores path and value and compares the value on reopen. Nothing is asked of the device
+  beyond what it already serves.
 - **The target is pointed at in one place** (decided 2026-11-04, in answer to "is this where a
   master plugin comes in"): the registry maps each device identity to its current host and port,
   process-wide, so slots never hold an address. The Monitor's device list, and the device pane of
-  every instance, show each device the session refers to with name, UUID if any, last address and
-  reachability; the user picks a found device or types an address, and every instance follows at
-  once. Each instance writes the new address into its own chunk on the next save, and the recents
-  store keeps it per user, so a sandboxed instance with its own registry finds it too. A device
-  with a UUID is re-found over DNS-SD with no click; pointing by hand is the path for a device
-  without one, or for two devices sharing a name. This is what a master plugin would have done,
-  without a track to delete, a load order, or IPC.
+  every instance, show each device the session refers to with name, identity value if set, last
+  address and reachability; the user picks a found device or types an address, and every instance
+  follows at once. Each instance writes the new address into its own chunk on the next save, and
+  the recents store keeps it per user, so a sandboxed instance with its own registry finds it
+  too. A device alone under its name is re-found over DNS-SD with no click; pointing by hand is
+  the path for two devices sharing a name with no identity leaf to tell them apart, or for a
+  network where multicast does not cross. This is what a master plugin would have done, without a
+  track to delete, a load order, or IPC.
 - Notifications over the websocket (`PATH_REMOVED`, `PATH_RENAMED`, `PATH_CHANGED`) mark slots
   stale live; the editor shows the old path next to the current tree with a rebind button.
 - **Export/import** of bindings as standalone JSON addressed by `host_param_id`; a small converter
@@ -304,15 +317,16 @@ profile required for v1, and the reply-port convention written into the spec dra
   `ACCESS: 1` to one client and `3` to another.
 
 **Done when:** a session saved against the mock device on one address reopens against the same
-device on another address with every slot live; a session against a mock device without a UUID
-reopens with the device unreachable, is pointed at the new address once in the Monitor, and
-every instance goes live; a renamed path shows stale and is rebound in one click; an exported JSON reimports into a fresh instance identically; all of it in CI with two
+device on another address with every slot live; two mock devices sharing a `NAME` are told apart
+by their identity leaf; a session whose device is not found by DNS-SD reopens with it unresolved,
+is pointed at the new address once in the Monitor, and every instance goes live; a renamed path shows stale and is rebound in one click; an exported JSON reimports into a fresh instance identically; all of it in CI with two
 mock devices.
 
 **Needs from the author:** nothing blocking.
 
-**Companion in WFS-DIY:** a persistent **UUID** in `HOST_INFO` (C2) and `PATH_REMOVED` /
-`PATH_RENAMED` when a channel is deleted or moved (L2). Per-client `ACCESS` (C6) if WFS-DIY's
+**Companion in WFS-DIY:** `PATH_REMOVED` / `PATH_RENAMED` when a channel is deleted or moved
+(L2); a read-only leaf carrying something unique per installation, if WFS-DIY has one to
+publish, so it can serve as an identity leaf (optional, not a profile requirement). Per-client `ACCESS` (C6) if WFS-DIY's
 client table is to be reflected; otherwise it stays a documented gap in its matrix row.
 
 ---
@@ -394,8 +408,8 @@ manufacturer can run it on their device with one command and get the same row.
 row.
 
 **Companion in WFS-DIY:** DNS-SD announcement of `_oscjson._tcp` (C3), via the same announcer
-the library ships; `TIMETAGS` in `HOST_INFO` once WFS-DIY honours bundle timetags, which the PRD
-says it does.
+the library ships, with the instance name equal to `NAME` (C2). WFS-DIY honours bundle
+timetags per the PRD; its bench row records that the per-device setting was ticked.
 
 ---
 
@@ -441,12 +455,13 @@ sponsor; the **institutional home** for the spec.
 
 In the order the phases need them.
 
-1. UUID key name, after checking Holophonix and ossia (Phase 0, spec).
-2. JUCE-first or CLAP-first, from the Phase 1 report; five plugin IDs or one (Phase 1).
-3. Reply port for devices without websocket: this plan recommends Live profile required for v1
-   (Phase 4).
-4. Nuendo: accept VST3 naming or talk to Steinberg (Phase 7).
-5. AES route, sponsor, and the spec's institutional home (Phase 9).
+1. JUCE-first or CLAP-first, from the Phase 1 report; five plugin IDs or one (Phase 1).
+2. Reply port for devices without websocket: this plan recommends Live profile required for v1
+   (Phase 4). Under the no-new-field rule, a `REPLY_PORT` query parameter is out too, which
+   leaves the Live profile or a `/register` convention inside the device's own tree.
+3. Nuendo: accept VST3 naming or talk to Steinberg (Phase 7).
+4. AES route, sponsor, and the spec's institutional home (Phase 9).
 
-Decided already: language and framework (C++20, JUCE 9), licence (GPLv3), copyright holders
-(Pierre-Olivier Boulant, Julien Bayle), all on 2026-11-04.
+Decided already, all on 2026-11-04: language and framework (C++20, JUCE 9), licence (GPLv3),
+copyright holders (Pierre-Olivier Boulant, Julien Bayle), no new `HOST_INFO` fields (no UUID, no
+`TIMETAGS`), the target pointed at once through the registry and the Monitor.
