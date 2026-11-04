@@ -147,9 +147,13 @@ step(function()
   log("fxIndex", fx)
 end, 2.0)
 
+local abort = false
+
 step(function()
   if fx < 0 then
+    -- Nothing else can run; skip to finish() so REAPER still quits.
     log("error", "plugin not found as " .. format .. ":OQA Spike 8")
+    abort = true
     return
   end
   for _, slot in ipairs({ 1, 2, 5 }) do
@@ -232,7 +236,7 @@ end
 
 local function run()
   local s = steps[index]
-  if s == nil then
+  if s == nil or abort then
     finish()
     return
   end
@@ -240,7 +244,11 @@ local function run()
   local now = reaper.time_precise()
   if started == nil then
     started = now
-    s.action()
+    local ok, err = pcall(s.action)
+    if not ok then
+      log("error.step" .. index, err)
+      abort = true      -- finish() at the next tick, so REAPER quits whatever went wrong
+    end
   end
 
   local elapsed = now - started
