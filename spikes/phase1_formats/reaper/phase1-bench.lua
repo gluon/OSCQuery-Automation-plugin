@@ -103,7 +103,13 @@ local function snapshot(label)
   for e = 0, lanes - 1 do
     local env = reaper.GetTrackEnvelope(track, e)
     local _, name = reaper.GetEnvelopeName(env, "")
-    log(label .. ".lane" .. e, name .. " | points=" .. reaper.CountEnvelopePoints(env))
+    local _, fxIndex, paramIndex = reaper.Envelope_GetParentTrack(env)
+    local paramName = ""
+    if fxIndex ~= nil and fxIndex >= 0 then
+      _, paramName = reaper.TrackFX_GetParamName(track, fxIndex, paramIndex, "")
+    end
+    log(label .. ".lane" .. e, name .. " | points=" .. reaper.CountEnvelopePoints(env)
+        .. " | param " .. tostring(paramIndex) .. " = " .. paramName)
   end
 
   local ack = readFile(dir .. "ack.txt") or ""
@@ -154,19 +160,54 @@ step(function()
     -- Nothing else can run; skip to finish() so REAPER still quits.
     log("error", "plugin not found as " .. format .. ":OQA Spike 8")
     abort = true
-    return
   end
-  for _, slot in ipairs({ 1, 2, 5 }) do
-    local env = reaper.GetFXEnvelope(track, fx, slot - 1, true)
-    envelopes[slot] = env
-    reaper.InsertEnvelopePoint(env, 0.0, 0.2, 0, 0, false, true)
-    reaper.InsertEnvelopePoint(env, 2.0, 0.8, 0, 0, false, true)
-    reaper.InsertEnvelopePoint(env, 4.0, 0.4, 0, 0, false, true)
-    reaper.Envelope_SortPoints(env)
+end, 0)
+
+local function drawLane(slot, paramIndex)
+  local env = reaper.GetFXEnvelope(track, fx, paramIndex, true)
+  envelopes[slot] = env
+  reaper.InsertEnvelopePoint(env, 0.0, 0.2, 0, 0, false, true)
+  reaper.InsertEnvelopePoint(env, 2.0, 0.8, 0, 0, false, true)
+  reaper.InsertEnvelopePoint(env, 4.0, 0.4, 0, 0, false, true)
+  reaper.Envelope_SortPoints(env)
+end
+
+local function paramIndexNamed(name)
+  for p = 0, reaper.TrackFX_GetNumParams(track, fx) - 1 do
+    local _, n = reaper.TrackFX_GetParamName(track, fx, p, "")
+    if n == name then return p end
   end
-  snapshot("1-unbound")
-  phase("1-unbound")
-end, 2.5)
+  return nil
+end
+
+if format == "AU" then
+  --[[ AU: an unbound slot is left out of the parameter list (juce-au-ishidden.patch),
+       so there is nothing to draw on until a slot is bound. Bind all, draw lanes on
+       slots 1, 2 and 5, then hide and show slots under them: does each lane stay on
+       its own slot when the list shrinks and grows, or on whatever takes its index? ]]
+  step(function() snapshot("a1-unbound"); phase("a1-unbound") end, 2.5)
+  bindStep("a2-all-bound", { "bindall Device A /bank" })
+  step(function()
+    for _, slot in ipairs({ 1, 2, 5 }) do
+      local index = paramIndexNamed("Device A /bank " .. slot)
+      log("a2b.slot" .. slot .. ".paramIndex", tostring(index))
+      if index ~= nil then drawLane(slot, index) end
+    end
+    snapshot("a2b-lanes-drawn")
+    phase("a2b-lanes-drawn")
+  end, 2.5)
+  step(function() reaper.OnPlayButton() end, 1.0)
+  bindStep("a3-renamed-while-playing", { "bind 1 Device A /bank 1 (renamed)" },
+           function() reaper.OnStopButton() end)
+  bindStep("a4-slot1-hidden", { "unbind 1" })
+  bindStep("a5-slot1-back-elsewhere", { "bind 1 Device B /source/1/position x" })
+  bindStep("a6-slot2-hidden", { "unbind 2" })
+else
+  step(function()
+    for _, slot in ipairs({ 1, 2, 5 }) do drawLane(slot, slot - 1) end
+    snapshot("1-unbound")
+    phase("1-unbound")
+  end, 2.5)
 
 bindStep("2-bound", { "bind 1 Device A /mixer/channel/1/gain" })
 
@@ -195,6 +236,7 @@ step(function()
   snapshot("6c-chunk-reapplied")
   phase("6c-chunk-reapplied")
 end, 2.5)
+end   -- VST3 branch
 
 -- And setting the FX offline and online again.
 step(function()
@@ -226,18 +268,34 @@ end, 2.5)
 -- Runner ---------------------------------------------------------------------------
 local index, started = 1, nil
 
+local quitAt = nil
+
+-- Results first; then the project saved to a path and reopened clean, so quitting can
+-- never stop on a save dialog (an unsaved project did, on the Mac, 2026-11-04).
 local function finish()
   local name = "results-" .. osName .. "-" .. format .. ".txt"
   writeFile(dir .. name, table.concat(results, "\n") .. "\n")
+  local finalPath = dir .. "phase1-" .. format .. "-final.rpp"
+  reaper.Main_SaveProjectEx(0, finalPath, 0)
+  reaper.Main_openProject("noprompt:" .. finalPath)
   phase("done")
-  reaper.Main_SaveProject(0, false)
-  reaper.Main_OnCommand(40004, 0)            -- File: Quit REAPER
+  quitAt = reaper.time_precise() + 2.0
 end
 
 local function run()
+  if quitAt ~= nil then
+    if reaper.time_precise() >= quitAt then
+      reaper.Main_OnCommand(40004, 0)        -- File: Quit REAPER
+    else
+      reaper.defer(run)
+    end
+    return
+  end
+
   local s = steps[index]
   if s == nil or abort then
     finish()
+    reaper.defer(run)
     return
   end
 
