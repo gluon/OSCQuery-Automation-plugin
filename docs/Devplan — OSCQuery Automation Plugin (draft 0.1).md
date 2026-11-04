@@ -120,6 +120,36 @@ has gone out for review; the mock device serves a fixture tree and a test reads 
   copied from WFS-DIY and go.dot keep their original header and gain a one-line origin note.
 - The two reviewers for the spec (Holophonix, one ossia maintainer).
 
+**Record, 2026-11-04.** Built in four commits on `main`: the spec draft (`docs/spec/`), the
+scaffold, CI, the mock device.
+
+- *Decided by the author the same day:* the spec text is CC BY 4.0, the rest GPLv3; the plugin's
+  identity is Pix et Bel, `PxBl`, plugin codes `Q008`…`Q128` and `QMon` (fixed for good, see
+  `src/shims/juce/CMakeLists.txt`); the shims are `src/shims/juce/` and `clap/` (layout above
+  amended).
+- *Pins:* JUCE at WFS-DIY's `d60b7a78` (the 9.0.5 tag; go.dot's `7ff644f6` is 9.0.4 plus 26);
+  `juce_simpleweb` from go.dot's fork pin `b72ec947`, because WFS-DIY's vendored copy cannot report
+  a port-0 bind, which a mock device on an ephemeral port needs; doctest 2.5.3 as its own
+  submodule (go.dot borrows Tracktion's); CLAP 1.2.10 and clap-helpers `a380c978`, not built.
+  `scripts/check-pins.py` holds `THIRD_PARTY_NOTICES.md` to the gitlinks.
+- *Fact corrected:* the VST3 SDK bundled in JUCE 9.0.5 is **MIT** (Steinberg, 2025, its
+  `LICENSE.txt`), not GPLv3-or-agreement as the facts table above and the PRD's licence reasoning
+  say. It changes nothing decided (JUCE's AGPLv3 still makes the binary GPL in practice) but the
+  PRD's sentence is stale.
+- *The proposal* (Vidvox README at `e3d8e3b9`) reads two ways in eight places, listed in §6 of
+  the spec draft with how a profile client reads each. The draft's *(proposed)* clauses are the
+  reviewers' questions.
+- *Done-when:* the spec is written and waits for the author to send it to the reviewers; the
+  mock device serves `generic-device.json` and `MockDeviceTests.cpp` reads every node back,
+  under C and fr_FR; CI builds the do-nothing VST3 on three platforms and pluginval passes it at
+  strictness 5.
+- *On the farm, the same day, at the mock-device commit:* the Mac mini (macOS 15.8.2, arm64,
+  Xcode 26.3) and the NUC (Ubuntu 24.04, GCC 13.3) configure `dev`, build with no warning in our
+  code, pass 11 cases and 230 assertions under C and fr_FR, build the Release VST3 (and the AU on
+  the Mac) and pass pluginval 1.0.4 at strictness 5 (the NUC headless, `--skip-gui-tests`). The
+  check is one script, `scripts/farm-check.sh`, run over SSH on a `git bundle` clone. GitHub warns that
+  `ubuntu-latest` moves to Ubuntu 26 from 2026-10-19; CI follows it unless a job breaks.
+
 ---
 
 ## Phase 1 — Bench the formats shipped first · S
