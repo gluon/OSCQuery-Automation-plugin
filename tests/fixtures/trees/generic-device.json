@@ -1,0 +1,167 @@
+{
+  "FULL_PATH": "/",
+  "ACCESS": 0,
+  "DESCRIPTION": "A generic device for tests. No real product's namespace.",
+  "CONTENTS": {
+    "mixer": {
+      "FULL_PATH": "/mixer",
+      "ACCESS": 0,
+      "CONTENTS": {
+        "channel": {
+          "FULL_PATH": "/mixer/channel",
+          "ACCESS": 0,
+          "CONTENTS": {
+            "1": {
+              "FULL_PATH": "/mixer/channel/1",
+              "ACCESS": 0,
+              "DESCRIPTION": "Channel 1",
+              "CONTENTS": {
+                "gain": {
+                  "FULL_PATH": "/mixer/channel/1/gain",
+                  "TYPE": "f",
+                  "ACCESS": 3,
+                  "VALUE": [-6.5],
+                  "RANGE": [{"MIN": -60.0, "MAX": 12.0}],
+                  "UNIT": ["dB"],
+                  "CLIPMODE": ["both"],
+                  "DESCRIPTION": "Gain"
+                },
+                "pan": {
+                  "FULL_PATH": "/mixer/channel/1/pan",
+                  "TYPE": "f",
+                  "ACCESS": 3,
+                  "VALUE": [0.0],
+                  "RANGE": [{"MIN": -1.0, "MAX": 1.0}]
+                },
+                "mute": {
+                  "FULL_PATH": "/mixer/channel/1/mute",
+                  "TYPE": "T",
+                  "ACCESS": 3,
+                  "VALUE": [false]
+                },
+                "mode": {
+                  "FULL_PATH": "/mixer/channel/1/mode",
+                  "TYPE": "i",
+                  "ACCESS": 3,
+                  "VALUE": [0],
+                  "RANGE": [{"VALS": [0, 1, 2]}],
+                  "DESCRIPTION": "0 mono, 1 stereo, 2 mid-side"
+                }
+              }
+            },
+            "2": {
+              "FULL_PATH": "/mixer/channel/2",
+              "ACCESS": 0,
+              "DESCRIPTION": "Channel 2",
+              "CONTENTS": {
+                "gain": {
+                  "FULL_PATH": "/mixer/channel/2/gain",
+                  "TYPE": "f",
+                  "ACCESS": 3,
+                  "VALUE": [0.0],
+                  "RANGE": [{"MIN": -60.0, "MAX": 12.0}],
+                  "UNIT": ["dB"],
+                  "CLIPMODE": ["both"]
+                },
+                "mute": {
+                  "FULL_PATH": "/mixer/channel/2/mute",
+                  "TYPE": "T",
+                  "ACCESS": 3,
+                  "VALUE": [true]
+                }
+              }
+            }
+          }
+        },
+        "master": {
+          "FULL_PATH": "/mixer/master",
+          "ACCESS": 0,
+          "CONTENTS": {
+            "trim": {
+              "FULL_PATH": "/mixer/master/trim",
+              "TYPE": "f",
+              "ACCESS": 3,
+              "VALUE": [0.0],
+              "DESCRIPTION": "A float with no RANGE: a slot bound to it stays inactive until min and max are entered"
+            },
+            "level": {
+              "FULL_PATH": "/mixer/master/level",
+              "TYPE": "i",
+              "ACCESS": 3,
+              "VALUE": [100],
+              "RANGE": [{"MIN": 0, "MAX": 127}]
+            }
+          }
+        }
+      }
+    },
+    "source": {
+      "FULL_PATH": "/source",
+      "ACCESS": 0,
+      "CONTENTS": {
+        "1": {
+          "FULL_PATH": "/source/1",
+          "ACCESS": 0,
+          "CONTENTS": {
+            "position": {
+              "FULL_PATH": "/source/1/position",
+              "TYPE": "fff",
+              "ACCESS": 3,
+              "VALUE": [0.0, 2.5, 1.25],
+              "RANGE": [{"MIN": -10.0, "MAX": 10.0}, {"MIN": -10.0, "MAX": 10.0}, {"MIN": 0.0, "MAX": 5.0}],
+              "UNIT": ["m", "m", "m"],
+              "DESCRIPTION": "x, y, z"
+            },
+            "label": {
+              "FULL_PATH": "/source/1/label",
+              "TYPE": "s",
+              "ACCESS": 3,
+              "VALUE": ["Lead vocal"]
+            }
+          }
+        }
+      }
+    },
+    "scene": {
+      "FULL_PATH": "/scene",
+      "ACCESS": 0,
+      "CONTENTS": {
+        "recall": {
+          "FULL_PATH": "/scene/recall",
+          "TYPE": "i",
+          "ACCESS": 2,
+          "RANGE": [{"MIN": 1, "MAX": 99}],
+          "DESCRIPTION": "Write-only"
+        }
+      }
+    },
+    "system": {
+      "FULL_PATH": "/system",
+      "ACCESS": 0,
+      "CONTENTS": {
+        "serial": {
+          "FULL_PATH": "/system/serial",
+          "TYPE": "s",
+          "ACCESS": 1,
+          "VALUE": ["MOCK-0001"],
+          "DESCRIPTION": "Read-only and unique per unit: what a user would pick as the identity leaf"
+        },
+        "load": {
+          "FULL_PATH": "/system/load",
+          "TYPE": "f",
+          "ACCESS": 1,
+          "VALUE": [12.5],
+          "RANGE": [{"MIN": 0.0, "MAX": 100.0}],
+          "UNIT": ["%"]
+        },
+        "standby": {
+          "FULL_PATH": "/system/standby",
+          "TYPE": "T",
+          "ACCESS": 3,
+          "VALUE": [false],
+          "CRITICAL": true
+        }
+      }
+    }
+  }
+}

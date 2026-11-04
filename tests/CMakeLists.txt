@@ -13,6 +13,17 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+# The mock OSCQuery device (devplan Phase 0): a library the tests link, and a program
+# that serves a fixture by hand. Both get JUCE from oqa_juce, compiled once.
+add_library(oqa_mock_device STATIC
+    mock-device/MockDevice.h
+    mock-device/MockDevice.cpp)
+target_include_directories(oqa_mock_device PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/mock-device")
+target_link_libraries(oqa_mock_device PUBLIC oqa_juce PRIVATE oqa::warnings)
+
+add_executable(oqa-mock-device mock-device/main.cpp)
+target_link_libraries(oqa-mock-device PRIVATE oqa_mock_device oqa::warnings)
+
 # One test executable, run twice by CTest: once under C, once under French
 # (OQA_LOCALE_FR), because RANGE and VALUE are decimals and every serialisation runs
 # under both (devplan, cross-cutting).
@@ -20,7 +31,10 @@
 add_executable(oqa_tests
     TestMain.cpp
     TestSupport.h
-    LocaleTests.cpp)
+    LocaleTests.cpp
+    support/HttpGet.h
+    support/WsTestClient.h
+    mock-device/MockDeviceTests.cpp)
 
 # doctest from its own submodule, SYSTEM so its warnings stay off our -Werror.
 target_include_directories(oqa_tests SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/ThirdParty/doctest")
@@ -29,7 +43,7 @@ target_compile_definitions(oqa_tests PRIVATE
     OQA_TEST_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures"
     OQA_LOCALE_FR="${OQA_LOCALE_FR}")
 
-target_link_libraries(oqa_tests PRIVATE oqa_juce oqa::warnings)
+target_link_libraries(oqa_tests PRIVATE oqa_mock_device oqa_juce oqa::warnings)
 
 add_test(NAME unit.C COMMAND oqa_tests --oqa-locale=C)
 add_test(NAME unit.fr_FR COMMAND oqa_tests --oqa-locale=${OQA_LOCALE_FR})

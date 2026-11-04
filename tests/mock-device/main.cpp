@@ -1,0 +1,95 @@
+/*
+    This file is part of the OSCQuery Automation Plugin —
+    https://github.com/pob31/OSCQuery-Automation-plugin
+
+    Copyright (C) 2026 Pierre-Olivier Boulant, Julien Bayle
+
+    The OSCQuery Automation Plugin is free software: you can redistribute it
+    and/or modify it under the terms of the GNU General Public License as
+    published by the Free Software Foundation, either version 3 of the License,
+    or (at your option) any later version. It is distributed in the hope that it
+    will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty
+    of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+    Public License (LICENSE, at the repository root) for more details.
+
+    SPDX-License-Identifier: GPL-3.0-or-later
+*/
+
+/*
+    oqa-mock-device: the mock device as a program, for curl, for pointing a
+    plugin or the conformance CLI at it by hand, and for anything outside the
+    test suite that needs a device.
+
+        oqa-mock-device --fixture <tree.json> [--port N] [--name "Some name"]
+
+    Prints one line, "oqa-mock-device http <port> osc <port>", once it answers,
+    then serves until interrupted (Ctrl-C or SIGTERM).
+*/
+
+#include "MockDevice.h"
+
+#include <atomic>
+#include <csignal>
+#include <iostream>
+
+namespace
+{
+    std::atomic<bool> interrupted { false };
+
+    void onSignal (int) { interrupted = true; }
+
+    int usage()
+    {
+        std::cerr << "usage: oqa-mock-device --fixture <tree.json> [--port N] [--name NAME]\n";
+        return 64;
+    }
+}
+
+int main (int argc, char** argv)
+{
+    juce::File fixture;
+    oqatest::MockDevice::Options options;
+
+    for (int i = 1; i < argc; ++i)
+    {
+        const juce::String arg (argv[i]);
+        const bool hasValue = i + 1 < argc;
+
+        if (arg == "--fixture" && hasValue)
+            fixture = juce::File::getCurrentWorkingDirectory().getChildFile (juce::String (argv[++i]));
+        else if (arg == "--port" && hasValue)
+            options.httpPort = juce::String (argv[++i]).getIntValue();
+        else if (arg == "--name" && hasValue)
+            options.name = juce::String (argv[++i]);
+        else
+            return usage();
+    }
+
+    if (fixture == juce::File())
+        return usage();
+
+    oqatest::MockDevice device (options);
+
+    if (! device.loadTreeFromFile (fixture))
+    {
+        std::cerr << "oqa-mock-device: cannot read a JSON tree from " << fixture.getFullPathName() << "\n";
+        return 66;
+    }
+
+    if (! device.start())
+    {
+        std::cerr << "oqa-mock-device: cannot bind (HTTP port " << options.httpPort << ")\n";
+        return 69;
+    }
+
+    std::cout << "oqa-mock-device http " << device.httpPort() << " osc " << device.oscPort() << std::endl;
+
+    std::signal (SIGINT, onSignal);
+    std::signal (SIGTERM, onSignal);
+
+    while (! interrupted)
+        juce::Thread::sleep (100);
+
+    device.stop();
+    return 0;
+}
