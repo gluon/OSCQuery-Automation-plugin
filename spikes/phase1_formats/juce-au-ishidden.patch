@@ -1,0 +1,45 @@
+diff --git a/modules/juce_audio_plugin_client/juce_audio_plugin_client_AU_1.mm b/modules/juce_audio_plugin_client/juce_audio_plugin_client_AU_1.mm
+index 4ff0efc..38d2d0b 100644
+--- a/modules/juce_audio_plugin_client/juce_audio_plugin_client_AU_1.mm
++++ b/modules/juce_audio_plugin_client/juce_audio_plugin_client_AU_1.mm
+@@ -1084,6 +1084,9 @@ public:
+                 if (param->isMetaParameter())
+                     outParameterInfo.flags |= kAudioUnitParameterFlag_IsGlobalMeta;
+ 
++                if (param->isHidden())
++                    outParameterInfo.flags |= kAudioUnitParameterFlag_IsHidden;
++
+                 auto parameterGroupHierarchy = juceFilter->getParameterTree().getGroupsForParameter (param);
+ 
+                 if (! parameterGroupHierarchy.isEmpty())
+diff --git a/modules/juce_audio_processors_headless/processors/juce_AudioProcessorParameter.cpp b/modules/juce_audio_processors_headless/processors/juce_AudioProcessorParameter.cpp
+index 1005571..64aa4c2 100644
+--- a/modules/juce_audio_processors_headless/processors/juce_AudioProcessorParameter.cpp
++++ b/modules/juce_audio_processors_headless/processors/juce_AudioProcessorParameter.cpp
+@@ -123,6 +123,7 @@ void AudioProcessorParameter::sendValueChangedMessageToListeners (float newValue
+ bool AudioProcessorParameter::isOrientationInverted() const                      { return false; }
+ bool AudioProcessorParameter::isAutomatable() const                              { return true; }
+ bool AudioProcessorParameter::isMetaParameter() const                            { return false; }
++bool AudioProcessorParameter::isHidden() const                                   { return false; }
+ AudioProcessorParameter::Category AudioProcessorParameter::getCategory() const   { return genericParameter; }
+ int AudioProcessorParameter::getNumSteps() const                                 { return getDefaultNumParameterSteps(); }
+ bool AudioProcessorParameter::isDiscrete() const                                 { return false; }
+diff --git a/modules/juce_audio_processors_headless/processors/juce_AudioProcessorParameter.h b/modules/juce_audio_processors_headless/processors/juce_AudioProcessorParameter.h
+index b0c55a1..229a3b3 100644
+--- a/modules/juce_audio_processors_headless/processors/juce_AudioProcessorParameter.h
++++ b/modules/juce_audio_processors_headless/processors/juce_AudioProcessorParameter.h
+@@ -234,6 +234,14 @@ public:
+     */
+     virtual bool isMetaParameter() const;
+ 
++    /** Should return true if hosts should not show this parameter to the user.
++        Read by the AU wrapper, which sets kAudioUnitParameterFlag_IsHidden;
++        the other formats have no such flag. A change takes effect at the next
++        updateHostDisplay() with parameterInfoChanged set.
++        By default this returns false.
++    */
++    virtual bool isHidden() const;
++
+     enum Category
+     {
+         genericParameter = (0 << 16) | 0,        /**< If your parameter is not a meter then you should use this category */
