@@ -126,7 +126,7 @@ The plugin never changes its parameter count at runtime. It changes names, group
 **Record (device to DAW)**
 
 - Preferred: `LISTEN` on the websocket for each bound path. Incoming values are scaled to 0–1 and pushed to the host as parameter changes through the format's host-callback path (`clap_host_params->request_flush`, VST3 `IEditController` output events, AU `AUParameterListener`).
-- Fallback for devices without websocket: the plugin opens a UDP listener and reports its port to the device; how the device learns that port is the single biggest gap in the current OSCQuery proposal and goes to the Open questions.
+- Fallback for devices without websocket (WebSockets are optional in the OSCQuery proposal; only servers that stream values need them): the plugin opens a UDP listener and shows its port in the editor; the user enters that port in the device's own configuration, as ToscA and OSCar users do today and as WFS-DIY's client table allows. Telling a device where to send OSC is the device's business, and the profile adds nothing for it (decided 2026-11-04).
 - Record only writes to the host when the slot's direction includes receive and the host lane is in Write, Touch or Latch, matching the Soundscape plugin's `Rx` behaviour.
 - Loop guard: a value the plugin just sent is ignored if echoed back within 50 ms, so send and receive on the same slot do not oscillate.
 
@@ -259,7 +259,7 @@ Initial subjects: WFS-DIY, XOA/Tight-WFS, the PRISM haptic floor controller, Hol
 
 ## Open questions
 
-- [ ] **Reply port for devices without websocket.** The OSCQuery proposal gives no way for a client to tell the device where to send OSC feedback. Candidates: a `REPLY_PORT` query parameter on `GET`, a `/register` convention, or require the Live profile for record. This is the one gap the Core profile cannot leave open if record is a v1 feature.
+- [x] **Reply port for devices without websocket.** Closed 2026-11-04. The proposal gives no way for a client to tell the device where to send OSC feedback, and under the no-new-field rule none is added: no `REPLY_PORT`, no `/register`. Record uses `LISTEN` when the device declares it in `EXTENSIONS`; otherwise the plugin's UDP listener port is shown in the editor and configured on the device side by the user. Record is therefore a v1 feature on every device that can send OSC to a configured address, which is all of them.
 - [x] **UUID field name.** Closed 2026-11-04: no UUID, and no new `HOST_INFO` field of any kind. OSCQuery is itself a proposal that needs support, not a rewrite. Identity is `NAME`, the tree hash, and an optional identity leaf the user designates in the device's own tree; what that cannot resolve, the user resolves by pointing once. The same rule removes the `TIMETAGS` field.
 - [ ] **Slot count variants.** Separate plugin IDs per size (8/16/32/64/128) or one plugin with a large fixed pool and hidden slots? Hidden works in CLAP and AU, not VST3, which argues for variants.
 - [x] **Licence.** Decided 2026-11-04: GPLv3 for the plugin and the client library, matching WFS-DIY and go.dot so their OSCQuery and mDNS code is reused as is. JUCE (AGPLv3 tier) and the VST3 SDK (GPLv3 or Steinberg agreement) make an open-source binary GPL in practice regardless of the source licence, so MIT bought nothing for the plugin. Cost: manufacturers cannot bundle the library in closed firmware; they run the conformance CLI instead.

@@ -267,18 +267,21 @@ the HTTP host). Nothing else.
   slot, with a counter in the status bar.
 - Slots with direction *both*: send and receive on one slot without oscillating; the test drives
   the mock device to echo with a delay above and below the guard window.
-- **Fallback for devices without websocket**: the library's UDP receiver is wired, and the plugin
-  reports its port in the editor. How the device learns it is the open question below; until it is
-  answered, record requires the Live profile and the editor says so on devices without LISTEN.
+- **Devices without LISTEN** (decided 2026-11-04; WebSockets are optional in the proposal, so
+  HTTP-only devices are conformant): the library's UDP receiver is wired, one port per process,
+  and the plugin shows that port and its own address in the editor and the Monitor. The user
+  enters them in the device's own configuration, as ToscA and OSCar users do today. The editor
+  says on such a device that record is waiting for the device to be told the port, and the
+  status bar shows the first packet arriving. Nothing is added to the spec for it.
+- Test: the mock device in HTTP-only mode is told the plugin's port by the test harness and sends
+  values; the lane records exactly as it does over LISTEN.
 
 **Done when:** a fader on a controller feeding WFS-DIY writes a lane in Reaper and Bitwig in
 Touch mode, the lane plays back to the device, and the loop guard counter stays at zero during
 playback; a session with 32 receiving slots shows no missed values at the device's update rate.
 
-**Needs from the author:** the **reply port** decision (PRD open question #1): `REPLY_PORT` on
-`GET`, a `/register` convention, or Live profile required for record in v1. Recommendation: Live
-profile required for v1, and the reply-port convention written into the spec draft as a
-*proposed* clause for v2 so manufacturers see it coming. The gesture idle timeout default.
+**Needs from the author:** the gesture idle timeout default. The reply port is decided (LISTEN
+when declared, else a UDP port shown in the editor and configured on the device side).
 
 **Companion in WFS-DIY:** none required; LISTEN exists.
 
@@ -457,12 +460,10 @@ sponsor; the **institutional home** for the spec.
 In the order the phases need them.
 
 1. JUCE-first or CLAP-first, from the Phase 1 report; five plugin IDs or one (Phase 1).
-2. Reply port for devices without websocket: this plan recommends Live profile required for v1
-   (Phase 4). Under the no-new-field rule, a `REPLY_PORT` query parameter is out too, which
-   leaves the Live profile or a `/register` convention inside the device's own tree.
-3. AES route, sponsor, and the spec's institutional home (Phase 9).
+2. AES route, sponsor, and the spec's institutional home (Phase 9).
 
 Decided already, all on 2026-11-04: language and framework (C++20, JUCE 9), licence (GPLv3),
 copyright holders (Pierre-Olivier Boulant, Julien Bayle), no new `HOST_INFO` fields (no UUID, no
 `TIMETAGS`), the target pointed at once through the registry and the Monitor, Nuendo on VST3
-with best-effort naming.
+with best-effort naming, record over LISTEN when declared and otherwise over a UDP port shown in
+the editor and configured on the device side.
