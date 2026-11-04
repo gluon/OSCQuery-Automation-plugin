@@ -6,4 +6,4 @@ and date. The spike's code lives in `spikes/` only until its report is written.
 
 | # | Spike | Verdict | Report |
 | --- | --- | --- | --- |
-| 1 | Formats shipped first: rename, hide, stale lanes in VST3 and AU | **In progress**: REAPER/Windows measured; AU has no IsHidden flag | [phase1-formats.md](phase1-formats.md) |
+| 1 | Formats shipped first: rename, hide, stale lanes in VST3 and AU | **In progress**: REAPER measured on both machines; AU has no IsHidden flag and hiding by the parameter list costs the automation in REAPER; hand-driven hosts pending | [phase1-formats.md](phase1-formats.md) |
