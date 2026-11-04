@@ -114,9 +114,11 @@ ossia, libossia or any other OSCQuery implementation.
     `~/Documents/WFS-DIY_JUCE`, a JUCE tree at `~/JUCE`.
   - `ssh nuc`: Intel NUC, Ubuntu 24.04.5, GCC 13.3, clang 18, cmake 3.28, ninja; the JUCE
     Linux dev packages are installed (ALSA, X11, freetype, GTK, webkit, JACK); pipewire and
-    jackd present; gdb and coredumpctl. Headless: the session is a tty with no `DISPLAY`, so
-    plugin editors there need Xvfb or a logged-in desktop. **No DAW installed**; WFS-DIY's LV2
-    plugins sit in `~/.lv2`. go.dot and WFS-DIY checkouts under `~/go.dot` and `~/WFS-DIY`.
+    jackd present; gdb and coredumpctl. **REAPER 7.84** at `/opt/REAPER` (`reaper` on `PATH`).
+    GNOME with gdm3 is installed but the SSH session is a tty with no `DISPLAY`: for a plugin
+    editor, log the `pob` user into the desktop at the machine (or enable autologin) and run
+    with `DISPLAY=:0`, or install Xvfb. WFS-DIY's LV2 plugins sit in `~/.lv2`. go.dot and WFS-DIY
+    checkouts under `~/go.dot` and `~/WFS-DIY`.
   - Moving a branch there without a push: `git bundle`, `scp`, `git fetch` from the bundle, as
     go.dot does.
 - `cmake`, `pluginval` and `clap-validator` are not on `PATH` here; WFS-DIY's plugin build uses
