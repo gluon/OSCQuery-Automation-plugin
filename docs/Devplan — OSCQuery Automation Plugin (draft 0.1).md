@@ -446,22 +446,24 @@ timetags per the PRD; its bench row records that the per-device setting was tick
 
 ---
 
-## Phase 9 — Public beta and the AES draft · M
+## Phase 9 — Public beta · M
 
-**Goal:** v0.9 on GitHub, the matrix published, the draft submitted. PRD milestone 7.
+**Goal:** v0.9 on GitHub, the matrix published, the profile draft published with it. PRD
+milestone 7. Standardisation is out of scope (removed 2026-11-04): a profile becomes a standard
+when manufacturers adopt it, and that is not code.
 
 - Release workflow from WFS-DIY's `plugins-release.yml`: tagged builds, signed installers, a
   changelog.
 - README for users (bind in three clicks), README for manufacturers (the Core profile in one
   page and how to run `conform`), README for implementers of other clients (the library).
-- Spec draft 0.2 incorporating what the matrix taught; submitted to the route the author chose.
+- Profile draft 0.2 incorporating what the matrix taught, published in `docs/spec/` with the
+  release.
 - Each manufacturer contacted with their row and the CLI.
 
-**Done when:** the release is public, the matrix page is live, the draft is in someone's inbox at
-AES, and the issue tracker is open.
+**Done when:** the release is public, the matrix page is live, the profile draft is in the
+repository, and the issue tracker is open.
 
-**Needs from the author:** the **AES route** (working group vs technical document first) and its
-sponsor; the **institutional home** for the spec.
+**Needs from the author:** who at each manufacturer receives their row.
 
 ---
 
@@ -486,9 +488,9 @@ sponsor; the **institutional home** for the spec.
 
 ## Needs from the author, collected
 
-In the order the phases need them.
-
-1. AES route, sponsor, and the spec's institutional home (Phase 9).
+None open as of 2026-11-04. The standardisation route and the spec's institutional home were
+removed from the PRD the same day: they depend on adoption by manufacturers, which is not this
+project's deliverable.
 
 Decided already, all on 2026-11-04: language and framework (C++20, JUCE 9), licence (GPLv3),
 copyright holders (Pierre-Olivier Boulant, Julien Bayle), no new `HOST_INFO` fields (no UUID, no

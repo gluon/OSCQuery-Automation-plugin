@@ -4,7 +4,7 @@ Nov 4, 2026 · @Pierre-Olivier Boulant
 
 ## Summary
 
-A generic DAW plugin that records and plays back automation curves to and from any OSC-controlled device, with the OSC address space discovered over OSCQuery instead of typed into an XML file. Shipped as CLAP, VST3 and AU from one codebase, open source, developed as the reference client for an OSCQuery discovery profile to be proposed to AES.
+A generic DAW plugin that records and plays back automation curves to and from any OSC-controlled device, with the OSC address space discovered over OSCQuery instead of typed into an XML file. Shipped as CLAP, VST3 and AU from one codebase, open source, developed as the reference client for an OSCQuery discovery profile. Standardisation of that profile is not a goal of this project: a profile becomes a standard when manufacturers adopt it, and that takes more than code (removed 2026-11-04).
 
 Repository: [github.com/pob31/OSCQuery-Automation-plugin](https://github.com/pob31/OSCQuery-Automation-plugin)
 
@@ -236,7 +236,7 @@ Dates are placeholders to be set once staffing is known; order and gates are the
 | 4b | Own CLAP shim | Native CLAP against the C API: factory with all variants, rename, hide, clear, module, JUCE editor embedded | Milestone 2 and 3 gates pass in Bitwig over CLAP; `clap-validator` clean |
 | 5 | AU and Linux | AU build in Logic and Live; Linux CLAP/VST3 | Same session file opens in all three formats |
 | 6 | Conformance CLI | Core and Live checks, matrix output | Run against WFS-DIY, Holophonix, ossia, Chataigne |
-| 7 | Public beta and AES draft | v0.9 release, matrix published, draft submitted to AES standards | Manufacturers contacted with their matrix row |
+| 7 | Public beta | v0.9 release, matrix published, profile draft 0.2 published in the repository | Manufacturers contacted with their matrix row |
 
 ## Interoperability test matrix
 
@@ -267,5 +267,3 @@ Initial subjects: WFS-DIY, XOA/Tight-WFS, the PRISM haptic floor controller, Hol
 - [x] **Licence.** Decided 2026-11-04: GPLv3 for the plugin and the client library, matching WFS-DIY and go.dot so their OSCQuery and mDNS code is reused as is. JUCE (AGPLv3 tier) and the VST3 SDK (GPLv3 or Steinberg agreement) make an open-source binary GPL in practice regardless of the source licence, so MIT bought nothing for the plugin. Cost: manufacturers cannot bundle the library in closed firmware; they run the conformance CLI instead.
 - [x] **JUCE CLAP status.** Checked 2026-11-04: not in JUCE 9.0.5, and nothing on upstream `develop` mentions CLAP; the Q3 2025 roadmap promise has no date. Decided: VST3 and AU first, our own CLAP shim at milestone 4b. If native support lands later it is a third way to build the same shim interface, not a design change.
 - [x] **Nuendo.** Decided 2026-11-04: Nuendo uses VST3 with best-effort naming. The bound path is always visible in the plugin editor, so a lane that keeps its `(unbound)` or stale title still works. Nuendo's actual `kParamTitlesChanged` behaviour is measured and written down in milestone 5, not negotiated with Steinberg.
-- [ ] **AES route.** Standards committee working group (new project under the networked-audio group) versus an AES technical document first. Needs a sponsor from a member company; d&b or L-Acoustics would carry weight.
-- [ ] **Institutional home for the spec.** The plugin's upstream stays under pob31, and any lab or venue that adopts it forks. The spec draft needs a home that is not a single person: an AES working group, or a body such as the OCA Alliance or the ADM-OSC workgroup willing to host a discovery profile.
