@@ -70,7 +70,8 @@ Each plugin instance owns a fixed pool of **N generic slots** (N = 32 by default
   JUCE's own wrappers; CLAP later through a shim of our own against the CLAP C API (plan
   Phase 5b). Neither `clap-juce-extensions` nor `clap-wrapper` is in the build.
 - **GPLv3** for the plugin and the client library. File headers follow go.dot's form and read
-  `Copyright (C) 2026 Pierre-Olivier Boulant, Julien Bayle`.
+  `Copyright (C) 2026 Pierre-Olivier Boulant, Julien Bayle`. The profile text in `docs/spec/` is
+  **CC BY 4.0**, so manufacturers can quote it (decided 2026-11-04).
 - **The Core profile adds no field to OSCQuery.** No UUID, no `TIMETAGS`, no `REPLY_PORT`.
   Anything the plugin needs beyond the proposal is a plugin-side setting or lives in the device's
   own tree. OSCQuery is itself a proposal that needs support, not a rewrite.
