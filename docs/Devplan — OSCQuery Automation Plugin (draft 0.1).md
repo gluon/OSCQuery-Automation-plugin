@@ -416,9 +416,14 @@ polished; the words for the failure-state tooltips.
   same bindings, since the chunk is format-neutral by construction.
 
 **Done when:** one Reaper session on the Mac mini opens the plugin as CLAP, VST3 and AU with
-identical bindings; Live, and Logic if it is on the Mac mini, run the AU and record; the NUC
-runs the Linux CLAP and VST3 in Reaper against a device on the farm's network; all installers
-produced from a clean checkout.
+identical bindings; Live 12 and GarageBand run the AU and record (the Mac mini has no Logic,
+inventoried 2026-11-04; a Logic row waits for a machine that has it); the NUC runs the Linux
+CLAP and VST3 in a host against WFS-DIY on the farm's network; all installers produced from a
+clean checkout.
+
+The NUC has no DAW and no display session today. Before this phase it needs Reaper for Linux
+(or Ardour from apt) and either a logged-in desktop or Xvfb for the editor; pluginval and
+clap-validator are installed on both farm machines at the same time.
 
 **Needs from the author:** signing identities. Nuendo is decided (VST3, best-effort naming);
 this phase writes down what `kParamTitlesChanged` actually does there, in `docs/bench/`.

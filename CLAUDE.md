@@ -105,10 +105,19 @@ ossia, libossia or any other OSCQuery implementation.
   (`../go.dot`). Each serves a tree with LISTEN, so a value moved in any of them is a record
   test without a hardware controller.
 - **Other machines on the author's farm**, over SSH with key auth, online when the author is at
-  home (172.22.x is the home network): `ssh macmini` (a Mac mini, `pierre-olivierboulant@172.22.1.27`,
-  seen from the work network as `POB12.local`; ctest lives in `/opt/homebrew/bin`) for macOS,
-  AU, Logic if installed, and notarisation; `ssh nuc` (`pob@172.22.1.29`, Ubuntu, gdb and
-  coredumpctl present) for Linux. The aliases are in the author's `~/.ssh/config`. Moving a
-  branch there without a push: `git bundle`, `scp`, `git fetch` from the bundle, as go.dot does.
+  home (172.22.x is the home network; aliases in the author's `~/.ssh/config`). Inventoried
+  2026-11-04:
+  - `ssh macmini`: Mac mini, Apple silicon, macOS 15.8.2, Xcode 26.3, cmake 4.2 and ninja from
+    Homebrew (`/opt/homebrew/bin` is not on the non-interactive `PATH`; export it). Hosts:
+    REAPER, Ableton Live 12 Suite, GarageBand. **No Logic.** `auval` present; no pluginval.
+    WFS-DIY.app and Go.dot.app installed; checkouts under `~/Documents/go.dot` and
+    `~/Documents/WFS-DIY_JUCE`, a JUCE tree at `~/JUCE`.
+  - `ssh nuc`: Intel NUC, Ubuntu 24.04.5, GCC 13.3, clang 18, cmake 3.28, ninja; the JUCE
+    Linux dev packages are installed (ALSA, X11, freetype, GTK, webkit, JACK); pipewire and
+    jackd present; gdb and coredumpctl. Headless: the session is a tty with no `DISPLAY`, so
+    plugin editors there need Xvfb or a logged-in desktop. **No DAW installed**; WFS-DIY's LV2
+    plugins sit in `~/.lv2`. go.dot and WFS-DIY checkouts under `~/go.dot` and `~/WFS-DIY`.
+  - Moving a branch there without a push: `git bundle`, `scp`, `git fetch` from the bundle, as
+    go.dot does.
 - `cmake`, `pluginval` and `clap-validator` are not on `PATH` here; WFS-DIY's plugin build uses
   the Visual Studio generator through `Plugin/Scripts/build-all.ps1`.
