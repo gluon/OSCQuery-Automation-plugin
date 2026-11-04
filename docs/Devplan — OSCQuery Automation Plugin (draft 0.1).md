@@ -161,8 +161,9 @@ JUCE's VST3/AU wrappers are not used at all).
 **Done when:** the report exists, the decision is written into the PRD's *Host parameter model*
 section, and the losing spike is deleted from `spikes/`.
 
-**Needs from the author:** the decision. Access to Bitwig, Reaper, Live and Logic on the bench;
-Nuendo if the Steinberg question is to be answered now rather than in Phase 7. Whether the slot
+**Needs from the author:** the decision. Access to Bitwig, Reaper, Live and Logic on the bench,
+and Nuendo for the VST3 rename row (decided 2026-11-04: Nuendo uses VST3, best-effort naming,
+so its behaviour is measured here, not negotiated). Whether the slot
 count variants are five plugin IDs (the PRD's lean, because VST3 cannot hide) or one plugin with
 hidden slots where the format allows; this plan assumes five IDs.
 
@@ -379,8 +380,8 @@ polished; the words for the failure-state tooltips.
 bindings; Logic and Live run the AU and record; Linux CI uploads working CLAP and VST3; all
 installers produced from a clean checkout.
 
-**Needs from the author:** the **Nuendo** question (accept VST3 best-effort naming or open a
-conversation with Steinberg about `kParamTitlesChanged`); signing identities.
+**Needs from the author:** signing identities. Nuendo is decided (VST3, best-effort naming);
+this phase writes down what `kParamTitlesChanged` actually does there, in `docs/bench/`.
 
 ---
 
@@ -459,9 +460,9 @@ In the order the phases need them.
 2. Reply port for devices without websocket: this plan recommends Live profile required for v1
    (Phase 4). Under the no-new-field rule, a `REPLY_PORT` query parameter is out too, which
    leaves the Live profile or a `/register` convention inside the device's own tree.
-3. Nuendo: accept VST3 naming or talk to Steinberg (Phase 7).
-4. AES route, sponsor, and the spec's institutional home (Phase 9).
+3. AES route, sponsor, and the spec's institutional home (Phase 9).
 
 Decided already, all on 2026-11-04: language and framework (C++20, JUCE 9), licence (GPLv3),
 copyright holders (Pierre-Olivier Boulant, Julien Bayle), no new `HOST_INFO` fields (no UUID, no
-`TIMETAGS`), the target pointed at once through the registry and the Monitor.
+`TIMETAGS`), the target pointed at once through the registry and the Monitor, Nuendo on VST3
+with best-effort naming.
