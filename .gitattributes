@@ -1,0 +1,47 @@
+# Line endings, pinned to LF in the working tree regardless of core.autocrlf.
+# The author develops on Windows with autocrlf=true; a contributor without it
+# would otherwise commit CRLF, and a CRLF shell script dies in CI with
+# "$'\r': command not found" pointing at the wrong line. Same rule as go.dot.
+*.sh   text eol=lf
+*.py   text eol=lf
+*.ps1  text eol=lf
+
+# Read by tools that tolerate CRLF, pinned anyway so a line-ending flip never
+# hides the one line that changed in a cross-platform diff.
+*.cmake        text eol=lf
+CMakeLists.txt text eol=lf
+*.yml          text eol=lf
+*.json         text eol=lf
+*.txt          text eol=lf
+*.iss          text eol=lf
+*.plist        text eol=lf
+*.plist.in     text eol=lf
+*.rc.in        text eol=lf
+
+# Our own sources and documents.
+*.h    text eol=lf
+*.cpp  text eol=lf
+*.mm   text eol=lf
+*.c    text eol=lf
+*.md   text eol=lf
+*.svg  text eol=lf
+
+# Fixtures compared byte for byte by tests (state chunks, device trees,
+# exported bindings) must be the same bytes on every platform.
+tests/**/*.json text eol=lf
+
+# Git's own files and the licence, so `git add` stops warning about them.
+.gitattributes text eol=lf
+.gitignore     text eol=lf
+.gitmodules    text eol=lf
+LICENSE        text eol=lf
+
+# Patches applied with `git apply` inside a submodule must keep their bytes.
+*.patch -text
+
+# Binary assets.
+*.png  binary
+*.icns binary
+*.ico  binary
+
+# Nothing here reaches ThirdParty/: submodules carry their own attributes.

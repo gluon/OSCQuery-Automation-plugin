@@ -1,0 +1,53 @@
+# CMake build trees. Presets put theirs under build/<preset>; out/ is Visual
+# Studio's "Open Folder" default; cmake-build*/ is CLion's.
+build/
+out/
+cmake-build*/
+
+# In-source-configure droppings.
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+
+# Per-developer preset overrides. Never committed: a committed one overrides
+# everyone else's environment with yours.
+CMakeUserPresets.json
+
+# Compile database and indexer caches.
+compile_commands.json
+.cache/
+.ccache/
+
+# IDE and editor.
+.vs/
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Agent working files. This ignores the .claude/ DIRECTORY only; the top-level
+# CLAUDE.md is a tracked project document and must be able to land.
+.claude/
+tmpclaude-*
+**/tmpclaude-*
+MEMORY.md
+
+# Python helpers.
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# OS cruft.
+.DS_Store
+._*
+Thumbs.db
+
+# Installer outputs and signed artefacts.
+Installer/Output/
+
+# NOT ignored, on purpose:
+#   docs/**      the PRD, the plan, the spec and the bench reports are tracked
+#   /CLAUDE.md   see above
+#   ThirdParty/  submodule gitlinks are tracked; their working trees are not
+#                files git sees, so no rule is needed either way
