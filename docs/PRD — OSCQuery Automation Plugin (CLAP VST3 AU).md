@@ -110,7 +110,8 @@ The plugin never changes its parameter count at runtime. It changes names, group
 
 - CLAP is the reference format: it is the only one where rename, grouping, hide and clear all work as designed.
 - VST3 and AU are best-effort for naming: the bound path is always visible inside the plugin editor, so a host that ignores the rename still works.
-- Build with JUCE plus `clap-juce-extensions` (or `clap-wrapper` if JUCE's native CLAP support has landed by implementation time). Decision to be taken at milestone 1.
+- Build with JUCE. VST3 and AU first, through JUCE's own wrappers; CLAP at milestone 4b through a shim of our own written against the CLAP C API with `clap-helpers`. Neither `clap-juce-extensions` nor `clap-wrapper` is used (decided 2026-11-04: JUCE 9.0.5 has no native CLAP and nothing on `develop` points to one, so nothing waits on JUCE). The shim interface is written for CLAP's capabilities from the start; VST3 and AU answer *unsupported* where they must.
+- Slot-count variants are five plugin IDs (8/16/32/64/128), decided by consequence the same day: with JUCE each ID is its own binary and VST3 cannot hide slots. The process-wide registry therefore lives in a shared core library loaded by every binary, after WFS-DIY's Bridge.
 - AAX is deferred; its parameter list is frozen at instantiation and Avid's SDK agreement conflicts with an open-source distribution.
 
 ## Transport, send and record directions
@@ -210,7 +211,7 @@ The editor has two panes and no modal dialogs: a **device browser** on the left 
 
 The three format shims are thin; everything that matters lives in the core and in a process-wide registry, so 64 instances share one OSCQuery client and one socket per device.
 
-- **Language and framework:** C++20 with JUCE, matching WFS-DIY so OSC and tree-browser code can be shared. CLAP through `clap-juce-extensions` unless native JUCE CLAP support is available at milestone 1.
+- **Language and framework:** C++20 with JUCE 9, matching WFS-DIY so OSC and tree-browser code can be shared. VST3 and AU through JUCE's wrappers; CLAP through an in-house shim against the CLAP C API at milestone 4b.
 - **OSCQuery client:** a small in-house library (HTTP, websocket, JSON tree model, DNS-SD) published separately, also GPLv3, so Go.dot and other open-source clients reuse it and the test suite links against it. Manufacturers with closed firmware validate against it through the conformance CLI rather than by bundling it; the author holds the copyright, so a JUCE-free permissive extraction stays possible if one asks.
 - **Threads:** the audio thread reads slot values only; the registry owns a network thread per device; the editor owns the browser. Lock-free queues between them.
 - **No external files:** bindings in the state chunk, recents in the standard per-user settings location.
@@ -228,10 +229,11 @@ Dates are placeholders to be set once staffing is known; order and gates are the
 | # | Milestone | Deliverable | Gate |
 | --- | --- | --- | --- |
 | 0 | Core profile draft | 4-page spec of `HOST_INFO` as defined, stable `NAME`, path stability, `TYPE`/`RANGE`, `ACCESS` per client | Reviewed by Holophonix and one ossia maintainer |
-| 1 | Framework decision | Spike: 8-slot CLAP + VST3 build, rename works in Reaper and Bitwig | CLAP path chosen (`clap-juce-extensions` vs native) |
+| 1 | Format bench | Spike: 8-slot VST3 + AU build; rename measured in Reaper, Bitwig, Live, Nuendo and Logic | Rename matrix written; five slot-count IDs confirmed |
 | 2 | Discovery and bind | Browser, tree model, bind, send over UDP, state chunk | WFS-DIY driven from Reaper with no typed address |
 | 3 | Record | `LISTEN` to host automation, loop guard, Write/Touch/Latch semantics | Controller moves recorded in Reaper and Bitwig |
 | 4 | Re-identification | Rebind by `NAME` and identity leaf, pointing once in the Monitor, stale slots, export/import JSON | Session moved between two machines with different IPs |
+| 4b | Own CLAP shim | Native CLAP against the C API: factory with all variants, rename, hide, clear, module, JUCE editor embedded | Milestone 2 and 3 gates pass in Bitwig over CLAP; `clap-validator` clean |
 | 5 | AU and Linux | AU build in Logic and Live; Linux CLAP/VST3 | Same session file opens in all three formats |
 | 6 | Conformance CLI | Core and Live checks, matrix output | Run against WFS-DIY, Holophonix, ossia, Chataigne |
 | 7 | Public beta and AES draft | v0.9 release, matrix published, draft submitted to AES standards | Manufacturers contacted with their matrix row |
@@ -261,9 +263,9 @@ Initial subjects: WFS-DIY, XOA/Tight-WFS, the PRISM haptic floor controller, Hol
 
 - [x] **Reply port for devices without websocket.** Closed 2026-11-04. The proposal gives no way for a client to tell the device where to send OSC feedback, and under the no-new-field rule none is added: no `REPLY_PORT`, no `/register`. Record uses `LISTEN` when the device declares it in `EXTENSIONS`; otherwise the plugin's UDP listener port is shown in the editor and configured on the device side by the user. Record is therefore a v1 feature on every device that can send OSC to a configured address, which is all of them.
 - [x] **UUID field name.** Closed 2026-11-04: no UUID, and no new `HOST_INFO` field of any kind. OSCQuery is itself a proposal that needs support, not a rewrite. Identity is `NAME`, the tree hash, and an optional identity leaf the user designates in the device's own tree; what that cannot resolve, the user resolves by pointing once. The same rule removes the `TIMETAGS` field.
-- [ ] **Slot count variants.** Separate plugin IDs per size (8/16/32/64/128) or one plugin with a large fixed pool and hidden slots? Hidden works in CLAP and AU, not VST3, which argues for variants.
+- [x] **Slot count variants.** Decided 2026-11-04, by consequence of building VST3 and AU first with JUCE: five plugin IDs (8/16/32/64/128). Hidden works in CLAP and AU, not VST3, and with JUCE each ID is its own binary, so the registry moves to a shared core library.
 - [x] **Licence.** Decided 2026-11-04: GPLv3 for the plugin and the client library, matching WFS-DIY and go.dot so their OSCQuery and mDNS code is reused as is. JUCE (AGPLv3 tier) and the VST3 SDK (GPLv3 or Steinberg agreement) make an open-source binary GPL in practice regardless of the source licence, so MIT bought nothing for the plugin. Cost: manufacturers cannot bundle the library in closed firmware; they run the conformance CLI instead.
-- [ ] **JUCE CLAP status.** Verify whether JUCE has shipped native CLAP support before milestone 1; it changes the build but not the design.
+- [x] **JUCE CLAP status.** Checked 2026-11-04: not in JUCE 9.0.5, and nothing on upstream `develop` mentions CLAP; the Q3 2025 roadmap promise has no date. Decided: VST3 and AU first, our own CLAP shim at milestone 4b. If native support lands later it is a third way to build the same shim interface, not a design change.
 - [x] **Nuendo.** Decided 2026-11-04: Nuendo uses VST3 with best-effort naming. The bound path is always visible in the plugin editor, so a lane that keeps its `(unbound)` or stale title still works. Nuendo's actual `kParamTitlesChanged` behaviour is measured and written down in milestone 5, not negotiated with Steinberg.
 - [ ] **AES route.** Standards committee working group (new project under the networked-audio group) versus an AES technical document first. Needs a sponsor from a member company; d&b or L-Acoustics would carry weight.
 - [ ] **Institutional home for the spec.** The plugin's upstream stays under pob31, and any lab or venue that adopts it forks. The spec draft needs a home that is not a single person: an AES working group, or a body such as the OCA Alliance or the ADM-OSC workgroup willing to host a discovery profile.

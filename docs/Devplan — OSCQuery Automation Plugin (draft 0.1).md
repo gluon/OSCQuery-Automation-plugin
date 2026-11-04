@@ -43,8 +43,9 @@ These change the build, not the design. Each is re-checked at the phase that dep
 | Fact | Where checked | Consequence |
 | --- | --- | --- |
 | JUCE 9.0.5 is the version WFS-DIY and go.dot build on; its `juce_audio_plugin_client` has AAX, AU, LV2, Standalone, Unity and VST3 targets and **no CLAP** | `ThirdParty/JUCE` in both repos | The PRD's "native JUCE CLAP if it has landed" branch is closed for now. Phase 1 chooses between the two wrappers below. |
-| `clap-juce-extensions` documents JUCE 6, 7 and 8; JUCE 9 is not mentioned. It exposes `clap_juce_audio_processor_capabilities` and `clap_juce_parameter_capabilities` but its README does not say whether hidden flags, info rescans or `clap_host_params->clear()` are reachable | github.com/free-audio/clap-juce-extensions | Spike A in Phase 1 has to prove JUCE 9 compatibility and reach the three CLAP features the PRD counts on. |
-| `clap-wrapper` turns a native CLAP into VST3, AUv2, AUv3 and a Standalone; AAX is dual-licensed (GPL-3 or Avid's agreement) | github.com/free-audio/clap-wrapper | Spike B in Phase 1: write the plugin as a native CLAP, keep JUCE for the editor and networking, let clap-wrapper produce VST3 and AU. This is the CLAP-reference path the PRD argues for, taken literally. |
+| `clap-juce-extensions` documents JUCE 6, 7 and 8; JUCE 9 is not mentioned. It exposes `clap_juce_audio_processor_capabilities` and `clap_juce_parameter_capabilities` but its README does not say whether hidden flags, info rescans or `clap_host_params->clear()` are reachable | github.com/free-audio/clap-juce-extensions; a JUCE forum post says the 8.0.11 `juce_audio_processors_headless` split broke it | Not in the build (decided 2026-11-04). Phase 1 spends one day seeing whether it compiles on 9.0.5, as information only; its source is read in Phase 5b for how a JUCE editor is embedded in a CLAP window. |
+| `clap-wrapper` turns a native CLAP into VST3, AUv2, AUv3 and a Standalone; AAX is dual-licensed (GPL-3 or Avid's agreement) | github.com/free-audio/clap-wrapper | Not in the build (decided 2026-11-04). VST3 and AU come from JUCE's own wrappers; CLAP from an in-house shim in Phase 5b. |
+| Upstream JUCE, checked 2026-11-04: no file, commit, branch or changelog entry mentions CLAP on `develop`; the Q3 2025 roadmap promised it for JUCE 9, which has shipped through 9.0.5 without it | github.com/juce-framework/JUCE; juce.com roadmap posts | Nothing waits on JUCE. If native CLAP lands later it is a third way to build the same shim interface, not a design change. |
 | WFS-DIY's `HOST_INFO` emits `NAME`, `OSC_PORT`, `OSC_TRANSPORT` (UDP), `WS_PORT` and `EXTENSIONS` for ACCESS, VALUE, RANGE, DESCRIPTION, TYPE, CLIPMODE, LISTEN. No `OSC_IP`, no mDNS announcement, `PATH_CHANGED` only (no `PATH_REMOVED`/`PATH_RENAMED`), `ACCESS` is global, not per client | `Source/Network/OSCQueryServer.cpp` in WFS-DIY | WFS-DIY as the first conformance subject fails C3, C6 and L2 today. Companion work in WFS-DIY is listed per phase below. |
 | go.dot already has multicast DNS written in-house (`src/wfg/engine/oscquery/Mdns.{h,cpp}`, `Discovery.{h,cpp}`): a codec, a browser on every interface sharing port 5353 with the system responder, and an announcer | go.dot repo, built 2026-10-17 | The client library's DNS-SD comes from there, not from a new implementation or a platform SDK. |
 | WFS-DIY's plugin suite has `OscQueryClient` (HTTP GET, websocket LISTEN/IGNORE, `PATH_CHANGED`), `OscTransport` (UDP send incl. three-float messages), `RateLimiter`, and a *Bridge* pattern: a shared dynamic library loaded by every plugin binary with a versioned ABI | `Plugin/Source/Shared` in WFS-DIY | The library's HTTP/websocket layer starts from `OscQueryClient`; the process-wide registry starts from the Bridge pattern. |
@@ -85,7 +86,7 @@ platforms.
   draft says in one paragraph why it adds no field: a profile of the proposal is easier to adopt
   than an amendment to it.
 - Repo scaffold: CMake, submodules pinned (JUCE 9.0.5 at the same commit as WFS-DIY,
-  `juce_simpleweb`, `clap`, `clap-helpers`, and both candidate wrappers for Phase 1), GPLv3 file
+  `juce_simpleweb`, `clap` and `clap-helpers` for Phase 5b), GPLv3 file
   headers in go.dot's form reading `Copyright (C) 2026 Pierre-Olivier Boulant, Julien Bayle`
   (decided 2026-11-04; Julien Bayle is a contributor to the repository), a
   `THIRD_PARTY_NOTICES.md` from the first dependency,
@@ -121,51 +122,40 @@ has gone out for review; the mock device serves a fixture tree and a test reads 
 
 ---
 
-## Phase 1 — Framework spike: JUCE-first or CLAP-first · M
+## Phase 1 — Bench the formats shipped first · S
 
-**Goal:** one of the two build paths chosen on measured evidence, before any core code depends on
-the choice.
+**Goal:** the rename behaviour of VST3 and AU measured in the hosts that matter, before core
+code depends on it.
 
-Two throwaway spikes, same feature list, same hosts:
+**Decided 2026-11-04:** VST3 and AU first, through JUCE's own wrappers; CLAP later, through a
+shim of our own written against the CLAP C API (Phase 5b). Neither `clap-juce-extensions` nor
+`clap-wrapper` is in the build. JUCE 9.0.5 has no native CLAP and the announcement has no date,
+so nothing waits on it; if it lands, it is a third way to build the same shim interface.
 
-- **Spike A — JUCE-first.** `juce_add_plugin` with VST3 + AU, `clap_juce_extensions_plugin`
-  on top, on JUCE 9.0.5. Parameter hiding, info rescan and `clear()` reached through
-  `clap_juce_parameter_capabilities` / `clap_juce_audio_processor_capabilities` or, where the
-  extensions do not expose them, through whatever hook exists. If the extensions do not build
-  against JUCE 9 at all, the spike records why and how much of a patch it would take.
-- **Spike B — CLAP-first.** A native CLAP written against `clap` + `clap-helpers`, JUCE used only
-  for the editor window (a `juce::Component` added to the host's parent window) and for
-  networking; `clap-wrapper` produces the VST3 and AUv2. All CLAP features reached directly.
-
-Both spikes expose **8 slots** with the PRD's parameter model (normalised float, stable ID, name
-changed at runtime) and the same six checks:
+- A throwaway `juce_add_plugin` in `spikes/`, 8 slots with the PRD's parameter model: normalised
+  float, stable ID, name changed at runtime through `updateHostDisplay` with
+  `parameterInfoChanged`, `(unbound)` names, AU `IsHidden` and `clump`.
+- The matrix, filled per host and written into `docs/spikes/phase1-formats.md`:
 
 | Check | Where |
 | --- | --- |
-| Rename a slot while active; the automation lane name follows | Reaper (CLAP, VST3), Bitwig (CLAP), Live (VST3), Logic (AU) |
-| Hide an unbound slot; it leaves the host's parameter list | Reaper, Bitwig (CLAP); Logic (AU) |
-| `clap_host_params->clear()` drops a stale lane | Reaper, Bitwig |
-| `module` grouping from a path shows as a hierarchy | Bitwig |
-| **All slot-count variants (8/16/32/64/128) from one binary** via the CLAP plugin factory, and the same through the wrapper for VST3 | Reaper, Bitwig |
-| pluginval at strictness 5 on the VST3, the AU validator on the AU | CI |
+| Rename a slot while active; the automation lane name follows | Reaper, Bitwig, Live, Nuendo (VST3); Logic (AU) |
+| Hide an unbound slot; it leaves the host's parameter list | Logic (AU) |
+| A stale lane after rebind: what the host shows, what the user has to do | all five |
+| pluginval at strictness 5 on the VST3, `auval` on the AU | CI |
 
-The fifth row matters beyond convenience: one binary per format means one process-wide registry
-regardless of which variant a track uses. If a path fails it, Phase 3 pays for a Bridge-style
-shared library instead.
+- **One day, information only:** clone `clap-juce-extensions` into `spikes/` and try to build it
+  on JUCE 9.0.5. The result goes in the report. It is not a dependency either way.
+- **Registry location, settled by consequence:** with JUCE each plugin ID is its own binary, so
+  five slot-count variants are five binaries per format, and VST3 cannot hide slots, so one
+  binary with hidden slots is not an option there. The process-wide registry therefore lives in
+  a shared library (WFS-DIY's Bridge pattern), built in Phase 3. The variants are five plugin
+  IDs, as the PRD leant.
 
-Report in `docs/spikes/phase1-framework.md`: the matrix above filled per host, build time,
-binary size, and the list of JUCE abstractions each path gives up (Spike A: `WrapperType` is
-undefined under CLAP, stepped parameters do not translate; Spike B: no `AudioProcessor`, so
-JUCE's VST3/AU wrappers are not used at all).
+**Done when:** the report exists, the five-ID decision is written into the PRD, and the spike is
+deleted from `spikes/`.
 
-**Done when:** the report exists, the decision is written into the PRD's *Host parameter model*
-section, and the losing spike is deleted from `spikes/`.
-
-**Needs from the author:** the decision. Access to Bitwig, Reaper, Live and Logic on the bench,
-and Nuendo for the VST3 rename row (decided 2026-11-04: Nuendo uses VST3, best-effort naming,
-so its behaviour is measured here, not negotiated). Whether the slot
-count variants are five plugin IDs (the PRD's lean, because VST3 cannot hide) or one plugin with
-hidden slots where the format allows; this plan assumes five IDs.
+**Needs from the author:** bench access to Reaper, Bitwig, Live, Nuendo and Logic.
 
 ---
 
@@ -220,16 +210,21 @@ repo later (Phase 8 splits it).
   value, resolved to one host:port), one network thread per device at
   realtime priority, a lock-free queue from each instance's audio thread. Instances register in
   `prepareToPlay` (or the CLAP `activate`) and again whenever the host restarts the process
-  (Logic's `AUHostingService` does this; WFS-DIY learnt it the hard way). If Phase 1 showed one
-  binary per format, the registry is a static in that binary; if not, it is a Bridge-style shared
-  library with a versioned ABI and an exact-match version check.
+  (Logic's `AUHostingService` does this; WFS-DIY learnt it the hard way). The registry lives in
+  a **shared core library** loaded by every plugin binary, after WFS-DIY's Bridge: versioned ABI,
+  exact-match version check, installed next to the plugins. Every variant, and later the CLAP
+  shim, links the same library, so one process has one registry whatever mix of binaries it
+  loads.
 - **Send path**: one bundle per device per audio block holding every changed slot from every
   instance, split at the MTU, immediate timetag unless the device's *honours timetags* setting is
   on, in which case timetag = intended playback time plus the per-device offset. Per-slot rate limiter,
   default off. TCP when `OSC_TRANSPORT` says so or the node is `CRITICAL`. The optional direct
   `sendto` from the audio thread, default off, behind a setting with a warning in its tooltip.
-- **Shims**: CLAP complete (rename, hide, module, clear); VST3 best-effort (`kParamTitlesChanged`,
-  `(unbound)` names). AU waits for Phase 7.
+- **Shims**: VST3 and AU through one JUCE `AudioProcessor` subclass, best-effort naming
+  (`kParamTitlesChanged`, `(unbound)` names; `IsHidden` and `clump` on AU), AU measured in Logic
+  in Phase 7. The shim interface is written for CLAP's capabilities (rename, hide, clear, module)
+  and the JUCE shim answers *unsupported* where a format must; the CLAP shim arrives in Phase 5b
+  and no core code moves for it.
 - **Editor, first cut**: device list (found, recent, manual), tree with search, slot table with
   click-slot-then-click-leaf binding, inline range and scaling, the *Test* button. Enough to bind;
   not yet the full UX.
@@ -335,6 +330,39 @@ client table is to be reflected; otherwise it stays a documented gap in its matr
 
 ---
 
+## Phase 5b — Our own CLAP shim · M
+
+**Goal:** CLAP, the reference format, from a shim written against the CLAP C API with
+`clap-helpers`, depending on neither JUCE's roadmap nor `clap-juce-extensions`. Decided
+2026-11-04. Placed here because Bitwig is a record gate and CLAP's gesture path is the cleanest
+to test, and because the core has to exist before a shim has anything to call.
+
+- Entry point and a **factory listing all five slot-count variants in one binary**; lifecycle
+  (init, activate, start and stop processing, reset); state through the same JSON chunk over
+  `clap_ostream` and `clap_istream`; one stereo audio port in and out, copied.
+- **Params extension**: count and info per slot, `CLAP_PARAM_IS_HIDDEN` for unbound slots,
+  `rescan(CLAP_PARAM_RESCAN_INFO)` on rename, `clap_host_params->clear()` on a stale lane,
+  `module` from the OSC path, in-events with sample offsets, out-events with
+  `PARAM_GESTURE_BEGIN` / `PARAM_VALUE` / `PARAM_GESTURE_END` for record, `request_flush` when
+  not processing. All of it direct calls into the same core as the JUCE shim.
+- **The JUCE editor in the host's window**: `create`, `set_parent`, `set_size`, `show`, `hide`
+  on Windows, macOS and X11; JUCE initialised inside a non-JUCE plugin; on Linux the host's
+  timer and posix-fd extensions pump JUCE's message loop. `clap-juce-extensions`' source is read
+  for how it does this and nothing is taken from it beyond that.
+- The CLAP binary links the shared core library from Phase 3, so a CLAP and a VST3 instance in
+  one process share one registry and one socket per device.
+- `clap-validator` in CI; Reaper and Bitwig on the bench; the rename, hide, clear and module rows
+  added to the Phase 1 report as `docs/spikes/phase5b-clap.md`.
+
+**Done when:** the Phase 3 and Phase 4 done-whens pass in Bitwig and Reaper over CLAP; an unbound
+slot is absent from the host's list; a stale lane is cleared from the host on rebind; a chunk
+saved from the VST3 opens in the CLAP with identical bindings and back; `clap-validator` is
+clean on three platforms.
+
+**Needs from the author:** nothing blocking. A Bitwig licence on the bench.
+
+---
+
 ## Phase 6 — The editor finished, the plugin's own server, the Monitor · M
 
 **Goal:** the PRD's UX section complete and the headless path dogfooded.
@@ -367,12 +395,13 @@ polished; the words for the failure-state tooltips.
 
 **Goal:** the same session file opens in all three formats. PRD milestone 5.
 
-- AU shim: `kAudioUnitProperty_ParameterInfo` change notification, `IsHidden`, `clump` per device,
-  gesture events for record. Logic's partial rename behaviour measured and written down.
-- Linux CLAP and VST3; LV2 only if it falls out of the chosen path for free.
-- The slot-count variants (8/16/32/64/128) as plugin IDs, generated from one CMake loop; the
-  Phase 1 one-binary result decides whether they share a registry by construction or through the
-  Bridge library.
+- AU, built by JUCE since Phase 3, now measured: `kAudioUnitProperty_ParameterInfo` change
+  notification, `IsHidden`, `clump` per device, gesture events for record. Logic's partial rename
+  behaviour written down in `docs/bench/`.
+- Linux VST3 and CLAP (the Phase 5b shim); LV2 only if JUCE gives it for free.
+- The slot-count variants (8/16/32/64/128) as plugin IDs, generated from one CMake loop for the
+  JUCE formats and listed by the factory for CLAP; all of them share the registry through the
+  shared core library from Phase 3.
 - Installers from WFS-DIY's scripts: Inno Setup on Windows, `.pkg` with codesign and
   notarisation on macOS, tarball with `install.sh` on Linux; CLAP paths added.
 - pluginval on every format in CI; `auval` on macOS.
@@ -459,11 +488,11 @@ sponsor; the **institutional home** for the spec.
 
 In the order the phases need them.
 
-1. JUCE-first or CLAP-first, from the Phase 1 report; five plugin IDs or one (Phase 1).
-2. AES route, sponsor, and the spec's institutional home (Phase 9).
+1. AES route, sponsor, and the spec's institutional home (Phase 9).
 
 Decided already, all on 2026-11-04: language and framework (C++20, JUCE 9), licence (GPLv3),
 copyright holders (Pierre-Olivier Boulant, Julien Bayle), no new `HOST_INFO` fields (no UUID, no
 `TIMETAGS`), the target pointed at once through the registry and the Monitor, Nuendo on VST3
 with best-effort naming, record over LISTEN when declared and otherwise over a UDP port shown in
-the editor and configured on the device side.
+the editor and configured on the device side, VST3 and AU first through JUCE's wrappers with our
+own CLAP shim in Phase 5b, five slot-count plugin IDs and the registry in a shared core library.
