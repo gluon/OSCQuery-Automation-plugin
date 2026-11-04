@@ -97,7 +97,7 @@ platforms.
   ```
   lib/oscquery/     the client library, its own CMake target and tests, no JUCE GUI dependency
   src/core/         slots, registry, state chunk, scaling, send and record paths
-  src/shims/        clap/, vst3/, au/ — thin
+  src/shims/        juce/ (one AudioProcessor: VST3 and AU), clap/ — thin
   src/editor/       browser, slot table, status bar, Monitor
   tools/conform/    the conformance CLI (Phase 8)
   tests/            unit (library, core), host-less plugin tests, a mock OSCQuery device

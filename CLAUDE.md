@@ -72,6 +72,11 @@ Each plugin instance owns a fixed pool of **N generic slots** (N = 32 by default
 - **GPLv3** for the plugin and the client library. File headers follow go.dot's form and read
   `Copyright (C) 2026 Pierre-Olivier Boulant, Julien Bayle`. The profile text in `docs/spec/` is
   **CC BY 4.0**, so manufacturers can quote it (decided 2026-11-04).
+- **Plugin identity, fixed for good:** company "Pix et Bel", manufacturer code `PxBl` (as
+  WFS-DIY), plugin codes `Q008` `Q016` `Q032` `Q064` `Q128` and `QMon` for the Monitor,
+  `JUCE_VST3_CAN_REPLACE_VST2=0`. The VST3 and AU IDs derive from these; changing one orphans
+  every saved session. Shims are `src/shims/juce/` (VST3 and AU) and `src/shims/clap/`
+  (decided 2026-11-04).
 - **The Core profile adds no field to OSCQuery.** No UUID, no `TIMETAGS`, no `REPLY_PORT`.
   Anything the plugin needs beyond the proposal is a plugin-side setting or lives in the device's
   own tree. OSCQuery is itself a proposal that needs support, not a rewrite.

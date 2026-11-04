@@ -1,0 +1,120 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 22,
+    "patch": 0
+  },
+
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "description": "Common settings, never configured directly. Each preset gets its own build tree under build/, so switching presets never re-configures on top of another generator's cache.",
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
+      "name": "dev",
+      "inherits": "base",
+      "displayName": "dev (Ninja Multi-Config)",
+      "description": "The everyday local preset on macOS and Linux; on Windows it needs an x64 Native Tools prompt, because Ninja does not find cl.exe by itself. Debug and Release share one configure: build dev-debug or dev-release.",
+      "generator": "Ninja Multi-Config"
+    },
+    {
+      "name": "vs",
+      "inherits": "base",
+      "displayName": "vs (Visual Studio, newest installed)",
+      "description": "Windows only, from any shell. No generator string on purpose: CMake picks the newest Visual Studio it finds, so this does not rot at the next VS release.",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "strict",
+      "inherits": "dev",
+      "displayName": "strict (warnings as errors, our code only)",
+      "description": "OQA_WARNINGS_AS_ERRORS=ON. Reaches oqa::warnings, which vendor sources never link. On Windows from a plain shell, configure vs with -DOQA_WARNINGS_AS_ERRORS=ON instead.",
+      "cacheVariables": {
+        "OQA_WARNINGS_AS_ERRORS": "ON"
+      }
+    },
+    {
+      "name": "ci-linux",
+      "inherits": "dev",
+      "displayName": "ci-linux",
+      "description": "What the Linux CI job configures: dev plus ccache.",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER_LAUNCHER": "ccache",
+        "CMAKE_CXX_COMPILER_LAUNCHER": "ccache"
+      }
+    },
+    {
+      "name": "ci-macos",
+      "inherits": "dev",
+      "displayName": "ci-macos",
+      "description": "What the macOS CI job configures: dev plus ccache, native architecture only. The universal build belongs to the installers (devplan Phase 7).",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER_LAUNCHER": "ccache",
+        "CMAKE_CXX_COMPILER_LAUNCHER": "ccache"
+      }
+    },
+    {
+      "name": "ci-windows",
+      "inherits": "vs",
+      "displayName": "ci-windows",
+      "description": "What the Windows CI job configures. No compiler cache: sccache with MSVC needs /Z7, and juce_recommended_config_flags gives /Zi in Debug (go.dot found this first)."
+    }
+  ],
+
+  "buildPresets": [
+    { "name": "dev-debug",          "configurePreset": "dev",        "configuration": "Debug" },
+    { "name": "dev-release",        "configurePreset": "dev",        "configuration": "Release" },
+    { "name": "vs-debug",           "configurePreset": "vs",         "configuration": "Debug" },
+    { "name": "vs-release",         "configurePreset": "vs",         "configuration": "Release" },
+    { "name": "strict-debug",       "configurePreset": "strict",     "configuration": "Debug" },
+    { "name": "ci-linux-debug",     "configurePreset": "ci-linux",   "configuration": "Debug" },
+    { "name": "ci-linux-release",   "configurePreset": "ci-linux",   "configuration": "Release" },
+    { "name": "ci-macos-debug",     "configurePreset": "ci-macos",   "configuration": "Debug" },
+    { "name": "ci-macos-release",   "configurePreset": "ci-macos",   "configuration": "Release" },
+    { "name": "ci-windows-debug",   "configurePreset": "ci-windows", "configuration": "Debug" },
+    { "name": "ci-windows-release", "configurePreset": "ci-windows", "configuration": "Release" }
+  ],
+
+  "testPresets": [
+    {
+      "name": "dev-debug",
+      "configurePreset": "dev",
+      "configuration": "Debug",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "vs-debug",
+      "configurePreset": "vs",
+      "configuration": "Debug",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "ci-linux",
+      "configurePreset": "ci-linux",
+      "configuration": "Debug",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "ci-macos",
+      "configurePreset": "ci-macos",
+      "configuration": "Debug",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "ci-windows",
+      "configurePreset": "ci-windows",
+      "configuration": "Debug",
+      "output": { "outputOnFailure": true }
+    }
+  ]
+}
