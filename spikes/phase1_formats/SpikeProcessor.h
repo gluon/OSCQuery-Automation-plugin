@@ -22,8 +22,11 @@
 
     Each slot is one host parameter: a normalised float with a stable ID
     ("slot1" ... "slot8"), whose NAME changes at runtime. Unbound, a slot is
-    named "(unbound)" and reports isHidden() (the patched JUCE turns that into
-    AU's IsHidden; VST3 has no such flag). Binding or unbinding calls
+    named "(unbound)" and reports isHidden(). AUv2 has no hidden flag (the PRD
+    names kAudioUnitParameterFlag_IsHidden, which the macOS SDK does not
+    define), so the patched JUCE leaves a hidden parameter out of
+    kAudioUnitProperty_ParameterList and marks it ExpertMode; VST3 has
+    nothing of the kind. Binding or unbinding calls
     updateHostDisplay with parameterInfoChanged, which JUCE turns into
     kParamTitlesChanged (VST3) and a ParameterList/ParameterInfo change (AU).
     Slots 1-4 and 5-8 are two parameter groups, i.e. two AU clumps and two

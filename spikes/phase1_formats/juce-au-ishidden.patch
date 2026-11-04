@@ -1,16 +1,50 @@
 diff --git a/modules/juce_audio_plugin_client/juce_audio_plugin_client_AU_1.mm b/modules/juce_audio_plugin_client/juce_audio_plugin_client_AU_1.mm
 --- a/modules/juce_audio_plugin_client/juce_audio_plugin_client_AU_1.mm
 +++ b/modules/juce_audio_plugin_client/juce_audio_plugin_client_AU_1.mm
-@@ -1084,6 +1084,9 @@
+@@ -1084,6 +1084,11 @@
                  if (param->isMetaParameter())
                      outParameterInfo.flags |= kAudioUnitParameterFlag_IsGlobalMeta;
  
++                // AUv2 has no hidden flag (AudioUnitProperties.h, macOS 15 SDK). A hidden
++                // parameter is left out of GetParameterList below and marked expert here.
 +                if (param->isHidden())
-+                    outParameterInfo.flags |= kAudioUnitParameterFlag_IsHidden;
++                    outParameterInfo.flags |= kAudioUnitParameterFlag_ExpertMode;
 +
                  auto parameterGroupHierarchy = juceFilter->getParameterTree().getGroupsForParameter (param);
  
                  if (! parameterGroupHierarchy.isEmpty())
+@@ -2334,11 +2339,6 @@
+         if (forceUseLegacyParamIDs || inScope != kAudioUnitScope_Global)
+             return MusicDeviceBase::GetParameterList (inScope, outParameterList, outNumParameters);
+ 
+-        outNumParameters = (UInt32) juceParameters.size();
+-
+-        if (outParameterList == nullptr)
+-            return noErr;
+-
+         if (cachedParameterList.empty())
+         {
+             struct ParamInfo
+@@ -2358,7 +2358,18 @@
+             std::transform   (vec.begin(), vec.end(), std::back_inserter (cachedParameterList), [] (auto x) { return x.identifier; });
+         }
+ 
+-        std::copy (cachedParameterList.begin(), cachedParameterList.end(), outParameterList);
++        // Hidden parameters are left out of the list the host sees; the cache keeps them all.
++        std::vector<AudioUnitParameterID> shown;
++        shown.reserve (cachedParameterList.size());
++
++        for (auto identifier : cachedParameterList)
++            if (auto* p = getParameterForAUParameterID (identifier); p == nullptr || ! p->isHidden())
++                shown.push_back (identifier);
++
++        outNumParameters = (UInt32) shown.size();
++
++        if (outParameterList != nullptr)
++            std::copy (shown.begin(), shown.end(), outParameterList);
+ 
+         return noErr;
+     }
 diff --git a/modules/juce_audio_processors_headless/processors/juce_AudioProcessorParameter.cpp b/modules/juce_audio_processors_headless/processors/juce_AudioProcessorParameter.cpp
 --- a/modules/juce_audio_processors_headless/processors/juce_AudioProcessorParameter.cpp
 +++ b/modules/juce_audio_processors_headless/processors/juce_AudioProcessorParameter.cpp
@@ -31,9 +65,9 @@ diff --git a/modules/juce_audio_processors_headless/processors/juce_AudioProcess
      virtual bool isMetaParameter() const;
 +
 +    /** Should return true if hosts should not show this parameter to the user.
-+        Read by the AU wrapper, which sets kAudioUnitParameterFlag_IsHidden;
-+        the other formats have no such flag. A change takes effect at the next
-+        updateHostDisplay() with parameterInfoChanged set.
++        Read by the AU wrapper only: AUv2 has no hidden flag, so a hidden parameter is
++        left out of kAudioUnitProperty_ParameterList and marked ExpertMode. A change
++        takes effect at the next updateHostDisplay() with parameterInfoChanged set.
 +        By default this returns false.
 +    */
 +    virtual bool isHidden() const;

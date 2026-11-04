@@ -24,7 +24,9 @@
 # It builds against a COPY of the pinned JUCE, extracted into the build folder and
 # patched there with juce-au-ishidden.patch (AudioProcessorParameter::isHidden(), read by
 # the AU wrapper), so the main tree's ThirdParty/JUCE is never touched. Decided by the
-# author 2026-11-04: measure IsHidden rather than record that JUCE cannot set it.
+# author 2026-11-04: measure hiding rather than record that JUCE cannot. Found the same
+# day: AUv2 has no kAudioUnitParameterFlag_IsHidden at all, so the patch leaves a hidden
+# parameter out of kAudioUnitProperty_ParameterList and marks it ExpertMode instead.
 
 cmake_minimum_required(VERSION 3.22)
 
