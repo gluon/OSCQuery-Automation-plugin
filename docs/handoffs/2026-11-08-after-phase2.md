@@ -15,10 +15,13 @@ For the next Claude Code session on this repository, and for the author. Read th
   `oscquery-dump 127.0.0.1:5005 --listen-first` and move an input fader. DNS-SD browse found
   nothing on this Windows machine with go.dot announcing beside it; try it on the home network
   with go.dot serving on the Mac mini (`wfg serve …`), and `dns-sd -B _oscjson._tcp` there.
-- **CI for Linux and macOS** ran at the closing push; check `gh run list` before building on it.
-  Everything new is plain C++20 and juce_core, and the copied go.dot units build on all three
-  platforms in go.dot, but this repository had not compiled them on the other two at the time of
-  writing.
+- **CI is green on Linux, macOS and Windows** (run 42509175235), after two fixes the Windows
+  build had not asked for: GCC and clang refuse a nested struct's default member initialisers in
+  a default argument of the enclosing class, and libc++ has no floating-point `std::to_chars`
+  below macOS 13.3, where this plugin's deployment target is 11.0 (go.dot's is 13.3), so
+  `osc/Value.cpp` finds the shortest round-trip text by trying precisions there. CTest hides the
+  suite's output on success, so the L5 timings on the runners are not in the logs; Windows's are
+  in the bench report.
 - **Next: Phase 3, slots, registry, send** (`src/core`, the shared core library after WFS-DIY's
   Bridge, the first editor). Size L. Start it in plan mode. It builds on `Device` (one per
   resolved device in the registry), `Finder` (the device list in the editor), `osc::bundle` (one

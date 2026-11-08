@@ -282,8 +282,10 @@ the records). Report of the bench: [`docs/bench/2026-11-08-phase2-library.md`](b
   `--generate N` from `tests/support/TreeGen.h`. Still missing: a distinct `WS_PORT`, per-client
   `ACCESS` (Phase 5).
 - *Done-when:* `oqa_oscquery_tests`, **90 cases, 31,830 assertions under C and fr-FR on Windows**,
-  as `oscquery.C` and `oscquery.fr_FR` in CTest; the three-platform run is CI's at the push that
-  closes this record. The example prints go.dot's tree (820 nodes) and the mock's and subscribes
+  as `oscquery.C` and `oscquery.fr_FR` in CTest; **CI green on Linux, macOS and Windows** (run
+  42509175235) after two portability fixes GCC and clang asked for (a nested struct's default
+  member initialisers in a default argument; floating-point `std::to_chars` absent below macOS
+  13.3, this plugin's floor being 11.0). The example prints go.dot's tree (820 nodes) and the mock's and subscribes
   with no address typed; **WFS-DIY's tree is not yet printed**: its OSCQuery server is off by default
   (`networkOscQueryEnabled`), switched on in its Network tab, which the author does; the row is
   open in the bench report. L5 on loopback: 10,000 leaves fetched and parsed in 1.4 s, Debug.
