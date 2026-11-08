@@ -13,7 +13,8 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-# The core first (devplan Phase 3), then the JUCE shim that links it. src/editor joins in
-# Phase 3e; src/shims/clap waits for Phase 5b.
+# The core first (devplan Phase 3), the editor's sources (an interface target), then the
+# JUCE shim that links both. src/shims/clap waits for Phase 5b.
 add_subdirectory(core)
+add_subdirectory(editor)
 add_subdirectory(shims/juce)

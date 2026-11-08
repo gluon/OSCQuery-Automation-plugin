@@ -18,6 +18,7 @@
 #include "PluginProcessor.h"
 
 #include <core/rt/RtCheck.h>
+#include <editor/EditorRoot.h>
 
 // The five plugin IDs are five slot counts (PRD, Binding model). Phase 3 builds one.
 static_assert (OQA_SLOT_COUNT == 8 || OQA_SLOT_COUNT == 16 || OQA_SLOT_COUNT == 32
@@ -106,9 +107,14 @@ namespace oqa::shim
 
     juce::AudioProcessorEditor* PluginProcessor::createEditor()
     {
-        /*  Phase 3d: the host's generic view of the slots. The editor proper,
-            with the device browser and the slot table, is Phase 3e's. */
-        return new juce::GenericAudioProcessorEditor (*this);
+        editor::Host host {
+            core,
+            [this] { bindingsChanged(); },
+            [this] (int slot) { return slot >= 0 && slot < slotCount ? slots[static_cast<std::size_t> (slot)]->getValue() : 0.0f; },
+            loaded.shared ? "Shared core library: " + juce::String (loaded.path) : juce::String (loaded.note)
+        };
+
+        return new editor::EditorRoot (*this, std::move (host));
     }
 
     bool PluginProcessor::acceptsMidi() const { return false; }

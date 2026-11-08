@@ -1,0 +1,405 @@
+/*
+    This file is part of the OSCQuery Automation Plugin —
+    https://github.com/pob31/OSCQuery-Automation-plugin
+
+    Copyright (C) 2026 Pierre-Olivier Boulant, Julien Bayle
+
+    The OSCQuery Automation Plugin is free software: you can redistribute it
+    and/or modify it under the terms of the GNU General Public License as
+    published by the Free Software Foundation, either version 3 of the License,
+    or (at your option) any later version. It is distributed in the hope that it
+    will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty
+    of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+    Public License (LICENSE, at the repository root) for more details.
+
+    SPDX-License-Identifier: GPL-3.0-or-later
+*/
+
+#include "SlotTable.h"
+
+namespace oqa::editor
+{
+    //==============================================================================
+    /** Two small text fields: min and max. Enter commits. */
+    class SlotTable::RangeEditor final : public juce::Component
+    {
+    public:
+        explicit RangeEditor (SlotTable& owner) : table (owner)
+        {
+            for (auto* e : { &minField, &maxField })
+            {
+                e->setFont (juce::FontOptions (12.0f));
+                e->setJustification (juce::Justification::centredRight);
+                e->onReturnKey = [this] { commit(); };
+                e->onFocusLost = [this] { commit(); };
+                addAndMakeVisible (*e);
+            }
+        }
+
+        void setRow (int newRow)
+        {
+            row = newRow;
+            const auto& slot = table.instance.chunk().slots[row];
+            minField.setText (slot.rangeMin.has_value() ? juce::String (*slot.rangeMin) : juce::String(), juce::dontSendNotification);
+            maxField.setText (slot.rangeMax.has_value() ? juce::String (*slot.rangeMax) : juce::String(), juce::dontSendNotification);
+            const bool editable = slot.bound() && ! slot.isToggle();
+            minField.setEnabled (editable);
+            maxField.setEnabled (editable);
+            minField.setTextToShowWhenEmpty (editable ? "min" : "", juce::Colours::grey);
+            maxField.setTextToShowWhenEmpty (editable ? "max" : "", juce::Colours::grey);
+        }
+
+        void resized() override
+        {
+            auto area = getLocalBounds().reduced (1);
+            minField.setBounds (area.removeFromLeft (area.getWidth() / 2 - 2));
+            area.removeFromLeft (4);
+            maxField.setBounds (area);
+        }
+
+    private:
+        void commit()
+        {
+            const auto& slot = table.instance.chunk().slots[row];
+            const auto minText = minField.getText().trim();
+            const auto maxText = maxField.getText().trim();
+
+            if (minText.isEmpty() || maxText.isEmpty())
+                return;
+
+            const auto min = minText.getDoubleValue();
+            const auto max = maxText.getDoubleValue();
+
+            if (slot.rangeMin == min && slot.rangeMax == max)
+                return;
+
+            if (min == max)
+                return;
+
+            table.instance.setRange (row, min, max);
+            table.changed();
+        }
+
+        SlotTable& table;
+        int row = 0;
+        juce::TextEditor minField, maxField;
+    };
+
+    /** A combo box for the curve or the direction. */
+    class SlotTable::ChoiceEditor final : public juce::Component
+    {
+    public:
+        ChoiceEditor (SlotTable& owner, Column which) : table (owner), column (which)
+        {
+            if (column == Column::scaling)
+            {
+                box.addItem ("linear", 1);
+                box.addItem ("log", 2);
+                box.addItem ("exp", 3);
+            }
+            else
+            {
+                box.addItem ("send", 1);
+                box.addItem ("receive", 2);
+                box.addItem ("both", 3);
+            }
+
+            box.onChange = [this] { commit(); };
+            addAndMakeVisible (box);
+        }
+
+        void setRow (int newRow)
+        {
+            row = newRow;
+            const auto& slot = table.instance.chunk().slots[row];
+            const int id = column == Column::scaling ? static_cast<int> (slot.scaling) + 1 : static_cast<int> (slot.direction) + 1;
+            box.setSelectedId (id, juce::dontSendNotification);
+            box.setEnabled (slot.bound());
+        }
+
+        void resized() override { box.setBounds (getLocalBounds().reduced (1)); }
+
+    private:
+        void commit()
+        {
+            const int id = box.getSelectedId();
+
+            if (id <= 0)
+                return;
+
+            if (column == Column::scaling)
+                table.instance.setScaling (row, static_cast<core::Scaling> (id - 1));
+            else
+                table.instance.setDirection (row, static_cast<core::Direction> (id - 1));
+
+            table.changed();
+        }
+
+        SlotTable& table;
+        Column column;
+        int row = 0;
+        juce::ComboBox box;
+    };
+
+    /** Test, or Clear. */
+    class SlotTable::ButtonCell final : public juce::Component
+    {
+    public:
+        ButtonCell (SlotTable& owner, Column which) : table (owner), column (which), button (which == Column::test ? "Test" : "x")
+        {
+            button.onClick = [this] { act(); };
+            addAndMakeVisible (button);
+        }
+
+        void setRow (int newRow)
+        {
+            row = newRow;
+            button.setEnabled (table.instance.chunk().slots[row].bound());
+        }
+
+        void resized() override { button.setBounds (getLocalBounds().reduced (2)); }
+
+    private:
+        void act()
+        {
+            if (column == Column::test)
+            {
+                std::string error;
+                table.instance.testSend (row, table.slotValue (row), error);
+            }
+            else
+            {
+                table.instance.unbind (row);
+                table.changed();
+            }
+        }
+
+        SlotTable& table;
+        Column column;
+        int row = 0;
+        juce::TextButton button;
+    };
+
+    //==============================================================================
+    SlotTable::SlotTable (core::Instance& instanceIn, std::function<float (int)> slotValueIn)
+        : instance (instanceIn), slotValue (std::move (slotValueIn))
+    {
+        title.setFont (juce::FontOptions (15.0f, juce::Font::bold));
+        addAndMakeVisible (title);
+
+        auto& header = table.getHeader();
+        header.addColumn ("#", Column::index, 30, 30, 40);
+        header.addColumn ("Name", Column::name, 150, 60, 400);
+        header.addColumn ("Device", Column::device, 100, 40, 300);
+        header.addColumn ("Path", Column::path, 200, 60, 600);
+        header.addColumn ("Range", Column::range, 120, 90, 200);
+        header.addColumn ("Curve", Column::scaling, 70, 60, 100);
+        header.addColumn ("Direction", Column::direction, 80, 70, 110);
+        header.addColumn ("Value", Column::value, 90, 50, 200);
+        header.addColumn ("", Column::test, 50, 50, 50);
+        header.addColumn ("", Column::clear, 30, 30, 30);
+        header.setStretchToFitActive (true);
+
+        table.setRowHeight (24);
+        table.setMultipleSelectionEnabled (false);
+        addAndMakeVisible (table);
+    }
+
+    SlotTable::~SlotTable() = default;
+
+    void SlotTable::resized()
+    {
+        auto area = getLocalBounds();
+        title.setBounds (area.removeFromTop (24));
+        table.setBounds (area);
+    }
+
+    void SlotTable::refresh (const juce::var& registryStatus)
+    {
+        status = registryStatus;
+        table.updateContent();
+        table.repaint();
+    }
+
+    void SlotTable::refreshValues()
+    {
+        table.repaintRow (-1);
+        table.repaint();
+    }
+
+    void SlotTable::changed()
+    {
+        if (onChanged != nullptr)
+            onChanged();
+    }
+
+    //==============================================================================
+    int SlotTable::getNumRows()
+    {
+        return instance.slotCount();
+    }
+
+    bool SlotTable::deviceReachable (int deviceIndex) const
+    {
+        const auto* devices = status.getProperty ("devices", {}).getArray();
+
+        if (devices == nullptr || deviceIndex < 0 || deviceIndex >= devices->size())
+            return false;
+
+        return static_cast<bool> ((*devices)[deviceIndex].getProperty ("reachable", false));
+    }
+
+    juce::Colour SlotTable::stateColour (int row) const
+    {
+        const auto& slot = instance.chunk().slots[row];
+
+        if (! slot.bound())
+            return juce::Colours::grey;
+
+        if (! slot.active())
+            return juce::Colours::orange;
+
+        if (! deviceReachable (slot.deviceIndex))
+            return juce::Colours::orangered;
+
+        return juce::Colours::limegreen;
+    }
+
+    juce::String SlotTable::cellText (int row, int column) const
+    {
+        const auto& chunk = instance.chunk();
+        const auto& slot = chunk.slots[row];
+
+        switch (column)
+        {
+            case Column::index:  return juce::String (row + 1);
+            case Column::name:   return slot.bound() ? juce::String (slot.displayName) : juce::String ("(unbound)");
+            case Column::device:
+                if (slot.deviceIndex >= 0 && slot.deviceIndex < static_cast<int> (chunk.devices.size()))
+                    return juce::String (chunk.devices[static_cast<std::size_t> (slot.deviceIndex)].name);
+                return {};
+            case Column::path:
+                if (! slot.bound())
+                    return {};
+                return juce::String (slot.path) + (slot.argIndex > 0 || chunk.slots.groupOf (row).size() > 1
+                                                       ? " [" + juce::String (slot.argIndex) + "]" : juce::String());
+            case Column::value:
+            {
+                if (! slot.bound())
+                    return {};
+
+                const auto normalised = slotValue (row);
+
+                if (slot.isToggle())
+                    return normalised >= 0.5f ? "on" : "off";
+
+                if (! slot.active())
+                    return juce::String (normalised, 3) + " (no range)";
+
+                const auto units = slot.toDevice (normalised);
+                return (slot.isInteger() ? juce::String (static_cast<int> (units)) : juce::String (units, 3))
+                     + (slot.unit.empty() ? juce::String() : " " + juce::String (slot.unit));
+            }
+            default: return {};
+        }
+    }
+
+    void SlotTable::paintRowBackground (juce::Graphics& g, int row, int, int, bool selected)
+    {
+        const auto& colours = getLookAndFeel();
+
+        if (selected)
+            g.fillAll (colours.findColour (juce::ListBox::backgroundColourId).brighter (0.25f));
+        else if (row % 2 == 1)
+            g.fillAll (colours.findColour (juce::ListBox::backgroundColourId).brighter (0.05f));
+    }
+
+    void SlotTable::paintCell (juce::Graphics& g, int row, int column, int width, int height, bool)
+    {
+        if (row < 0 || row >= instance.slotCount())
+            return;
+
+        const auto& colours = getLookAndFeel();
+
+        if (column == Column::index)
+        {
+            g.setColour (stateColour (row));
+            g.fillEllipse (3.0f, height / 2.0f - 4.0f, 8.0f, 8.0f);
+            g.setColour (colours.findColour (juce::ListBox::textColourId));
+            g.setFont (juce::FontOptions (12.0f));
+            g.drawText (cellText (row, column), 14, 0, width - 14, height, juce::Justification::centredLeft, true);
+            return;
+        }
+
+        const auto& slot = instance.chunk().slots[row];
+        g.setColour (colours.findColour (juce::ListBox::textColourId).withAlpha (slot.bound() ? 1.0f : 0.5f));
+        g.setFont (juce::FontOptions (12.0f));
+        g.drawText (cellText (row, column), 4, 0, width - 8, height,
+                    column == Column::value ? juce::Justification::centredRight : juce::Justification::centredLeft, true);
+    }
+
+    juce::Component* SlotTable::refreshComponentForCell (int row, int column, bool, juce::Component* existing)
+    {
+        switch (column)
+        {
+            case Column::range:
+            {
+                auto* editor = dynamic_cast<RangeEditor*> (existing);
+
+                if (editor == nullptr)
+                {
+                    delete existing;
+                    editor = new RangeEditor (*this);
+                }
+
+                editor->setRow (row);
+                return editor;
+            }
+
+            case Column::scaling:
+            case Column::direction:
+            {
+                auto* editor = dynamic_cast<ChoiceEditor*> (existing);
+
+                if (editor == nullptr)
+                {
+                    delete existing;
+                    editor = new ChoiceEditor (*this, static_cast<Column> (column));
+                }
+
+                editor->setRow (row);
+                return editor;
+            }
+
+            case Column::test:
+            case Column::clear:
+            {
+                auto* cell = dynamic_cast<ButtonCell*> (existing);
+
+                if (cell == nullptr)
+                {
+                    delete existing;
+                    cell = new ButtonCell (*this, static_cast<Column> (column));
+                }
+
+                cell->setRow (row);
+                return cell;
+            }
+
+            default:
+                delete existing;
+                return nullptr;
+        }
+    }
+
+    int SlotTable::getColumnAutoSizeWidth (int column)
+    {
+        int widest = 40;
+        juce::Font font (juce::FontOptions (12.0f));
+
+        for (int row = 0; row < getNumRows(); ++row)
+            widest = juce::jmax (widest, static_cast<int> (juce::GlyphArrangement::getStringWidth (font, cellText (row, column))) + 12);
+
+        return widest;
+    }
+}

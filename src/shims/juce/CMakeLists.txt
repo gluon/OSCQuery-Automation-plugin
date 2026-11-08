@@ -72,6 +72,7 @@ function(oqa_add_plugin_variant slots code)
         PRIVATE
             oqa::core
             oqa::oscquery
+            oqa::editor
             juce::juce_audio_processors
             juce::juce_cryptography
             juce::juce_data_structures
