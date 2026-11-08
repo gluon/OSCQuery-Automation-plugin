@@ -20,13 +20,15 @@
 add_executable(oqa_core_tests
     ../TestMain.cpp
     ScalingTests.cpp
-    SlotTests.cpp)
+    SlotTests.cpp
+    StateChunkTests.cpp)
 
 target_include_directories(oqa_core_tests PRIVATE "${CMAKE_SOURCE_DIR}/tests")
 target_include_directories(oqa_core_tests SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/ThirdParty/doctest")
 
 target_compile_definitions(oqa_core_tests PRIVATE
     OQA_TEST_FIXTURES_DIR="${CMAKE_SOURCE_DIR}/tests/fixtures"
+    OQA_TEST_STATE_DIR="${CMAKE_SOURCE_DIR}/tests/state"
     OQA_LOCALE_FR="${OQA_LOCALE_FR}")
 
 target_link_libraries(oqa_core_tests PRIVATE oqa::core oqa_mock_device oqa_juce oqa::warnings)

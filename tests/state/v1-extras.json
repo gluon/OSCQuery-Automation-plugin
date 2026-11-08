@@ -1,0 +1,73 @@
+{
+  "version": 1,
+  "saved_by": "a future plugin, 9.9.9",
+  "colour_theme": { "accent": "#ff8800" },
+  "devices": [
+    {
+      "name": "Generic Mock",
+      "last_host": "10.0.0.7",
+      "last_port": 5005,
+      "tree_hash": "",
+      "honours_timetags": false,
+      "offset_ms": 3,
+      "firmware": "2.4.1",
+      "pinned": true
+    }
+  ],
+  "slots": [
+    {
+      "host_param_id": 3,
+      "device_index": 0,
+      "path": "/mixer/channel/2/gain",
+      "arg_index": 0,
+      "type": "f",
+      "range": { "min": -60.0, "max": 12.0 },
+      "scaling": "linear",
+      "direction": "send",
+      "display_name": "Ch 2 gain",
+      "range_overridden": false,
+      "unit": "dB",
+      "colour": "#00ccff",
+      "smoothing_ms": 40
+    },
+    {
+      "host_param_id": 1,
+      "device_index": 0,
+      "path": "/mixer/channel/1/pan",
+      "arg_index": 0,
+      "type": "f",
+      "range": { "min": -1.0, "max": 1.0 },
+      "scaling": "s-curve",
+      "direction": "send",
+      "display_name": "Pan 1",
+      "range_overridden": false,
+      "unit": ""
+    },
+    {
+      "host_param_id": 12,
+      "device_index": 0,
+      "path": "/mixer/master/level",
+      "arg_index": 0,
+      "type": "i",
+      "range": { "min": 0, "max": 127 },
+      "scaling": "linear",
+      "direction": "send",
+      "display_name": "Beyond an 8-slot table",
+      "range_overridden": false,
+      "unit": ""
+    },
+    {
+      "host_param_id": 2,
+      "device_index": 4,
+      "path": "/mixer/master/trim",
+      "arg_index": 0,
+      "type": "f",
+      "range": null,
+      "scaling": "linear",
+      "direction": "send",
+      "display_name": "Names a device the chunk does not list",
+      "range_overridden": false,
+      "unit": ""
+    }
+  ]
+}

@@ -24,7 +24,11 @@ add_library(oqa_core STATIC
     Scaling.h
     Scaling.cpp
     Slot.h
-    Slot.cpp)
+    Slot.cpp
+
+    # 3b: the state chunk, JSON, versioned; every version ever shipped stays loadable.
+    StateChunk.h
+    StateChunk.cpp)
 add_library(oqa::core ALIAS oqa_core)
 
 set_target_properties(oqa_core PROPERTIES POSITION_INDEPENDENT_CODE ON)

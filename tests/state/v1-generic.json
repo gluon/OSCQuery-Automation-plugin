@@ -1,0 +1,116 @@
+{
+  "version": 1,
+  "devices": [
+    {
+      "name": "Generic Mock",
+      "last_host": "192.168.1.40",
+      "last_port": 5005,
+      "tree_hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "identity_path": "/system/serial",
+      "identity_value": "MOCK-0001",
+      "honours_timetags": true,
+      "offset_ms": -12.5
+    },
+    {
+      "name": "Second Mock",
+      "last_host": "192.168.1.41",
+      "last_port": 5005,
+      "tree_hash": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+      "honours_timetags": false,
+      "offset_ms": 0.0
+    }
+  ],
+  "slots": [
+    {
+      "host_param_id": 0,
+      "device_index": 0,
+      "path": "/mixer/channel/1/gain",
+      "arg_index": 0,
+      "type": "f",
+      "range": { "min": -60.0, "max": 12.0 },
+      "scaling": "linear",
+      "direction": "send",
+      "display_name": "Ch 1 gain",
+      "range_overridden": false,
+      "unit": "dB"
+    },
+    {
+      "host_param_id": 1,
+      "device_index": 0,
+      "path": "/mixer/master/trim",
+      "arg_index": 0,
+      "type": "f",
+      "range": { "min": 20.0, "max": 20000.0 },
+      "scaling": "log",
+      "direction": "both",
+      "display_name": "mixer/master/trim",
+      "range_overridden": true,
+      "unit": ""
+    },
+    {
+      "host_param_id": 4,
+      "device_index": 1,
+      "path": "/source/1/position",
+      "arg_index": 0,
+      "type": "f",
+      "range": { "min": -10.0, "max": 10.0 },
+      "scaling": "linear",
+      "direction": "send",
+      "display_name": "source/1/position[0]",
+      "range_overridden": false,
+      "unit": "m"
+    },
+    {
+      "host_param_id": 5,
+      "device_index": 1,
+      "path": "/source/1/position",
+      "arg_index": 1,
+      "type": "f",
+      "range": { "min": -10.0, "max": 10.0 },
+      "scaling": "linear",
+      "direction": "send",
+      "display_name": "source/1/position[1]",
+      "range_overridden": false,
+      "unit": "m"
+    },
+    {
+      "host_param_id": 6,
+      "device_index": 1,
+      "path": "/source/1/position",
+      "arg_index": 2,
+      "type": "f",
+      "range": { "min": 0.0, "max": 5.0 },
+      "scaling": "exp",
+      "direction": "send",
+      "display_name": "source/1/position[2]",
+      "range_overridden": false,
+      "unit": "m"
+    },
+    {
+      "host_param_id": 7,
+      "device_index": 0,
+      "path": "/mixer/channel/1/mute",
+      "arg_index": 0,
+      "type": "T",
+      "range": null,
+      "scaling": "linear",
+      "direction": "send",
+      "display_name": "Mute 1",
+      "range_overridden": false,
+      "unit": ""
+    },
+    {
+      "host_param_id": 2,
+      "device_index": 0,
+      "path": "/mixer/master/level",
+      "arg_index": 0,
+      "type": "i",
+      "range": { "min": 0, "max": 127 },
+      "scaling": "linear",
+      "direction": "receive",
+      "display_name": "Master level",
+      "range_overridden": false,
+      "unit": ""
+    }
+  ]
+}

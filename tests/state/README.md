@@ -1,0 +1,15 @@
+# tests/state
+
+One state-chunk fixture per version ever shipped (devplan, cross-cutting: "every version ever
+shipped stays loadable; a fixture per version in `tests/state/`"). `tests/core/StateChunkTests.cpp`
+loads each and checks what it reads; a chunk's reader is never deleted.
+
+Fixtures are the one place an OSC address may be written down in this repository: they are
+sessions saved against the generic mock device (`tests/fixtures/trees/generic-device.json`),
+never a real product's namespace.
+
+| File | Version | What it holds |
+| --- | --- | --- |
+| `v1-generic.json` | 1 | Two devices (one with an identity leaf, timetags on and an offset), a ranged float, a user-overridden range with the log curve, an `fff` as three consecutive slots, a toggle, an integer set to receive |
+| `v1-extras.json` | 1 | Fields this version does not know, at the top level, on a device and on a slot; a slot beyond 8 slots; a slot naming no device; an unknown scaling name |
+| `v1-empty.json` | 1 | A session with nothing bound |
