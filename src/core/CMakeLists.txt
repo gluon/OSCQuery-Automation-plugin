@@ -28,7 +28,16 @@ add_library(oqa_core STATIC
 
     # 3b: the state chunk, JSON, versioned; every version ever shipped stays loadable.
     StateChunk.h
-    StateChunk.cpp)
+    StateChunk.cpp
+
+    # 3c: the lipogram's regions and counters; the ring from the audio threads to a
+    # device's network thread; time tags from the clock; the per-slot rate limiter.
+    rt/RtCheck.h
+    registry/ChangeRing.h
+    send/TimeTags.h
+    send/TimeTags.cpp
+    send/RateLimiter.h
+    send/RateLimiter.cpp)
 add_library(oqa::core ALIAS oqa_core)
 
 set_target_properties(oqa_core PROPERTIES POSITION_INDEPENDENT_CODE ON)

@@ -19,9 +19,14 @@
 
 add_executable(oqa_core_tests
     ../TestMain.cpp
+    ../support/RtAllocCounter.cpp       # the counting operator new: test executables only
     ScalingTests.cpp
     SlotTests.cpp
-    StateChunkTests.cpp)
+    StateChunkTests.cpp
+    RtCheckTests.cpp
+    ChangeRingTests.cpp
+    TimeTagTests.cpp
+    RateLimiterTests.cpp)
 
 target_include_directories(oqa_core_tests PRIVATE "${CMAKE_SOURCE_DIR}/tests")
 target_include_directories(oqa_core_tests SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/ThirdParty/doctest")
@@ -31,7 +36,11 @@ target_compile_definitions(oqa_core_tests PRIVATE
     OQA_TEST_STATE_DIR="${CMAKE_SOURCE_DIR}/tests/state"
     OQA_LOCALE_FR="${OQA_LOCALE_FR}")
 
-target_link_libraries(oqa_core_tests PRIVATE oqa::core oqa_mock_device oqa_juce oqa::warnings)
+# oqa::oscquery named here although oqa::core carries it: GNU ld scans archives once, in
+# order, and CMake appends a transitive archive after the direct ones, which put the
+# library (which needs juce::SHA256) after oqa_juce (which has it). Named directly it
+# comes before. The same order as lib/oscquery/tests.
+target_link_libraries(oqa_core_tests PRIVATE oqa::core oqa::oscquery oqa_mock_device oqa_juce oqa::warnings)
 
 add_test(NAME core.C COMMAND oqa_core_tests --oqa-locale=C)
 add_test(NAME core.fr_FR COMMAND oqa_core_tests --oqa-locale=${OQA_LOCALE_FR})
