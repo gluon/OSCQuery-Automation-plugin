@@ -34,6 +34,7 @@ add_library(oqa_core STATIC
     # device's network thread; time tags from the clock; the per-slot rate limiter.
     rt/RtCheck.h
     registry/ChangeRing.h
+    registry/Wake.h
     send/TimeTags.h
     send/TimeTags.cpp
     send/RateLimiter.h

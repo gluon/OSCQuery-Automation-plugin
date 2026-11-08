@@ -47,7 +47,6 @@
 
 #include <juce_core/juce_core.h>
 
-#include <memory>
 #include <string>
 #include <vector>
 
@@ -67,8 +66,8 @@ namespace oqa::core
         /** Why the static copy is in use, in words; empty when shared. */
         std::string note;
 
-        /** The handle; the loader keeps every library it opened open for the life of the process. */
-        std::shared_ptr<juce::DynamicLibrary> library;
+        /** The system's handle (HMODULE or dlopen's), never closed: the registry in a library owns threads. */
+        void* handle = nullptr;
     };
 
     class RegistryLoader

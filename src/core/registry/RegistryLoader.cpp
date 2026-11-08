@@ -40,6 +40,16 @@ namespace oqa::core
         constexpr int parentsToWalk = 5;
 
         using ApiFn = const OqaCoreApi* (*) (void);
+
+      #if defined (_WIN32)
+        void* openLibrary (const juce::String& path)         { return LoadLibraryW (path.toWideCharPointer()); }
+        void* findFunction (void* handle, const char* name)  { return reinterpret_cast<void*> (GetProcAddress (static_cast<HMODULE> (handle), name)); }
+        void closeLibrary (void* handle)                     { FreeLibrary (static_cast<HMODULE> (handle)); }
+      #else
+        void* openLibrary (const juce::String& path)         { return dlopen (path.toRawUTF8(), RTLD_LOCAL | RTLD_NOW); }
+        void* findFunction (void* handle, const char* name)  { return dlsym (handle, name); }
+        void closeLibrary (void* handle)                     { dlclose (handle); }
+      #endif
     }
 
     const char* RegistryLoader::libraryFileName() noexcept
@@ -130,47 +140,46 @@ namespace oqa::core
         if (! file.existsAsFile())
             return fallback (file.getFullPathName().toStdString() + ": not found");
 
-        /*  NEVER CLOSED. The registry in a library owns threads and sockets;
-            unloading it under them is how a host crashes on exit. Every
-            library opened here is kept until the process ends, whatever
-            happens to the LoadedCore that asked. */
-        static std::vector<std::shared_ptr<juce::DynamicLibrary>> kept;
+        /*  The system's own loader, and NEVER CLOSED once the table is taken:
+            the registry in a library owns threads and sockets, and unloading
+            it under them is how a host crashes on exit. A file that turns out
+            not to be the library is closed again. No JUCE object is involved,
+            so nothing is counted at exit. */
+        const auto path = file.getFullPathName();
+        void* handle = openLibrary (path);
 
-        auto library = std::make_shared<juce::DynamicLibrary>();
-        kept.push_back (library);
+        if (handle == nullptr)
+            return fallback (path.toStdString() + ": would not load");
 
-        if (! library->open (file.getFullPathName()))
-            return fallback (file.getFullPathName().toStdString() + ": would not load");
-
-        const auto entry = reinterpret_cast<ApiFn> (library->getFunction ("oqa_core_api"));
+        const auto entry = reinterpret_cast<ApiFn> (findFunction (handle, "oqa_core_api"));
 
         if (entry == nullptr)
         {
-            library->close();
-            return fallback (file.getFullPathName().toStdString() + ": is not the core library (no oqa_core_api)");
+            closeLibrary (handle);
+            return fallback (path.toStdString() + ": is not the core library (no oqa_core_api)");
         }
 
         const auto* api = entry();
 
         if (api == nullptr)
         {
-            library->close();
-            return fallback (file.getFullPathName().toStdString() + ": answered no table");
+            closeLibrary (handle);
+            return fallback (path.toStdString() + ": answered no table");
         }
 
         if (api->abiVersion != OQA_CORE_ABI_VERSION || api->size < sizeof (OqaCoreApi))
         {
             const auto found = api->abiVersion;
-            library->close();
-            return fallback (file.getFullPathName().toStdString() + ": is ABI version " + std::to_string (found)
+            closeLibrary (handle);
+            return fallback (path.toStdString() + ": is ABI version " + std::to_string (found)
                              + ", this plugin needs " + std::to_string (OQA_CORE_ABI_VERSION));
         }
 
         LoadedCore out;
         out.api = api;
         out.shared = true;
-        out.path = file.getFullPathName().toStdString();
-        out.library = std::move (library);
+        out.path = path.toStdString();
+        out.handle = handle;
         return out;
     }
 

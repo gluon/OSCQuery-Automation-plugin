@@ -18,6 +18,7 @@
 #include <core/registry/Registry.h>
 
 #include <core/registry/ChangeRing.h>
+#include <core/registry/Wake.h>
 #include <core/rt/RtCheck.h>
 #include <core/send/RateLimiter.h>
 #include <core/send/TimeTags.h>
@@ -34,7 +35,6 @@
 #include <chrono>
 #include <map>
 #include <mutex>
-#include <semaphore>
 #include <thread>
 #include <unordered_map>
 #include <unordered_set>
@@ -210,7 +210,7 @@ namespace oqa::core
         ~DeviceEntry() override
         {
             signalThreadShouldExit();
-            wake.release();
+            wake.signal();
             stopThread (3000);
 
             const std::lock_guard<std::mutex> guard (deviceLock);
@@ -224,7 +224,7 @@ namespace oqa::core
         //==============================================================================
         //  The audio thread.
         ChangeRing<ringCapacity> ring;
-        std::counting_semaphore<1 << 20> wake { 0 };
+        Wake wake;
 
         bool directSend (Registry::InstanceRecord& instance, Group& group) noexcept
         {
@@ -287,7 +287,7 @@ namespace oqa::core
             }
 
             addressChanged.store (true, std::memory_order_release);
-            wake.release();
+            wake.signal();
         }
 
         void setTiming (bool honoursTimetags, double offsetMs)
@@ -691,9 +691,8 @@ namespace oqa::core
 
             while (! threadShouldExit())
             {
-                (void) wake.try_acquire_for (milliseconds (100));
-
-                while (wake.try_acquire()) {}
+                (void) wake.waitFor (milliseconds (100));
+                wake.drain();
 
                 if (threadShouldExit())
                     break;
@@ -719,7 +718,7 @@ namespace oqa::core
                     while (! everyActiveMarked (now) && now < deadline)
                     {
                         if (! drain (now))
-                            (void) wake.try_acquire_for (deadline - now);
+                            (void) wake.waitFor (deadline - now);
 
                         now = steady_clock::now();
                     }
@@ -1062,7 +1061,7 @@ namespace oqa::core
 
             /*  The one syscall of the audio path, by decision (2026-11-08):
                 a non-blocking wake, once per block per device. */
-            device->wake.release();
+            device->wake.signal();
         }
     }
 
@@ -1087,7 +1086,7 @@ namespace oqa::core
         group->known[plan->argOfSlot[static_cast<std::size_t> (slot)]].store (normalised, std::memory_order_relaxed);
         group->device->ring.push ({ instance->id, static_cast<std::uint16_t> (slot), SlotChange::value, normalised });
         group->device->ring.push ({ instance->id, 0, SlotChange::endOfBlock, 0.0f });
-        group->device->wake.release();
+        group->device->wake.signal();
         return true;
     }
 
