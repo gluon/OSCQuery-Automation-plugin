@@ -14,15 +14,28 @@
     SPDX-License-Identifier: GPL-3.0-or-later
 
     Origin: go.dot src/wfg/engine/osc/OscValue.cpp at 1c8aaa0a, namespace and
-    include renamed, otherwise as it was.
+    include renamed; a shortestRoundTrip without std::to_chars for macOS
+    before 13.3, this project's deployment target being 11.0.
 */
 
 #include <oscquery/osc/Value.h>
 
 #include <charconv>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
+
+#if defined (__APPLE__)
+ #include <Availability.h>
+ /*  Floating-point std::to_chars arrived in libc++ for macOS 13.3. go.dot's
+     deployment target is 13.3 and it uses to_chars; this plugin's is 11.0
+     (CMakeLists.txt), so below 13.3 the shortest round-trip text is found by
+     trying each precision in turn. Same result, more work per number. */
+ #if defined (__MAC_OS_X_VERSION_MIN_REQUIRED) && __MAC_OS_X_VERSION_MIN_REQUIRED < 130300
+  #define OQA_NO_FLOAT_TO_CHARS 1
+ #endif
+#endif
 
 #if defined (_WIN32)
  // _create_locale, _strtod_l and _locale_t.
@@ -321,6 +334,39 @@ namespace oqa::oscquery::osc
             return std::strtod (first, end);
         }
 
+       #if OQA_NO_FLOAT_TO_CHARS
+        /*  Without to_chars: the shortest "%.{p}g" that reads back to the same
+            bits, p from 1 to 17 (9 suffices for a float, 17 for a double). The
+            read-back goes through the same C-locale strtod the parser uses, so
+            the text is shortest by the parser's own reading. */
+        template <typename Float>
+        std::string shortestRoundTrip (Float value)
+        {
+            char buffer[64];
+
+            for (int precision = 1; precision <= 17; ++precision)
+            {
+                const auto written = std::snprintf (buffer, sizeof (buffer), "%.*g", precision,
+                                                    static_cast<double> (value));
+
+                if (written <= 0 || written >= static_cast<int> (sizeof (buffer)))
+                    break;
+
+                //  snprintf honours the global locale; a decimal comma is put back.
+                for (char* c = buffer; *c != 0; ++c)
+                    if (*c == ',')
+                        *c = '.';
+
+                char* end = nullptr;
+                const auto back = static_cast<Float> (strtodClassic (buffer, &end));
+
+                if (end == buffer + written && std::memcmp (&back, &value, sizeof (Float)) == 0)
+                    return std::string (buffer, static_cast<std::size_t> (written));
+            }
+
+            return std::string (buffer);
+        }
+       #else
         template <typename Float>
         std::string shortestRoundTrip (Float value)
         {
@@ -340,6 +386,7 @@ namespace oqa::oscquery::osc
             return result.ec == std::errc {} ? std::string (large.data(), result.ptr)
                                              : std::string {};
         }
+       #endif
     }
 
     std::string formatDouble (double value)

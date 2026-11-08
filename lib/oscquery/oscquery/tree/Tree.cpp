@@ -22,6 +22,7 @@
 #include <juce_cryptography/juce_cryptography.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 
 namespace oqa::oscquery
@@ -123,6 +124,15 @@ namespace oqa::oscquery
             return v.isInt() || v.isInt64() || v.isDouble();
         }
 
+        /** A number read as a flag: anything but zero is true. */
+        bool nonZero (const juce::var& v) noexcept
+        {
+            if (v.isInt() || v.isInt64())
+                return static_cast<juce::int64> (v) != 0;
+
+            return std::fpclassify (static_cast<double> (v)) != FP_ZERO;
+        }
+
         /*  juce::var answers isObject() for an array as well, and the
             DynamicObject behind an array is null: a JSON object is one that
             is not an array. */
@@ -176,7 +186,7 @@ namespace oqa::oscquery
             case 'T':
             case 'F':
                 if (v.isBool())   return osc::Value::boolean (static_cast<bool> (v));
-                if (isNumber (v)) return osc::Value::boolean (static_cast<double> (v) != 0.0);
+                if (isNumber (v)) return osc::Value::boolean (nonZero (v));
                 if (v.isString()) return osc::Value::boolean (v.toString().equalsIgnoreCase ("true"));
                 break;
 
@@ -345,7 +355,7 @@ namespace oqa::oscquery
                 else if (key == "TYPE")        { if (v.isString()) node.type = v.toString().toStdString(); }
                 else if (key == "ACCESS")      { if (isNumber (v)) node.access = static_cast<int> (v); }
                 else if (key == "DESCRIPTION") { if (v.isString()) node.description = v.toString().toStdString(); }
-                else if (key == "CRITICAL")    { node.critical = v.isBool() ? static_cast<bool> (v) : (isNumber (v) && static_cast<double> (v) != 0.0); }
+                else if (key == "CRITICAL")    { node.critical = v.isBool() ? static_cast<bool> (v) : (isNumber (v) && nonZero (v)); }
                 else if (key == "RANGE")       { rangeVar = v; }
                 else if (key == "VALUE")       { valueVar = v; }
                 else if (key == "UNIT")        { node.unit = stringList (v); }

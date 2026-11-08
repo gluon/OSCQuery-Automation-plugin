@@ -79,7 +79,7 @@ namespace oqa::oscquery
             int capacity = 32;
         };
 
-        explicit Recents (Options options = {});
+        explicit Recents (Options options = Options());
         ~Recents();
 
         Recents (const Recents&) = delete;
