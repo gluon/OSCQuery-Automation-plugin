@@ -63,8 +63,9 @@ These change the build, not the design. Each is re-checked at the phase that dep
 | HTTP GET, websocket, LISTEN/IGNORE, notifications | go.dot `src/wfg/engine/oscquery/OscQueryClient::get` (the raw-socket GET, chunked bodies); WFS-DIY `Plugin/Source/Shared/OscQueryClient` as the behavioural reference only (amended 2026-11-08: it has no licence header, parses no `HOST_INFO` and decodes one message; nothing copied) | A typed tree model, `HOST_INFO` parsing with `EXTENSIONS`, subtree GET, all four `PATH_*`, reconnect with backoff: `lib/oscquery/oscquery/Device` |
 | DNS-SD browse and announce | go.dot `src/wfg/engine/oscquery/Mdns`, `Discovery` | Extracted with no dependency on go.dot's engine; the announcer serves the plugin's own server in Phase 6 |
 | OSC encode/decode, UDP send and receive | go.dot `src/wfg/engine/osc/OscValue`, `OscAddress`, `OscCodec`, `UdpEndpoint`, `SocketBuffers` (decided by the author 2026-11-08, replacing WFS-DIY `OscTransport` plus `juce_osc`: JUCE's byte-level OSC streams are private to its `.cpp` files and `juce::OSCArgument` has no bool, int64, double or time tag) | Adds bundles under the MTU with one timetag (`osc/Bundler`), SLIP and length-prefix framing (`osc/Framing`), a TCP sender (`net/TcpSender`); the non-blocking `sendto` path waits for Phase 3 |
-| Rate limiter | WFS-DIY `RateLimiter` | Becomes per slot and default off, per the PRD |
-| Shared library across plugin binaries | WFS-DIY Bridge (`BridgeApi.h`, `BridgeLoader`) | Hosts the device registry so every slot-count variant and every format in the process shares one client per device (see Phase 3) |
+| Rate limiter | WFS-DIY `RateLimiter`, its shape only (latest value per key, compared with what was last sent) | Per bound path, default off, driven by the network thread's clock: no mutex, no timer (`src/core/send/RateLimiter`, 2026-11-08) |
+| Realtime-safe encoder and UDP sender | Written here, 2026-11-08: neither repository had a send path a realtime thread may call (go.dot's `UdpEndpoint::send` builds a `juce::String` and may resolve the host; `osc::encode` returns a vector) | `osc/FixedEncoder` (a message or a bundle into a caller's buffer, byte for byte the codec's) and `net/RawUdpSender` (resolved once, non-blocking `sendto`, a full buffer a counted drop) in the library |
+| Shared library across plugin binaries | WFS-DIY Bridge (`BridgeApi.h`, `BridgeLoader`), the ABI pattern only: exact-match version, found by walking up from the plugin's own module | One exported table (`registry/RegistryApi.h`) over the registry, in `OSCQuery-Automation-Core`; every binary also links the core and falls back to it, saying so, where WFS-DIY's plugins go silent (2026-11-08) |
 | Websocket/HTTP transport | `juce_simpleweb` (vendored in both repos) | Unchanged; TLS compiled out as in WFS-DIY |
 | Installer scripts, CI | WFS-DIY `Plugin/Scripts`, `Plugin/Installer`, `plugins-ci.yml` | Renamed; adds a CLAP install path and pluginval |
 
@@ -383,6 +384,42 @@ Reaper on Windows and the Mac mini, the records, the amendments.
   one value per slot per block, because JUCE's `AudioProcessor` delivers no sample-accurate
   parameter events (the CLAP shim will, Phase 5b); the device key in Phase 3 is `NAME` plus last
   host:port, re-identification being Phase 5's.
+
+**Record, 2026-11-08 (built; the DAW rows of the done-when open).** Built in eight commits on
+`main`, 3a to 3e: `src/core` (`oqa::core`), the shared core library `OSCQuery-Automation-Core` and
+its loader, the shim's real parameters, the editor's first cut. Report of the bench so far:
+[`docs/bench/2026-11-08-phase3-send.md`](bench/2026-11-08-phase3-send.md).
+
+- *Done so far, measured on this machine against the mock (Debug, loopback):* two instances, 25
+  blocks, **25 bundles of two messages**; an `fff` one message with the tree's values for the
+  arguments not automated; 32 messages at an MTU of 200 in four bundles; CRITICAL on a UDP device
+  over the websocket; a TCP device's SLIP-framed bundles; the rate limiter holding to 20 Hz; the
+  NTP tag at now plus the offset when the setting is on; an unreachable device sending nothing
+  until pointed right, every instance following; **500 blocks allocating nothing** on the audio
+  path, direct send on or off; **post to the wire median 96 µs, p99 227 µs**. The core's suite is
+  **69 cases** as `core.C` and `core.fr_FR`; the library's 98. pluginval 1.0.4 passes at
+  strictness 5 on the VST3 with the editor. **Live against WFS-DIY the same day:** the whole path,
+  Instance to registry to bundle to UDP 8000, drove three per-input floats found in its tree and
+  read them back exactly (20 bundles, 60 messages, none dropped).
+- *Implementer's decisions, the author's to overrule:* the rate limit is per bound path, not per
+  argument, since a multi-argument node is one message anyway; `critical` and `unit` travel on the
+  slot and in the chunk, because bindings arrive before the device's tree does on a reload; a
+  device entry lives as long as the registry (its sockets and thread are not worth closing on
+  every `releaseResources`); a session device whose address a second chunk disagrees on keeps the
+  first address until pointed (Phase 5 resolves identity); the direct send sends a plain message
+  with no bundle and no time tag; the arguments not automated start from the tree's `VALUE` at
+  bind time and are not yet refreshed when the tree reloads (Phase 4's LISTEN will keep them
+  current); the AU gets no parameter clump (fixed at construction, it could not follow a rebind;
+  REAPER would put the unit's name in lane titles). NTP seconds wrap at the end of era 0 (2036) as
+  NTP's do.
+- *Found on the way:* a CMake target that links `oqa::core` gets the client library's archive
+  appended after `oqa_juce` on GNU ld, which has already passed the SHA-256 it needs: name
+  `oqa::oscquery` directly. `Node::argument()` returns a view by value, so a reference into its
+  `range` dangles. MSVC's `std::counting_semaphore::try_acquire_for` is `[[nodiscard]]`. No range
+  in the generic fixture excludes zero, so the log curve is tested on a user-entered range.
+- *Still to fill, the author at the DAW:* the done-when's REAPER rows on Windows (the Release VST3
+  and the core DLL are installed in `%LOCALAPPDATA%\Programs\Common\VST3\`; the steps are in the
+  bench report) and on the Mac mini, and the 32-track capture.
 
 ---
 

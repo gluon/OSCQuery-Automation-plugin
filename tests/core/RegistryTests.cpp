@@ -43,6 +43,7 @@
 #include <core/rt/RtCheck.h>
 #include <core/send/TimeTags.h>
 
+#include <oscquery/Device.h>
 #include <oscquery/osc/Codec.h>
 #include <oscquery/osc/Framing.h>
 #include <oscquery/tree/Tree.h>
@@ -647,4 +648,136 @@ TEST_CASE ("registry: from the post to the wire on loopback, measured")
     /*  The PRD's target is under a millisecond to the wire; the gather deadline
         is half of it and the receiving thread's wake is in this number too. */
     CHECK (median < 2000.0);
+}
+
+//==============================================================================
+/*  AGAINST A LIVE DEVICE, when OQA_LIVE_DEVICE names one as host:port (the
+    author's WFS-DIY: 127.0.0.1:5005). Not a CI case: the device is not there.
+    The first three writable, ranged, per-channel float leaves of its tree
+    (a numeric segment in the path), whatever they are called, are bound to
+    three slots, driven for twenty blocks, read back over HTTP, and put back.
+    No address is typed; the record goes in docs/bench. */
+TEST_CASE ("registry: a live device, when OQA_LIVE_DEVICE names one")
+{
+    const auto target = juce::SystemStats::getEnvironmentVariable ("OQA_LIVE_DEVICE", {});
+
+    if (target.isEmpty())
+    {
+        MESSAGE ("OQA_LIVE_DEVICE not set; skipped");
+        return;
+    }
+
+    const auto host = target.upToLastOccurrenceOf (":", false, false).toStdString();
+    const int port = target.fromLastOccurrenceOf (":", false, false).getIntValue();
+    REQUIRE (port > 0);
+
+    /*  The tree, straight from the device, to choose leaves by what they are. */
+    oqa::oscquery::Device probe (oqa::oscquery::Device::Options { host, port });
+    REQUIRE_MESSAGE (probe.probe(), probe.lastError());
+    REQUIRE_MESSAGE (probe.fetchTree(), probe.lastError());
+    const auto tree = probe.tree();
+    const auto info = probe.hostInfo();
+    REQUIRE (info.has_value());
+
+    std::vector<const Node*> chosen;
+
+    for (const auto* leaf : tree.leaves())
+    {
+        if (! isRangedFloat (*leaf) || leaf->argumentCount() != 1)
+            continue;
+
+        const auto path = juce::String (leaf->fullPath);
+        bool numeric = false;
+
+        for (const auto& segment : juce::StringArray::fromTokens (path, "/", {}))
+            numeric = numeric || (segment.isNotEmpty() && segment.containsOnly ("0123456789"));
+
+        if (numeric)
+            chosen.push_back (leaf);
+
+        if (chosen.size() == 3)
+            break;
+    }
+
+    REQUIRE (chosen.size() == 3);
+
+    std::vector<double> before;
+
+    for (const auto* leaf : chosen)
+    {
+        const auto value = probe.readValue (leaf->fullPath);
+        REQUIRE (value.has_value());
+        REQUIRE (! value->empty());
+        before.push_back ((*value)[0].asDouble());
+    }
+
+    Instance one (api(), 4, "live");
+    DeviceRef ref;
+    ref.name = info->name;
+    ref.lastHost = host;
+    ref.lastPort = port;
+    const int device = one.addDevice (ref);
+
+    std::string why;
+
+    for (int i = 0; i < 3; ++i)
+        REQUIRE_MESSAGE (one.bind (i, *chosen[static_cast<std::size_t> (i)], 0, device, why), why);
+
+    one.connect();
+
+    REQUIRE (waitUntil ([&]
+    {
+        const auto status = juce::JSON::parse (juce::String (one.statusJson()));
+        const auto* devices = status.getProperty ("devices", {}).getArray();
+        return devices != nullptr && ! devices->isEmpty() && static_cast<bool> ((*devices)[0].getProperty ("sender_ready", false));
+    }));
+
+    /*  Twenty blocks, each slot on its own ramp, ending at 0.37, 0.61 and 0.84 of its range. */
+    float values[4] = {};
+    const float ends[3] = { 0.37f, 0.61f, 0.84f };
+
+    for (int block = 1; block <= 20; ++block)
+    {
+        for (int i = 0; i < 3; ++i)
+            values[i] = ends[i] * block / 20.0f;
+
+        one.processBlock (values, 4);
+        std::this_thread::sleep_for (std::chrono::milliseconds (5));
+    }
+
+    std::this_thread::sleep_for (std::chrono::milliseconds (200));
+
+    for (int i = 0; i < 3; ++i)
+    {
+        const auto* leaf = chosen[static_cast<std::size_t> (i)];
+        const auto value = probe.readValue (leaf->fullPath);
+        REQUIRE (value.has_value());
+        const auto expected = one.chunk().slots[i].toDevice (ends[i]);
+        INFO (leaf->fullPath << " expected " << expected << " read " << (*value)[0].asDouble());
+        CHECK ((*value)[0].asDouble() == doctest::Approx (expected).epsilon (1e-3));
+        MESSAGE ("live: " << leaf->fullPath << " = " << (*value)[0].asDouble() << " (sent " << expected << ")");
+    }
+
+    const auto status = juce::JSON::parse (juce::String (one.statusJson()));
+    const auto& d = (*status.getProperty ("devices", {}).getArray())[0];
+    MESSAGE ("live: " << info->name << " at " << d.getProperty ("resolved", "").toString().toStdString()
+             << ", " << static_cast<int> (d.getProperty ("bundles_sent", 0)) << " bundles, "
+             << static_cast<int> (d.getProperty ("messages_sent", 0)) << " messages, "
+             << static_cast<int> (d.getProperty ("datagrams_dropped", 0)) << " dropped");
+
+    /*  Put the device back as it was, through the same path. */
+    for (int i = 0; i < 3; ++i)
+        values[i] = one.chunk().slots[i].toHost (before[static_cast<std::size_t> (i)]);
+
+    one.processBlock (values, 4);
+    std::this_thread::sleep_for (std::chrono::milliseconds (200));
+
+    for (int i = 0; i < 3; ++i)
+    {
+        const auto value = probe.readValue (chosen[static_cast<std::size_t> (i)]->fullPath);
+        REQUIRE (value.has_value());
+        CHECK ((*value)[0].asDouble() == doctest::Approx (before[static_cast<std::size_t> (i)]).epsilon (1e-3));
+    }
+
+    one.disconnect();
 }

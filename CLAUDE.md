@@ -93,9 +93,13 @@ Sibling repositories on the author's machine, both GPLv3, both on JUCE 9.0.5:
 - **WFS-DIY** (`../WFS_DIY_v1`): `Plugin/Source/Shared/OscQueryClient.{h,cpp}` is the
   behavioural reference for talking to WFS-DIY's server (the LISTEN shape, re-LISTEN on open);
   nothing is copied from it (no licence header, no HOST_INFO parsing). `OscTransport` is **not**
-  used: OSC comes from go.dot (decided 2026-11-08). `RateLimiter` is the idea for Phase 3's
-  per-slot limiter, and the Bridge shared-library pattern (`BridgeApi.h`, `BridgeLoader`) is
-  Phase 3's registry. `Source/Network/OSCQueryServer.cpp` is the first conformance subject.
+  used: OSC comes from go.dot (decided 2026-11-08). `RateLimiter` lent Phase 3's per-slot limiter its shape only (latest value per
+  key, compared with what was last sent): its mutex and timer were not copied, and its
+  parameter-to-OSC path takes locks and allocates on the audio thread, so nothing of that was
+  either. The Bridge (`BridgeApi.h`, `BridgeLoader`) lent the registry's ABI pattern (exact-match
+  version, found beside the plugin by walking up from its own module); its threading was not
+  copied, and where it goes silent without its library this plugin falls back to its own core
+  and says so (Phase 3, 2026-11-08). `Source/Network/OSCQueryServer.cpp` is the first conformance subject.
   `Plugin/Scripts`, `Plugin/Installer` and `.github/workflows/plugins-ci.yml` are the installer
   and CI patterns to copy.
 - **go.dot** (`../go.dot`, at `1c8aaa0a`), copied into `lib/oscquery/` in Phase 2:
