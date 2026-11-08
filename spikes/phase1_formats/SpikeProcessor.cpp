@@ -20,9 +20,10 @@
 namespace spike
 {
     //==============================================================================
-    SlotParameter::SlotParameter (int slotNumber)
+    SlotParameter::SlotParameter (int slotNumber, bool hide)
         : juce::AudioProcessorParameterWithID (juce::ParameterID { "slot" + juce::String (slotNumber), 1 },
-                                               unboundName)
+                                               unboundName),
+          hideWhenUnbound (hide)
     {
     }
 
@@ -41,7 +42,7 @@ namespace spike
     }
 
     float SlotParameter::getValueForText (const juce::String& text) const { return text.getFloatValue(); }
-    bool SlotParameter::isHidden() const { return ! bound.load(); }
+    bool SlotParameter::isHidden() const { return hideWhenUnbound && ! bound.load(); }
     bool SlotParameter::isBound() const { return bound.load(); }
 
     juce::String SlotParameter::currentName() const
@@ -108,7 +109,8 @@ namespace spike
             addAndMakeVisible (bindAll);
             addAndMakeVisible (unbindAll);
 
-            footer.setText ("Commands also read from " + SpikeProcessor::commandDirectory().getFullPathName(),
+            footer.setText (juce::String (SpikeProcessor::hidesUnboundSlots() ? "Hiding unbound slots (AU). " : "Not hiding unbound slots (no-hide). ")
+                            + "Commands also read from " + SpikeProcessor::commandDirectory().getFullPathName(),
                             juce::dontSendNotification);
             footer.setFont (juce::FontOptions (12.0f));
             addAndMakeVisible (footer);
@@ -185,7 +187,7 @@ namespace spike
 
             for (int i = group * 4; i < group * 4 + 4; ++i)
             {
-                auto param = std::make_unique<SlotParameter> (i + 1);
+                auto param = std::make_unique<SlotParameter> (i + 1, hidesUnboundSlots());
                 slots[(size_t) i] = param.get();
                 tree->addChild (std::move (param));
             }
@@ -217,6 +219,11 @@ namespace spike
     juce::File SpikeProcessor::commandDirectory()
     {
         return juce::File::getSpecialLocation (juce::File::userHomeDirectory).getChildFile (".oqa-spike-phase1");
+    }
+
+    bool SpikeProcessor::hidesUnboundSlots()
+    {
+        return ! commandDirectory().getChildFile ("no-hide").existsAsFile();
     }
 
     void SpikeProcessor::tellHost()

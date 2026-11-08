@@ -34,7 +34,7 @@ if(CMAKE_HOST_APPLE)
     set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "Minimum macOS version")
 endif()
 
-project(oqa_spike_phase1 VERSION 0.0.1 LANGUAGES C CXX)
+project(oqa_spike_phase1 VERSION 0.0.2 LANGUAGES C CXX)
 
 if(APPLE)
     enable_language(OBJC OBJCXX)

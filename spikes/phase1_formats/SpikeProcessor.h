@@ -59,7 +59,7 @@ namespace spike
     class SlotParameter final : public juce::AudioProcessorParameterWithID
     {
     public:
-        explicit SlotParameter (int slotNumber);
+        SlotParameter (int slotNumber, bool hideWhenUnbound);
 
         float getValue() const override;
         void setValue (float newValue) override;
@@ -77,6 +77,7 @@ namespace spike
     private:
         std::atomic<float> value { 0.0f };
         std::atomic<bool> bound { false };
+        const bool hideWhenUnbound;
         mutable juce::SpinLock nameLock;
         juce::String name { unboundName };
     };
@@ -115,6 +116,11 @@ namespace spike
         SlotParameter& slot (int slotIndex) { return *slots[(size_t) slotIndex]; }
 
         static juce::File commandDirectory();
+
+        /*  False when ~/.oqa-spike-phase1/no-hide exists at load: unbound slots are then
+            only named "(unbound)", never hidden, as VST3 has to. Added 2026-11-08 to tell
+            whether hiding is what keeps GarageBand from offering the slots. */
+        static bool hidesUnboundSlots();
 
     private:
         void timerCallback() override;
