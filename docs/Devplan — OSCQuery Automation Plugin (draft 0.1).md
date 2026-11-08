@@ -51,6 +51,8 @@ These change the build, not the design. Each is re-checked at the phase that dep
 | WFS-DIY's plugin suite has `OscQueryClient` (HTTP GET, websocket LISTEN/IGNORE, `PATH_CHANGED`), `OscTransport` (UDP send incl. three-float messages), `RateLimiter`, and a *Bridge* pattern: a shared dynamic library loaded by every plugin binary with a versioned ABI | `Plugin/Source/Shared` in WFS-DIY | The library's HTTP/websocket layer starts from `OscQueryClient`; the process-wide registry starts from the Bridge pattern. |
 | WFS-DIY and go.dot are **GPL-3**; the PRD put the plugin and the library under **MIT**; JUCE 8+ is AGPLv3 or commercial, the VST3 SDK GPLv3 or Steinberg's agreement | both `LICENSE` files; juce.com; steinberg.net | An open-source binary is GPL in practice whatever the source licence says. Decided 2026-11-04: **GPLv3 for plugin and library**, so files from WFS-DIY and go.dot are copied as they are, JUCE types included. The library is not bundleable in closed firmware; manufacturers use the conformance CLI. |
 | WFS-DIY's plugin CI builds on windows-2025 (VS 2026), macOS and Linux and uploads installers; signing and notarisation on release only | `.github/workflows/plugins-ci.yml` in WFS-DIY | Phase 0 copies the pattern. |
+| WFS-DIY **does not honour OSC bundle timetags**: its parser reads the eight bytes and drops them; bundles apply on arrival from a 16 ms drain on its message thread. Its outgoing bundles carry timetag 1 (checked 2026-11-08) | `spatcore/control/osc/OSCParser.h`, `OSCIngestQueue.h`, `OSCManager::handleIncomingBundle` in WFS-DIY | The PRD's "WFS-DIY does" is stale and amended. Phase 3 builds the timetag path against the mock device only; no bench device verifies scheduling yet. |
+| WFS-DIY's OSC router accepts the OSCQuery short form `/wfs/input/<n>/<name>`, the channel in the address, beside its standard form with the channel as the first argument (checked 2026-11-08) | `Source/Network/OSCMessageRouter.cpp`, `GoDotProtocol.h` in WFS-DIY | The tree's `FULL_PATH` is sendable as is, with `TYPE`'s tags. Confirmed on the bench first thing in Phase 3f. |
 
 ---
 
@@ -345,6 +347,42 @@ Phase 7 adds the other variants); whether `$instance` lands here or in Phase 6 (
 
 **Companion in WFS-DIY:** `OSC_IP` in `HOST_INFO` (cheap, and the library otherwise falls back to
 the HTTP host). Nothing else.
+
+**Planned, 2026-11-08.** Broken into six subphases, each one commit on `main` with its tests, as
+Phase 2 was: **3a** slot model and scaling (`src/core`, target `oqa::core`, tests `core.C` and
+`core.fr_FR`); **3b** state chunk, `version` 1, fixtures in `tests/state/`; **3c** registry and
+send path (the C ABI `RegistryApi.h`, the shared core library, the per-device realtime network
+thread, the ring, the block bundler, the rate limiter, timetags, a realtime-safe UDP sender and a
+fixed-buffer encoder added to the library, the lipogram test, the latency harness); **3d** the JUCE
+shim's real parameters, state and registration; **3e** the editor's first cut; **3f** the bench in
+Reaper on Windows and the Mac mini, the records, the amendments.
+
+- *Decided by the author the same day:* **32 slots alone** through Phase 3; **`$instance` in
+  Phase 6**; the **timetag path is built and verified on the mock only**, the per-device setting
+  default off; the audio thread wakes the network thread with **one non-blocking notify per block
+  per device**, the one named exception to the lipogram's "no syscalls", recorded as such.
+- *Facts found while planning, from the sibling repositories:* **WFS-DIY discards bundle
+  timetags** (`spatcore/control/osc/OSCParser.h` reads the eight bytes and drops them; bundles
+  apply on arrival from a 16 ms drain on its message thread), so the PRD's "WFS-DIY does" is
+  amended: no device on the bench honours them yet. WFS-DIY's **Bridge is a registry only**: no
+  lock-free hand-off (mutexes, allocation and UDP sends on the thread that changed the parameter),
+  so its ABI pattern is copied and its threading is not. **go.dot's lipogram counts allocations**
+  through a replaced global `operator new`, test-only here (a replaced allocator inside a plugin
+  could leak into the host); locks and syscalls fall to a Clang RTSan job when the runner has
+  Clang 20. **No realtime-safe send exists** in either repository: `UdpEndpoint::send` builds a
+  `juce::String` and may resolve the host, `osc::encode` returns a vector; both are written new
+  in 3c. WFS-DIY's OSC router **accepts the tree's short form** `/wfs/input/<n>/<name>` with the
+  channel in the address (`OSCMessageRouter.cpp`), so `FULL_PATH` is sendable as is; confirmed on
+  the bench first thing in 3f.
+- *Implementer's decisions, the author's to overrule:* only the registry crosses the shared
+  library's ABI (slots, scaling, chunk and editor are C++ in the plugin binary; structured data
+  crosses as JSON text, the hot path as scalars); every plugin binary **also links the core
+  statically and falls back to it** when the shared library is missing or its ABI version differs,
+  saying so in the status bar, where WFS-DIY's plugins go silent; the shared library is built with
+  hidden visibility and exports the C ABI only, so two copies of JUCE in one process do not meet;
+  one value per slot per block, because JUCE's `AudioProcessor` delivers no sample-accurate
+  parameter events (the CLAP shim will, Phase 5b); the device key in Phase 3 is `NAME` plus last
+  host:port, re-identification being Phase 5's.
 
 ---
 
