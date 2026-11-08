@@ -103,8 +103,8 @@ ossia, libossia or any other OSCQuery implementation.
 
 ## The bench, as of 2026-11-04
 
-- **Hosts on this Windows machine:** Reaper and Samplitude (both VST3), Ableton Live, and
-  Bitwig Studio 6.1.4 (VST3 and CLAP; installed 2026-11-04). No Nuendo.
+- **Hosts on this Windows machine:** Reaper and Samplitude (both VST3), Ableton Live 12.4.16
+  (updated 2026-11-08), and Bitwig Studio 6.1.4 (VST3 and CLAP; installed 2026-11-04). No Nuendo.
 - **OSCQuery applications on hand**, as devices to bind, as sources to record from, and as
   conformance subjects: WFS-DIY (a Release build at
   `../WFS_DIY_v1/Builds/VisualStudio2022/x64/Release/App/`), Chataigne, ossia score, and go.dot
