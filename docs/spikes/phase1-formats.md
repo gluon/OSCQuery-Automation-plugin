@@ -91,6 +91,7 @@ groups: the clump is a property of the slot, not of what it is bound to.
 | | REAPER 7.80, Mac mini | VST3 | Identical to Windows, step for step. |
 | | REAPER 7.80, Mac mini | AU | Parameter list follows at once; the existing lane keeps its old title. |
 | | Samplitude Suite 2026 (build 26015), Windows | VST3 | The automation menu keeps the old names during playback and takes the new ones once playback stops; renames while stopped show at once. The eight slots are one flat numbered list ("1: Device A /param/1" … "7: (unbound)"); the Device A / B groups do not appear. |
+| | Samplitude Suite 2026 (build 26215), Windows | VST3 | Rebinding to a new name updates the name in the UI. *During playback: to confirm.* |
 | | Live 12, Windows | VST3 | *pending, checklist* |
 | | Bitwig 6.1.4, Windows | VST3 | **An existing lane follows.** Slot 3's lane, rebound several times, carries each new name ("Device A /param/30", "OQA Spike 8" beneath); no group shown. During playback: not checked. |
 | | Nuendo | VST3 | *no host* |
@@ -113,7 +114,8 @@ groups: the clump is a property of the slot, not of what it is bound to.
 Checked and ruled out, Samplitude: dragging an automation handle during playback moves the handle
 to the play cursor or the cursor back to the handle. It does the same on a bound slot and on the
 track's own volume curve, in Read mode: Samplitude's way of editing during playback, not the
-plugin. Bitwig 6.1.4 does not do it: points edit freely during playback, wherever the cursor is.
+plugin. Samplitude build 26215 no longer does it, and neither does Bitwig 6.1.4: points edit
+freely during playback, wherever the cursor is.
 
 REAPER puts a VST3 unit's name in each lane title (`Device A /bank 2 / OQA Spike 8 /
 Device A`), so in REAPER the device grouping reaches the lane in VST3, against the PRD's "Flat;
