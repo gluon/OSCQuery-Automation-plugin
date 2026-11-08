@@ -100,7 +100,7 @@ groups: the clump is a property of the slot, not of what it is bound to.
 | | Live, GarageBand, Mac mini | AU | *pending, checklist* |
 | Stale lane after rebind | REAPER, Windows and Mac | VST3 | Points kept on the slot's ID through unbind and rebind; the lane drives the new target under the old title. Fixed by reopening the project or setting the plugin offline and online (all titles refresh, state and points intact). Re-applying the lane's state chunk does not refresh it. |
 | | REAPER 7.80, Mac mini | AU | With list-omission hiding, an unbind deletes the lane, so there is no stale lane, and no automation. After offline/online, the surviving lane's title lost its parameter name (" / OQA Spike 8"). |
-| | Samplitude Suite 2026, Windows | VST3 | Curves are neither removed nor changed by bind, unbind or rebinding to another path: the curve drives the new target. Its name follows once playback stops. |
+| | Samplitude Suite 2026, Windows | VST3 | Curves are neither removed nor changed by bind, unbind or rebinding to another path: the curve drives the new target. Its name follows once playback stops. Saved, closed and reopened: every curve, bound or not, and every binding and name come back. |
 | | the other hosts | | *pending* |
 | pluginval, strictness 5 | Windows | VST3 | SUCCESS |
 | | Mac mini (arm64) | VST3 | SUCCESS |
