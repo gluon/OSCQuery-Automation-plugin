@@ -45,7 +45,10 @@
 
 #include <juce_core/juce_core.h>
 
+#include <cstdint>
 #include <memory>
+#include <utility>
+#include <vector>
 
 namespace oqatest
 {
@@ -71,6 +74,21 @@ namespace oqatest
             /** The HTTP port to bind; 0 lets the system choose, which is what
                 lets tests run in parallel. */
             int httpPort = 0;
+
+            /** True: a device that answers `?HOST_INFO` and nothing else (every
+                other GET is 404), for the client's "reachable without a tree". */
+            bool hostInfoOnly = false;
+
+            /** True: notifications go out whether or not `extensions` lists them,
+                as WFS-DIY sends PATH_CHANGED without listing it. */
+            bool notifyUnlisted = false;
+
+            /** "UDP" (a datagram socket is bound and read) or "TCP" (a listener is
+                bound and every connection's bytes are kept, unframed). */
+            juce::String oscTransport { "UDP" };
+
+            /** Emitted as OSC_IP when not empty; absent otherwise, as most devices. */
+            juce::String oscIp;
         };
 
         MockDevice();
@@ -126,6 +144,25 @@ namespace oqatest
 
         /** How many websocket connections are open. */
         int connectionCount() const;
+
+        /** Sets each VALUE and sends ONE binary frame holding an OSC bundle of
+            the messages (time tag "immediately") to every connection that
+            LISTENs to any of the paths: the proposal's "changes may be coalesced". */
+        bool setValueBundle (const std::vector<std::pair<juce::String, juce::Array<juce::var>>>& values);
+
+        /** Closes every websocket connection from the server's side, as a
+            device rebooting would. Listeners go with them. */
+        void closeAllConnections();
+
+        /** Every binary frame received over the websocket, in order: the OSC a
+            client sends a device this way (spec draft L3, L4). */
+        std::vector<std::vector<std::uint8_t>> receivedWebsocketOsc() const;
+
+        /** Every datagram received on OSC_PORT (UDP), in order. */
+        std::vector<std::vector<std::uint8_t>> receivedOsc() const;
+
+        /** Every byte received on OSC_PORT (TCP), in order, as the stream carried it. */
+        std::vector<std::uint8_t> receivedOscStream() const;
 
     private:
         struct Impl;

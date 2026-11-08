@@ -21,7 +21,17 @@
 add_executable(oqa_oscquery_tests
     "${CMAKE_SOURCE_DIR}/tests/TestMain.cpp"
     OscValueTests.cpp
-    OscCodecTests.cpp)
+    OscCodecTests.cpp
+    HostInfoTests.cpp
+    TreeTests.cpp
+    HttpGetTests.cpp
+    DeviceTests.cpp
+    MdnsTests.cpp
+    FinderTests.cpp
+    TransportTests.cpp
+    RecentsTests.cpp
+    LargeTreeTests.cpp
+    "${CMAKE_SOURCE_DIR}/tests/support/TreeGen.h")
 
 target_include_directories(oqa_oscquery_tests PRIVATE "${CMAKE_SOURCE_DIR}/tests")
 target_include_directories(oqa_oscquery_tests SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/ThirdParty/doctest")

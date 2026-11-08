@@ -31,7 +31,50 @@ add_library(oqa_oscquery STATIC
     oscquery/osc/Address.h
     oscquery/osc/Address.cpp
     oscquery/osc/Codec.h
-    oscquery/osc/Codec.cpp)
+    oscquery/osc/Codec.cpp
+    oscquery/osc/Framing.h          # SLIP and length-prefix framing for a stream
+    oscquery/osc/Framing.cpp
+    oscquery/osc/Bundler.h          # messages into bundles under the MTU
+    oscquery/osc/Bundler.cpp
+
+    # One HTTP GET over a raw socket (juce::URL rewrites `?HOST_INFO`); the UDP
+    # endpoint that names each datagram's sender; the TCP sender.
+    oscquery/net/HttpGet.h
+    oscquery/net/HttpGet.cpp
+    oscquery/net/SocketBuffers.h
+    oscquery/net/SocketBuffers.cpp
+    oscquery/net/UdpEndpoint.h
+    oscquery/net/UdpEndpoint.cpp
+    oscquery/net/TcpSender.h
+    oscquery/net/TcpSender.cpp
+
+    # HOST_INFO as the Core profile reads it, and the tree model.
+    oscquery/HostInfo.h
+    oscquery/HostInfo.cpp
+    oscquery/tree/Node.h
+    oscquery/tree/Tree.h
+    oscquery/tree/Tree.cpp
+
+    # One device session: HOST_INFO, tree, the websocket stream, reconnect.
+    oscquery/Device.h
+    oscquery/Device.cpp
+
+    # DNS-SD: the multicast DNS codec (pure), the browser and announcer sharing
+    # port 5353 with the system's responder, the per-interface group join.
+    oscquery/mdns/Mdns.h
+    oscquery/mdns/Mdns.cpp
+    oscquery/mdns/MulticastJoin.h
+    oscquery/mdns/MulticastJoin.cpp
+    oscquery/mdns/Discovery.h
+    oscquery/mdns/Discovery.cpp
+
+    # Found and typed devices, each probed with HOST_INFO before it is listed.
+    oscquery/Finder.h
+    oscquery/Finder.cpp
+
+    # The per-user recents store, a juce::PropertiesFile at the standard location.
+    oscquery/Recents.h
+    oscquery/Recents.cpp)
 add_library(oqa::oscquery ALIAS oqa_oscquery)
 
 set_target_properties(oqa_oscquery PROPERTIES POSITION_INDEPENDENT_CODE ON)
@@ -42,3 +85,5 @@ target_link_libraries(oqa_oscquery PUBLIC oqa::deps PRIVATE oqa::warnings)
 if(OQA_BUILD_TESTS)
     add_subdirectory(tests)
 endif()
+
+add_subdirectory(examples)

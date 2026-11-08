@@ -29,10 +29,12 @@
 
 #include <juce_simpleweb/juce_simpleweb.h>
 
+#include <atomic>
 #include <cstring>
 #include <map>
 #include <mutex>
 #include <set>
+#include <thread>
 
 namespace oqatest
 {
@@ -195,6 +197,23 @@ namespace oqatest
 
             return out.getMemoryBlock();
         }
+
+        /*  One OSC bundle, time tag 1 ("immediately"), each element its size
+            then its bytes, as OSC 1.0 lays it out. */
+        juce::MemoryBlock encodeOscBundle (const std::vector<juce::MemoryBlock>& messages)
+        {
+            juce::MemoryOutputStream out;
+            out.write ("#bundle", 8);                    // seven characters and the terminator
+            out.writeInt64BigEndian (1);
+
+            for (const auto& message : messages)
+            {
+                out.writeIntBigEndian (static_cast<int> (message.getSize()));
+                out.write (message.getData(), message.getSize());
+            }
+
+            return out.getMemoryBlock();
+        }
     }
 
     //==============================================================================
@@ -206,12 +225,18 @@ namespace oqatest
         Options options;
 
         std::unique_ptr<SimpleWebSocketServer> server;   // one per start(), so a restart is clean
-        std::unique_ptr<juce::DatagramSocket> osc;       // bound for OSC_PORT; nothing read yet
+        std::unique_ptr<juce::DatagramSocket> osc;       // OSC_PORT over UDP, read by oscThread
+        std::unique_ptr<juce::StreamingSocket> oscListener;   // OSC_PORT over TCP, accepted by oscThread
+        std::thread oscThread;
+        std::atomic<bool> oscStopping { false };
+        std::vector<std::vector<std::uint8_t>> oscDatagrams;  // under lock
+        std::vector<std::uint8_t> oscStream;                  // under lock
 
         mutable std::mutex lock;                          // the tree, listeners, connections
         juce::var root;
         std::map<juce::String, std::set<juce::String>> listeners;   // path -> connection ids
         std::set<juce::String> connections;
+        std::vector<std::vector<std::uint8_t>> wsOsc;                // binary frames received
 
         bool advertises (const char* extension) const
         {
@@ -223,12 +248,77 @@ namespace oqatest
             return server != nullptr ? server->port : 0;
         }
 
+        bool oscOverTcp() const { return options.oscTransport.equalsIgnoreCase ("TCP"); }
+
+        int boundOscPort() const
+        {
+            if (oscOverTcp())
+                return oscListener != nullptr ? oscListener->getBoundPort() : 0;
+
+            return osc != nullptr ? osc->getBoundPort() : 0;
+        }
+
+        /*  Reads OSC_PORT on its own thread: datagrams whole, a TCP connection's
+            bytes as they come (one connection at a time; a test opens one). */
+        void readOsc()
+        {
+            std::vector<std::uint8_t> buffer (65536);
+
+            while (! oscStopping.load())
+            {
+                if (! oscOverTcp())
+                {
+                    if (osc->waitUntilReady (true, 50) != 1)
+                        continue;
+
+                    const auto got = osc->read (buffer.data(), static_cast<int> (buffer.size()), false);
+
+                    if (got <= 0)
+                        continue;
+
+                    const std::lock_guard<std::mutex> guard (lock);
+                    oscDatagrams.emplace_back (buffer.begin(), buffer.begin() + got);
+                    continue;
+                }
+
+                if (oscListener->waitUntilReady (true, 50) != 1)
+                    continue;
+
+                std::unique_ptr<juce::StreamingSocket> connection (oscListener->waitForNextConnection());
+
+                if (connection == nullptr)
+                    continue;
+
+                while (! oscStopping.load())
+                {
+                    const auto ready = connection->waitUntilReady (true, 50);
+
+                    if (ready < 0)
+                        break;
+
+                    if (ready == 0)
+                        continue;
+
+                    const auto got = connection->read (buffer.data(), static_cast<int> (buffer.size()), false);
+
+                    if (got <= 0)
+                        break;
+
+                    const std::lock_guard<std::mutex> guard (lock);
+                    oscStream.insert (oscStream.end(), buffer.begin(), buffer.begin() + got);
+                }
+            }
+        }
+
         juce::var hostInfo() const
         {
             auto* info = new juce::DynamicObject();
             info->setProperty ("NAME", options.name);
-            info->setProperty ("OSC_PORT", osc != nullptr ? osc->getBoundPort() : 0);
-            info->setProperty ("OSC_TRANSPORT", "UDP");
+            info->setProperty ("OSC_PORT", boundOscPort());
+            info->setProperty ("OSC_TRANSPORT", oscOverTcp() ? "TCP" : "UDP");
+
+            if (options.oscIp.isNotEmpty())
+                info->setProperty ("OSC_IP", options.oscIp);
 
             if (options.websocket)
                 info->setProperty ("WS_PORT", boundHttpPort());
@@ -285,6 +375,12 @@ namespace oqatest
             if (query == "HOST_INFO")
             {
                 reply (response, 200, juce::JSON::toString (hostInfo(), true));
+                return true;
+            }
+
+            if (options.hostInfoOnly)
+            {
+                reply (response, 404, "this device serves HOST_INFO only\n");
                 return true;
             }
 
@@ -360,6 +456,13 @@ namespace oqatest
             connectionClosed (id, 0, {});
         }
 
+        void dataReceived (const juce::String&, const juce::MemoryBlock& data) override
+        {
+            const std::lock_guard<std::mutex> guard (lock);
+            const auto* bytes = static_cast<const std::uint8_t*> (data.getData());
+            wsOsc.emplace_back (bytes, bytes + data.getSize());
+        }
+
         void messageReceived (const juce::String& id, const juce::String& message) override
         {
             if (! options.websocket || ! advertises ("LISTEN"))
@@ -417,7 +520,7 @@ namespace oqatest
 
         void notify (const char* extension, const juce::var& data)
         {
-            if (advertises (extension))
+            if (advertises (extension) || options.notifyUnlisted)
                 broadcastText (command (extension, data));
         }
 
@@ -459,13 +562,29 @@ namespace oqatest
         if (impl->server != nullptr)
             return false;
 
-        impl->osc = std::make_unique<juce::DatagramSocket>();
-
-        if (! impl->osc->bindToPort (0))
+        if (impl->oscOverTcp())
         {
-            impl->osc.reset();
-            return false;
+            impl->oscListener = std::make_unique<juce::StreamingSocket>();
+
+            if (! impl->oscListener->createListener (0))
+            {
+                impl->oscListener.reset();
+                return false;
+            }
         }
+        else
+        {
+            impl->osc = std::make_unique<juce::DatagramSocket>();
+
+            if (! impl->osc->bindToPort (0))
+            {
+                impl->osc.reset();
+                return false;
+            }
+        }
+
+        impl->oscStopping.store (false);
+        impl->oscThread = std::thread ([this] { impl->readOsc(); });
 
         impl->server = std::make_unique<SimpleWebSocketServer>();
         impl->server->addHTTPRequestHandler (impl.get());
@@ -508,7 +627,13 @@ namespace oqatest
             impl->server.reset();
         }
 
+        impl->oscStopping.store (true);
+
+        if (impl->oscThread.joinable())
+            impl->oscThread.join();
+
         impl->osc.reset();
+        impl->oscListener.reset();
 
         const std::lock_guard<std::mutex> guard (impl->lock);
         impl->listeners.clear();
@@ -517,7 +642,19 @@ namespace oqatest
 
     bool MockDevice::isRunning() const { return impl->server != nullptr; }
     int MockDevice::httpPort() const { return impl->boundHttpPort(); }
-    int MockDevice::oscPort() const { return impl->osc != nullptr ? impl->osc->getBoundPort() : 0; }
+    int MockDevice::oscPort() const { return impl->boundOscPort(); }
+
+    std::vector<std::vector<std::uint8_t>> MockDevice::receivedOsc() const
+    {
+        const std::lock_guard<std::mutex> guard (impl->lock);
+        return impl->oscDatagrams;
+    }
+
+    std::vector<std::uint8_t> MockDevice::receivedOscStream() const
+    {
+        const std::lock_guard<std::mutex> guard (impl->lock);
+        return impl->oscStream;
+    }
     const MockDevice::Options& MockDevice::options() const { return impl->options; }
     juce::var MockDevice::hostInfo() const { return impl->hostInfo(); }
 
@@ -528,6 +665,62 @@ namespace oqatest
     }
 
     //==============================================================================
+    bool MockDevice::setValueBundle (const std::vector<std::pair<juce::String, juce::Array<juce::var>>>& values)
+    {
+        std::vector<juce::MemoryBlock> messages;
+        std::set<juce::String> ids;
+
+        {
+            const std::lock_guard<std::mutex> guard (impl->lock);
+
+            for (const auto& entry : values)
+            {
+                const auto path = normalisePath (entry.first);
+                const auto node = findIn (impl->root, path);
+
+                if (! node.isObject() || ! node.hasProperty ("TYPE"))
+                    return false;
+
+                node.getDynamicObject()->setProperty ("VALUE", juce::var (entry.second));
+                messages.push_back (encodeOsc (path, node.getProperty ("TYPE", {}).toString(), entry.second));
+
+                if (const auto it = impl->listeners.find (path); it != impl->listeners.end())
+                    ids.insert (it->second.begin(), it->second.end());
+            }
+        }
+
+        const auto bundle = encodeOscBundle (messages);
+
+        for (const auto& id : ids)
+            impl->sendBinaryTo (id, bundle);
+
+        return true;
+    }
+
+    void MockDevice::closeAllConnections()
+    {
+        if (impl->server == nullptr)
+            return;
+
+        std::vector<std::shared_ptr<WsServer::Connection>> open;
+
+        {
+            const juce::ScopedLock mapLock (impl->server->connectionMap.getLock());
+
+            for (decltype (impl->server->connectionMap)::Iterator it (impl->server->connectionMap); it.next();)
+                open.push_back (it.getValue());
+        }
+
+        for (const auto& connection : open)
+            connection->send_close (1000, "closed by the test");
+    }
+
+    std::vector<std::vector<std::uint8_t>> MockDevice::receivedWebsocketOsc() const
+    {
+        const std::lock_guard<std::mutex> guard (impl->lock);
+        return impl->wsOsc;
+    }
+
     bool MockDevice::setValue (const juce::String& rawPath, const juce::Array<juce::var>& values)
     {
         const auto path = normalisePath (rawPath);
