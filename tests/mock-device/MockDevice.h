@@ -45,6 +45,7 @@
 
 #include <juce_core/juce_core.h>
 
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <utility>
@@ -163,6 +164,12 @@ namespace oqatest
 
         /** Every byte received on OSC_PORT (TCP), in order, as the stream carried it. */
         std::vector<std::uint8_t> receivedOscStream() const;
+
+        /** When each UDP datagram was read, one per entry of receivedOsc(), for a latency harness. */
+        std::vector<std::chrono::steady_clock::time_point> receivedOscTimes() const;
+
+        /** Forget everything received over UDP, TCP and the websocket. */
+        void clearReceivedOsc();
 
     private:
         struct Impl;

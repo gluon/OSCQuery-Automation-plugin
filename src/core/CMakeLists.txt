@@ -37,7 +37,16 @@ add_library(oqa_core STATIC
     send/TimeTags.h
     send/TimeTags.cpp
     send/RateLimiter.h
-    send/RateLimiter.cpp)
+    send/RateLimiter.cpp
+
+    # 3c: the registry (one device entry, one network thread, one socket per device), the
+    # C ABI over it that the shared core library exports, and the plugin side of it.
+    registry/RegistryApi.h
+    registry/Registry.h
+    registry/Registry.cpp
+    registry/RegistryApi.cpp
+    Instance.h
+    Instance.cpp)
 add_library(oqa::core ALIAS oqa_core)
 
 set_target_properties(oqa_core PROPERTIES POSITION_INDEPENDENT_CODE ON)

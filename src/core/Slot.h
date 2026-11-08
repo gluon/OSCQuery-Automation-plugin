@@ -104,6 +104,9 @@ namespace oqa::core
         std::string displayName;
         std::string unit;
 
+        /** CRITICAL from the tree at bind time: this slot's messages take the reliable route (spec L4). */
+        bool critical = false;
+
         //==============================================================================
         bool bound() const noexcept     { return ! path.empty(); }
         bool isToggle() const noexcept  { return type == 'T' || type == 'F'; }

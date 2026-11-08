@@ -17,6 +17,8 @@
 
 #include "MockDevice.h"
 
+#include <chrono>
+
 /*
     Where this comes from. The server shell (one juce_simpleweb server for HTTP
     and WebSocket, start(0) then wait for the granted port, answering on the
@@ -230,6 +232,7 @@ namespace oqatest
         std::thread oscThread;
         std::atomic<bool> oscStopping { false };
         std::vector<std::vector<std::uint8_t>> oscDatagrams;  // under lock
+        std::vector<std::chrono::steady_clock::time_point> oscTimes;   // when each datagram was read
         std::vector<std::uint8_t> oscStream;                  // under lock
 
         mutable std::mutex lock;                          // the tree, listeners, connections
@@ -276,8 +279,10 @@ namespace oqatest
                     if (got <= 0)
                         continue;
 
+                    const auto readAt = std::chrono::steady_clock::now();
                     const std::lock_guard<std::mutex> guard (lock);
                     oscDatagrams.emplace_back (buffer.begin(), buffer.begin() + got);
+                    oscTimes.push_back (readAt);
                     continue;
                 }
 
@@ -654,6 +659,21 @@ namespace oqatest
     {
         const std::lock_guard<std::mutex> guard (impl->lock);
         return impl->oscStream;
+    }
+
+    std::vector<std::chrono::steady_clock::time_point> MockDevice::receivedOscTimes() const
+    {
+        const std::lock_guard<std::mutex> guard (impl->lock);
+        return impl->oscTimes;
+    }
+
+    void MockDevice::clearReceivedOsc()
+    {
+        const std::lock_guard<std::mutex> guard (impl->lock);
+        impl->oscDatagrams.clear();
+        impl->oscTimes.clear();
+        impl->oscStream.clear();
+        impl->wsOsc.clear();
     }
     const MockDevice::Options& MockDevice::options() const { return impl->options; }
     juce::var MockDevice::hostInfo() const { return impl->hostInfo(); }

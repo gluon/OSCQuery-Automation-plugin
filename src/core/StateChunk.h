@@ -28,9 +28,10 @@
                    identity_value, honours_timetags, offset_ms
       slots[]      host_param_id, device_index, path, arg_index, type, range
                    {min, max}, scaling, direction, display_name,
-                   range_overridden, and unit (not in the PRD's list; what the
-                   tree said, kept so the editor shows it before the device is
-                   reached)
+                   range_overridden, and two the PRD's list has not: unit
+                   (what the tree said, so the editor shows it before the
+                   device is reached) and critical (the tree's CRITICAL, so
+                   the reliable route is known before the tree is)
 
     ONLY BOUND SLOTS ARE WRITTEN. A slot absent from slots[] is unbound.
 

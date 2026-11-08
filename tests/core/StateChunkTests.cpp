@@ -284,7 +284,7 @@ TEST_CASE ("a fresh chunk made from bound slots writes what the PRD lists")
     const auto& s = (*slots)[0];
 
     for (const char* field : { "host_param_id", "device_index", "path", "arg_index", "type", "range",
-                               "scaling", "direction", "display_name", "range_overridden", "unit" })
+                               "scaling", "direction", "display_name", "range_overridden", "unit", "critical" })
     {
         INFO ("field " << field);
         CHECK (s.hasProperty (field));

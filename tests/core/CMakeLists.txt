@@ -26,7 +26,8 @@ add_executable(oqa_core_tests
     RtCheckTests.cpp
     ChangeRingTests.cpp
     TimeTagTests.cpp
-    RateLimiterTests.cpp)
+    RateLimiterTests.cpp
+    RegistryTests.cpp)
 
 target_include_directories(oqa_core_tests PRIVATE "${CMAKE_SOURCE_DIR}/tests")
 target_include_directories(oqa_core_tests SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/ThirdParty/doctest")

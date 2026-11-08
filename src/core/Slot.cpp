@@ -166,6 +166,7 @@ namespace oqa::core
         argIndex    = static_cast<int> (argument);
         type        = view.tag;
         unit        = view.unit;
+        critical    = node.critical;
         displayName = defaultDisplayName (node, argument);
 
         rangeOverridden = false;
@@ -195,6 +196,7 @@ namespace oqa::core
         rangeOverridden = false;
         displayName.clear();
         unit.clear();
+        critical = false;
     }
 
     void Slot::setRange (double min, double max) noexcept

@@ -246,6 +246,7 @@ TEST_CASE ("a T or F leaf is a toggle: active without a range, true above a half
     CHECK (slot.rangeKnown());
     CHECK (slot.active());
     CHECK_FALSE (slot.rangeMin.has_value());
+    CHECK_FALSE (slot.critical);
 
     CHECK (slot.toDevice (0.49f) == 0.0);
     CHECK (slot.toDevice (0.5f) == 1.0);
@@ -417,4 +418,18 @@ TEST_CASE ("the chosen curve applies to a bound slot's range")
     CHECK (slot.scaling == Scaling::logarithmic);
     CHECK (slot.mapping().effectiveScaling() == Scaling::linear);
     CHECK (slot.toDevice (0.5f) == doctest::Approx (0.0));
+}
+
+TEST_CASE ("a CRITICAL leaf marks its slot critical, and the chunk carries it")
+{
+    const auto tree = fixtureTree();
+    const auto& node = leafWhere (tree, [] (const Node& n) { return n.critical && n.bindableForSend(); });
+
+    Slot slot;
+    std::string why;
+    REQUIRE_MESSAGE (slot.bind (node, 0, 0, why), why);
+    CHECK (slot.critical);
+
+    slot.unbind();
+    CHECK_FALSE (slot.critical);
 }

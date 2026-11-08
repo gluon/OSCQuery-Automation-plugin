@@ -54,6 +54,7 @@ namespace oqa::core
             constexpr const char* displayName     = "display_name";
             constexpr const char* rangeOverridden = "range_overridden";
             constexpr const char* unit            = "unit";
+            constexpr const char* critical        = "critical";
         }
 
         const std::set<std::string> deviceKeys {
@@ -63,7 +64,7 @@ namespace oqa::core
 
         const std::set<std::string> slotKeys {
             key::hostParamId, key::deviceIndex, key::path, key::argIndex, key::type, key::range,
-            key::scaling, key::direction, key::displayName, key::rangeOverridden, key::unit
+            key::scaling, key::direction, key::displayName, key::rangeOverridden, key::unit, key::critical
         };
 
         const std::set<std::string> topKeys { key::version, key::devices, key::slots };
@@ -277,6 +278,7 @@ namespace oqa::core
 
             slot.displayName = stringOf (object->getProperty (key::displayName));
             slot.unit        = stringOf (object->getProperty (key::unit));
+            slot.critical    = static_cast<bool> (object->getProperty (key::critical));
 
             juce::NamedValueSet extras;
             keepExtras (*object, slotKeys, extras);
@@ -314,6 +316,7 @@ namespace oqa::core
             object->setProperty (key::displayName,     juce::String (slot.displayName));
             object->setProperty (key::rangeOverridden, slot.rangeOverridden);
             object->setProperty (key::unit,            juce::String (slot.unit));
+            object->setProperty (key::critical,        slot.critical);
 
             if (extras != nullptr)
                 writeExtras (*object, *extras);
