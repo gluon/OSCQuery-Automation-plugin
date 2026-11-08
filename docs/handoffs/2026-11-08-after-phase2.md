@@ -12,9 +12,11 @@ For the next Claude Code session on this repository, and for the author. Read th
   `docs/bench/2026-11-08-phase2-library.md`.
 - **The done-when is met against WFS-DIY** (its OSC Query switched on by the author, who is at
   home: 172.22.1.11): the tree printed, a position subscribed, its changes printed as OSC moved it.
-  **One bench row is still open:** DNS-SD browse found nothing on this Windows machine with go.dot
-  announcing beside it; try it on the home network with go.dot serving on the Mac mini
-  (`wfg serve …`), and `dns-sd -B _oscjson._tcp` there. Two shell lessons for the next bench:
+  DNS-SD browse finds an instance announced from the Mac mini (`dns-sd -R` there) across the
+  home network and lists it with its probe result; it found nothing announced on this same
+  Windows machine, which the bench report keeps as a same-host finding. A *reachable* found device
+  waits for a current go.dot build on the Mac (`~/Documents/go.dot/build/spikes` is an old spike
+  whose `serve` takes other arguments) or a real device. Two shell lessons for the next bench:
   Git Bash rewrites `/wfs/...` arguments into Windows paths unless `MSYS_NO_PATHCONV=1`, and
   WFS-DIY does not push a change back to a websocket client at the same IP as the UDP sender.
 - **CI is green on Linux, macOS and Windows** (run 42509175235), after two fixes the Windows

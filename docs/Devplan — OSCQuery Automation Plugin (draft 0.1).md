@@ -290,9 +290,10 @@ the records). Report of the bench: [`docs/bench/2026-11-08-phase2-library.md`](b
   it printed the current value and then three changes sent over UDP as they landed (WFS-DIY's
   OSCQuery server is off by default, `networkOscQueryEnabled`; the author switched it on in its
   Network tab). L5 on loopback: 10,000 leaves fetched and parsed in 1.4 s, Debug.
-  DNS-SD browse found nothing on this Windows machine with go.dot announcing beside it (four
-  processes already on 5353); the browser and announcer are proven against each other on loopback,
-  and the real-network row waits for the home network.
+  DNS-SD browse **finds an instance announced from the Mac mini** (Bonjour's `dns-sd -R`) across
+  the home network, probes it and lists it down with the reason; it found nothing announced on
+  this same Windows machine (four processes already on 5353), a same-host matter kept in the
+  bench report.
 
 ---
 
