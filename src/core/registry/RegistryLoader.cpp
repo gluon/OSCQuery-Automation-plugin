@@ -130,7 +130,14 @@ namespace oqa::core
         if (! file.existsAsFile())
             return fallback (file.getFullPathName().toStdString() + ": not found");
 
+        /*  NEVER CLOSED. The registry in a library owns threads and sockets;
+            unloading it under them is how a host crashes on exit. Every
+            library opened here is kept until the process ends, whatever
+            happens to the LoadedCore that asked. */
+        static std::vector<std::shared_ptr<juce::DynamicLibrary>> kept;
+
         auto library = std::make_shared<juce::DynamicLibrary>();
+        kept.push_back (library);
 
         if (! library->open (file.getFullPathName()))
             return fallback (file.getFullPathName().toStdString() + ": would not load");

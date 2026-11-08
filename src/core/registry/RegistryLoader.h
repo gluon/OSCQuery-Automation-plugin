@@ -67,7 +67,7 @@ namespace oqa::core
         /** Why the static copy is in use, in words; empty when shared. */
         std::string note;
 
-        /** Keeps the library open. */
+        /** The handle; the loader keeps every library it opened open for the life of the process. */
         std::shared_ptr<juce::DynamicLibrary> library;
     };
 

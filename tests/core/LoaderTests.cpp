@@ -90,6 +90,11 @@ TEST_CASE ("loader: the shared library built here loads, is version 1, and runs 
         CHECK (static_cast<int> (whole.getProperty ("instances", 0)) == 1);
     }
 
+    /*  The library's table is version 1 with the additive shutdown present. */
+    REQUIRE (loaded.api->size >= sizeof (OqaCoreApi));
+    REQUIRE (loaded.api->shutdown != nullptr);
+    oqatest::registerShutdownHook ([api = loaded.api] { api->shutdown(); });
+
     /*  And it sends: a mock device, a slot bound, one block, one bundle. */
     oqatest::MockDevice mock;
     REQUIRE (mock.loadTree (juce::JSON::parse (oqatest::fixture ("trees/generic-device.json"))));

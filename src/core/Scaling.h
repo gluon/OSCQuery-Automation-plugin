@@ -71,14 +71,14 @@ namespace oqa::core
         /** Finite, and not a point. */
         bool valid() const noexcept
         {
-            return std::isfinite (min) && std::isfinite (max) && min != max;
+            return std::isfinite (min) && std::isfinite (max) && std::islessgreater (min, max);
         }
 
         /** The log curve wants both ends on the same side of zero, neither on it. */
         static bool logAvailable (double min, double max) noexcept
         {
             return std::isfinite (min) && std::isfinite (max)
-                && min != 0.0 && max != 0.0 && (min > 0.0) == (max > 0.0);
+                && std::islessgreater (min, 0.0) && std::islessgreater (max, 0.0) && (min > 0.0) == (max > 0.0);
         }
 
         /** The curve actually applied: linear where log is unavailable. */

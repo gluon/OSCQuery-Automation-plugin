@@ -112,6 +112,11 @@ typedef struct OqaCoreApi
 
     /** Frees any string the table answered. */
     void (*freeString) (char* text);
+
+    /*  Additive, 2026-11-08 (size says whether it is there): stop every
+        device's thread and forget every instance. For a process that is
+        ending; a test calls it before main returns. */
+    void (*shutdown) (void);
 } OqaCoreApi;
 
 /*  The shared library's export. Declared with the export attribute only

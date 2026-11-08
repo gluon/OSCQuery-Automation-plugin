@@ -59,7 +59,15 @@ function(oqa_add_plugin_variant slots code)
         PluginProcessor.h
         PluginProcessor.cpp
         SlotParameter.h
-        SlotParameter.cpp)
+        SlotParameter.cpp
+
+        # The core's and the client library's object files go INTO the plugin's shared-code
+        # archive rather than beside it: GNU ld scans an archive once, in order, and the
+        # format targets put the shared-code archive (where the plugin's JUCE modules are)
+        # before any other, so a separate liboqa_oscquery.a could never find juce::SHA256 or
+        # the websocket client. Members of one archive resolve each other whatever the order.
+        $<TARGET_OBJECTS:oqa_core>
+        $<TARGET_OBJECTS:oqa_oscquery>)
 
     target_compile_definitions(${target} PRIVATE
         OQA_SLOT_COUNT=${slots})

@@ -33,6 +33,7 @@
 
 #include <clocale>
 #include <cstring>
+#include <functional>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -42,11 +43,30 @@ namespace oqatest
     namespace
     {
         std::string appliedLocale { "C" };
+
+        std::vector<std::function<void()>>& shutdownHooks()
+        {
+            static std::vector<std::function<void()>> hooks;
+            return hooks;
+        }
     }
 
     const char* appliedLocaleName()
     {
         return appliedLocale.c_str();
+    }
+
+    void registerShutdownHook (std::function<void()> hook)
+    {
+        shutdownHooks().push_back (std::move (hook));
+    }
+
+    void runShutdownHooks()
+    {
+        for (auto& hook : shutdownHooks())
+            hook();
+
+        shutdownHooks().clear();
     }
 }
 
@@ -96,5 +116,8 @@ int main (int argc, char** argv)
 
     doctest::Context context;
     context.applyCommandLine (static_cast<int> (forwarded.size()), forwarded.data());
-    return context.run();
+    const int result = context.run();
+
+    oqatest::runShutdownHooks();
+    return result;
 }

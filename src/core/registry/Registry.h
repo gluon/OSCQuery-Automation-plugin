@@ -141,6 +141,9 @@ namespace oqa::core
         std::size_t deviceCount() const;
         std::size_t instanceCount() const;
 
+        /** Stop every device's thread and forget every instance: for a process that is ending. */
+        void shutdown();
+
     private:
         struct Impl;
         std::unique_ptr<Impl> impl;

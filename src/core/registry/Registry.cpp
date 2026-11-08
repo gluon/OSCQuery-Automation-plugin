@@ -196,9 +196,14 @@ namespace oqa::core
             buffer.resize (datagramBufferBytes);
             openDevice();
 
-            /*  Realtime where the system allows it (a period of a millisecond,
-                half of it busy at most); a high-priority thread where it does not. */
-            if (! startRealtimeThread (RealtimeOptions {}.withPriority (9).withPeriodMs (1.0).withMaximumProcessingTimeMs (0.5)))
+            /*  Realtime where the system allows it: woken about once a block,
+                busy for tens of microseconds. The budget declared is small on
+                purpose: macOS demotes a time-constraint thread that overruns
+                its computation, and the gather below waits on the semaphore
+                rather than spinning, so the thread never does. A high-priority
+                thread where realtime is refused. */
+            if (! startRealtimeThread (RealtimeOptions {}.withPriority (9).withPeriodMs (1.0)
+                                                         .withProcessingTimeMs (0.05).withMaximumProcessingTimeMs (0.25)))
                 startThread (Priority::highest);
         }
 
@@ -706,13 +711,15 @@ namespace oqa::core
                 if (drain (now))
                 {
                     /*  Gather: every instance active lately posts its marker
-                        within the block; wait for the last of them, briefly. */
+                        within the block, each with a wake; wait for the last
+                        of them on the semaphore, never spinning, until the
+                        deadline. */
                     const auto deadline = now + microseconds (local.gatherDeadlineUs);
 
                     while (! everyActiveMarked (now) && now < deadline)
                     {
                         if (! drain (now))
-                            std::this_thread::yield();
+                            (void) wake.try_acquire_for (deadline - now);
 
                         now = steady_clock::now();
                     }
@@ -804,7 +811,15 @@ namespace oqa::core
 
     Registry::~Registry()
     {
-        /*  Instances first (their plans point at devices), then the devices. */
+        shutdown();
+    }
+
+    void Registry::shutdown()
+    {
+        /*  Instances first (their plans point at devices), then the devices,
+            each stopping its thread and its device. For a process that is
+            ending, or a test that wants no thread left when main returns. */
+        const std::lock_guard<std::mutex> guard (impl->lock);
         impl->instances.clear();
         impl->devices.clear();
     }

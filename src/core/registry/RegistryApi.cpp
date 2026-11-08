@@ -167,6 +167,11 @@ namespace
         std::free (text);
     }
 
+    void shutdownRegistry()
+    {
+        Registry::shared().shutdown();
+    }
+
     const OqaCoreApi table {
         OQA_CORE_ABI_VERSION,
         sizeof (OqaCoreApi),
@@ -182,7 +187,8 @@ namespace
         deviceSetAddress,
         settingsSetJson,
         settingsJson,
-        freeString
+        freeString,
+        shutdownRegistry
     };
 }
 

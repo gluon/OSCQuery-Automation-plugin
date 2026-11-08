@@ -24,6 +24,7 @@
 
 #include <juce_core/juce_core.h>
 
+#include <functional>
 #include <string>
 
 namespace oqatest
@@ -37,6 +38,12 @@ namespace oqatest
     {
         return std::string (appliedLocaleName()) == std::string (OQA_LOCALE_FR);
     }
+
+    /*  Something to run after the last test and before main returns: a
+        registry to stop, so no thread of ours is alive when JUCE's leak
+        detector counts. Defined in TestMain.cpp. */
+    void registerShutdownHook (std::function<void()> hook);
+    void runShutdownHooks();
 
     /** A file under tests/fixtures/, by its path relative to that folder. */
     inline juce::File fixture (const juce::String& relativePath)
