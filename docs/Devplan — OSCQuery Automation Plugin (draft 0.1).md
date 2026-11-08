@@ -412,9 +412,20 @@ its loader, the shim's real parameters, the editor's first cut. Report of the be
   current); the AU gets no parameter clump (fixed at construction, it could not follow a rebind;
   REAPER would put the unit's name in lane titles). NTP seconds wrap at the end of era 0 (2036) as
   NTP's do.
+- *On the Mac mini the same day* (`scripts/farm-check.sh`, Debug): every CTest entry passes, the
+  Release VST3 and AU build, pluginval passes the VST3; 25 blocks from two instances as 25 bundles;
+  post to the wire median 209 µs, p99 337 µs. It took two fixes to get there: a device thread that
+  spun to its gather deadline overran macOS's time-constraint budget and was demoted until its wakes
+  came late (the gather now waits on the semaphore, the budget declared is a fraction of the
+  deadline); and libc++'s `counting_semaphore::try_acquire_for` polls with a growing back-off instead
+  of waking on release, so on Apple the wake is a dispatch semaphore (`registry/Wake.h`). The loader
+  holds the system's own handle (LoadLibrary, dlopen), never closed, with no JUCE object for the leak
+  detector to count at exit; `Registry::shutdown()` (the API table's first additive entry) lets a
+  test process end with no thread of ours alive.
 - *Found on the way:* a CMake target that links `oqa::core` gets the client library's archive
   appended after `oqa_juce` on GNU ld, which has already passed the SHA-256 it needs: name
-  `oqa::oscquery` directly. `Node::argument()` returns a view by value, so a reference into its
+  `oqa::oscquery` directly; for the plugin, whose JUCE modules live in JUCE's shared-code archive
+  that the format targets put first, the core's and the library's object files go into that archive. `Node::argument()` returns a view by value, so a reference into its
   `range` dangles. MSVC's `std::counting_semaphore::try_acquire_for` is `[[nodiscard]]`. No range
   in the generic fixture excludes zero, so the log curve is tested on a user-entered range.
 - *Still to fill, the author at the DAW:* the done-when's REAPER rows on Windows (the Release VST3

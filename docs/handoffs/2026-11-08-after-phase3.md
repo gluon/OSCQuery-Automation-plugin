@@ -21,9 +21,14 @@ For the next Claude Code session on this repository, and for the author. Read th
   Windows and on the Mac mini. The Release VST3 and the core DLL are installed in
   `%LOCALAPPDATA%\Programs\Common\VST3\`; the steps are in the bench report. Fill the rows, then
   close the record in the devplan.
-- **CI** was green through 3c-2a (run 42514922031); the 3c-3, 3d and 3e pushes each cancelled the
-  previous run, and the one for 3e (42517557126) was in progress at hand-off. The Mac mini farm
-  check (`scripts/farm-check.sh` on a bundle clone at `~/oqa-phase3`) was started at hand-off.
+- **CI and the farm.** Linux and Windows are green on `8ce6faa` (run 42519594126). macOS on the
+  shared runner failed one assertion of the two-instance case (a block split into two bundles on a
+  loaded machine), loosened in the commit after. **The Mac mini passes everything** on `8ce6faa`
+  (`scripts/farm-check.sh` on a bundle clone at `~/oqa-phase3`: six CTest entries, Release VST3 and
+  AU, pluginval on the VST3), after two macOS fixes: the gather waits on the semaphore instead of
+  spinning (a time-constraint thread that overruns is demoted), and the wake is a dispatch
+  semaphore (libc++'s `try_acquire_for` polls with a back-off). The NUC's run was started at
+  hand-off.
 
 ## Decided this session (the author, 2026-11-08)
 
