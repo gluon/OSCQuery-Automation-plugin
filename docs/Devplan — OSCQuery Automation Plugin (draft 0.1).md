@@ -192,6 +192,25 @@ deleted from `spikes/`.
 **Needs from the author:** access to the Mac mini; Bitwig and Nuendo licences, or an agreed
 empty row for each until one turns up.
 
+**Record, 2026-11-08.** Report: [`docs/spikes/phase1-formats.md`](spikes/phase1-formats.md);
+the spike is deleted (its code is in the history at `aaac2c4`).
+
+- *VST3 rename works in every host but REAPER:* Samplitude 2026 (build 26215), Live 12.4.16 and
+  Bitwig 6.1.4 follow on lanes already drawn, during playback too, on both machines where
+  installed. REAPER renames the parameter but not a lane already drawn, until reopen or FX
+  offline/online.
+- *No host loses automation through bind, unbind or rebind, unless slots are hidden.* A rebound
+  slot's curve drives the new target; in REAPER under the old title.
+- *AU cannot hide without cost:* AUv2 has no `IsHidden` flag; leaving the slot out of the
+  parameter list (tried through a JUCE patch in the spike) deletes its automation in REAPER and
+  keeps it out of GarageBand. Proposed to the author: AU slots never hidden, named `(unbound)`
+  as VST3. Pending the author's yes, the PRD's Binding model rule is unchanged.
+- *Mac bundles must be ad-hoc signed as a whole* for the AU registrar to see them; JUCE's CMake
+  under Ninja does not do it.
+- *Done-when:* the report exists, the five-ID decision is in the PRD (2026-11-04), the spike is
+  deleted. Bitwig was installed on both machines on 2026-11-04; Nuendo and Logic rows stay empty;
+  clap-juce-extensions builds on JUCE 9.0.5 (information only).
+
 ---
 
 ## Phase 2 — The client library · M
