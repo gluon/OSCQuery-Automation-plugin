@@ -47,3 +47,6 @@ target_link_libraries(oqa_tests PRIVATE oqa_mock_device oqa_juce oqa::warnings)
 
 add_test(NAME unit.C COMMAND oqa_tests --oqa-locale=C)
 add_test(NAME unit.fr_FR COMMAND oqa_tests --oqa-locale=${OQA_LOCALE_FR})
+
+# The core's tests (devplan Phase 3): core.C and core.fr_FR.
+add_subdirectory(core)

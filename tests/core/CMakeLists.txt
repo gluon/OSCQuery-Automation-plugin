@@ -1,0 +1,35 @@
+# This file is part of the OSCQuery Automation Plugin —
+# https://github.com/pob31/OSCQuery-Automation-plugin
+#
+# Copyright (C) 2026 Pierre-Olivier Boulant, Julien Bayle
+#
+# The OSCQuery Automation Plugin is free software: you can redistribute it
+# and/or modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation, either version 3 of the License,
+# or (at your option) any later version. It is distributed in the hope that it
+# will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty
+# of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+# Public License (LICENSE, at the repository root) for more details.
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# The core's tests (devplan Phase 3), a third executable beside unit.* and oscquery.*,
+# sharing the suite's entry point, support headers and the mock device, and run twice by
+# CTest: once under C, once under French, because ranges and the state chunk are decimals.
+
+add_executable(oqa_core_tests
+    ../TestMain.cpp
+    ScalingTests.cpp
+    SlotTests.cpp)
+
+target_include_directories(oqa_core_tests PRIVATE "${CMAKE_SOURCE_DIR}/tests")
+target_include_directories(oqa_core_tests SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/ThirdParty/doctest")
+
+target_compile_definitions(oqa_core_tests PRIVATE
+    OQA_TEST_FIXTURES_DIR="${CMAKE_SOURCE_DIR}/tests/fixtures"
+    OQA_LOCALE_FR="${OQA_LOCALE_FR}")
+
+target_link_libraries(oqa_core_tests PRIVATE oqa::core oqa_mock_device oqa_juce oqa::warnings)
+
+add_test(NAME core.C COMMAND oqa_core_tests --oqa-locale=C)
+add_test(NAME core.fr_FR COMMAND oqa_core_tests --oqa-locale=${OQA_LOCALE_FR})
