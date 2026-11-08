@@ -203,8 +203,8 @@ the spike is deleted (its code is in the history at `aaac2c4`).
   slot's curve drives the new target; in REAPER under the old title.
 - *AU cannot hide without cost:* AUv2 has no `IsHidden` flag; leaving the slot out of the
   parameter list (tried through a JUCE patch in the spike) deletes its automation in REAPER and
-  keeps it out of GarageBand. Proposed to the author: AU slots never hidden, named `(unbound)`
-  as VST3. Pending the author's yes, the PRD's Binding model rule is unchanged.
+  keeps it out of GarageBand. Decided by the author the same day: AU slots are never hidden and
+  are named `(unbound)` as in VST3; the PRD's Binding model rule and format table are amended.
 - *Mac bundles must be ad-hoc signed as a whole* for the AU registrar to see them; JUCE's CMake
   under Ninja does not do it.
 - *Done-when:* the report exists, the five-ID decision is in the PRD (2026-11-04), the spike is
@@ -275,7 +275,8 @@ repo later (Phase 8 splits it).
   default off. TCP when `OSC_TRANSPORT` says so or the node is `CRITICAL`. The optional direct
   `sendto` from the audio thread, default off, behind a setting with a warning in its tooltip.
 - **Shims**: VST3 and AU through one JUCE `AudioProcessor` subclass, best-effort naming
-  (`kParamTitlesChanged`, `(unbound)` names; `IsHidden` and `clump` on AU), AU measured in Logic
+  (`kParamTitlesChanged`, `(unbound)` names; on AU `(unbound)` names too, never hidden, decided
+  2026-11-08, and `clump`), AU measured in Logic
   in Phase 7. The shim interface is written for CLAP's capabilities (rename, hide, clear, module)
   and the JUCE shim answers *unsupported* where a format must; the CLAP shim arrives in Phase 5b
   and no core code moves for it.
@@ -452,7 +453,8 @@ polished; the words for the failure-state tooltips.
 **Goal:** the same session file opens in all three formats. PRD milestone 5.
 
 - AU, built by JUCE since Phase 3, now measured: `kAudioUnitProperty_ParameterInfo` change
-  notification, `IsHidden`, `clump` per device, gesture events for record. Logic's partial rename
+  notification, `clump` (fixed per slot by JUCE's parameter groups, Phase 1), gesture events for
+  record. Logic's partial rename
   behaviour written down in `docs/bench/`.
 - Linux VST3 and CLAP (the Phase 5b shim); LV2 only if JUCE gives it for free.
 - The slot-count variants (8/16/32/64/128) as plugin IDs, generated from one CMake loop for the

@@ -48,7 +48,7 @@ Each plugin instance owns a fixed pool of **N generic slots** (N = 32 by default
 **Rules**
 
 - The host always sees a normalised 0–1 float. Scaling to device units happens inside the plugin, so no host rescan is ever needed for a range change.
-- Unbound slots are hidden where the format allows (CLAP `is_hidden`, AU `kAudioUnitParameterFlag_IsHidden`) and named `(unbound)` where it does not (VST3).
+- Unbound slots are hidden in CLAP (`is_hidden`) and named `(unbound)` in VST3 and AU: VST3 cannot hide a parameter, and AUv2 has no hidden flag; leaving a slot out of the AU parameter list loses its automation (REAPER) or the slot itself (GarageBand) (measured 2026-11-08, `docs/spikes/phase1-formats.md`).
 - Multi-argument nodes (`fff`) bind as consecutive slots; sending is grouped so the device receives one message with all arguments, using the last known value for arguments not being automated.
 - Rate limiting per slot: default 100 Hz, configurable; sends only on value change, with an optional periodic resend for lossy links.
 - A `$instance` token in paths is supported for ToscA-style per-track numbering, but it is sugar over the explicit path, not the primary model.

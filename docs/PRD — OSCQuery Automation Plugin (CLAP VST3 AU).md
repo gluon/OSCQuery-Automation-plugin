@@ -87,7 +87,7 @@ Each plugin instance owns a fixed pool of **N generic slots** (N = 32 by default
 **Rules**
 
 - The host always sees a normalised 0–1 float. Scaling to device units happens inside the plugin, so no host rescan is ever needed for a range change.
-- Unbound slots are hidden where the format allows (CLAP `is_hidden`, AU `kAudioUnitParameterFlag_IsHidden`) and named `(unbound)` where it does not (VST3).
+- Unbound slots are hidden in CLAP (`is_hidden`) and named `(unbound)` in VST3 and AU: VST3 cannot hide a parameter, and AUv2 has no hidden flag; leaving a slot out of the AU parameter list loses its automation (REAPER) or the slot itself (GarageBand) (measured 2026-11-08, `docs/spikes/phase1-formats.md`).
 - Multi-argument nodes (`fff`) bind as consecutive slots; sending is grouped so the device receives one message with all arguments, using the last known value for arguments not being automated.
 - Rate limiting per slot: default 100 Hz, configurable; sends only on value change, with an optional periodic resend for lossy links.
 - A `$instance` token in paths is supported for ToscA-style per-track numbering, but it is sugar over the explicit path, not the primary model.
@@ -99,9 +99,9 @@ The plugin never changes its parameter count at runtime. It changes names, group
 | Capability | CLAP | VST3 | AU |
 | --- | --- | --- | --- |
 | Stable parameter identity | `clap_id` per slot | `ParamID` per slot | `AudioUnitParameterID` per slot |
-| Rename after bind | `rescan(CLAP_PARAM_RESCAN_INFO)`, immediate, while active | `restartComponent(kParamTitlesChanged)`; Reaper honours it, others inconsistently | `kAudioUnitProperty_ParameterInfo` change notification; Logic partial |
+| Rename after bind | `rescan(CLAP_PARAM_RESCAN_INFO)`, immediate, while active | `restartComponent(kParamTitlesChanged)`; Samplitude, Live and Bitwig follow on lanes already drawn, during playback too; Reaper renames the parameter but not a lane already drawn (measured 2026-11-08) | `kAudioUnitProperty_ParameterInfo` change notification; GarageBand follows, Reaper as for VST3, Logic unmeasured (2026-11-08) |
 | Hierarchical grouping | `module` path from the OSC path (`/wfs/input/12`) | Flat; group in name prefix | `clump` ID per device |
-| Hide unbound slots | `CLAP_PARAM_IS_HIDDEN` | Not available | `IsHidden` flag |
+| Hide unbound slots | `CLAP_PARAM_IS_HIDDEN` | Not available | Not without cost: no AUv2 flag, and leaving the slot out of the parameter list loses automation (2026-11-08) |
 | Drop stale automation | `clap_host_params->clear()` | Not available | Not available |
 | Sample-accurate automation | Yes | Yes, if host sends it | Yes |
 | Hosts (Nov 2026) | Bitwig, Reaper, FL Studio, Studio One | Everything except Logic and Pro Tools | Logic, GarageBand, Live and Reaper on macOS |
@@ -110,6 +110,7 @@ The plugin never changes its parameter count at runtime. It changes names, group
 
 - CLAP is the reference format: it is the only one where rename, grouping, hide and clear all work as designed.
 - VST3 and AU are best-effort for naming: the bound path is always visible inside the plugin editor, so a host that ignores the rename still works.
+- AU never hides an unbound slot (decided 2026-11-08, after the Phase 1 format bench): AUv2 has no hidden flag, and the one means it has, leaving the slot out of the parameter list, deleted automation in REAPER and kept the slots out of GarageBand. Unbound AU slots are named `(unbound)`, as in VST3. CLAP's `is_hidden` is unaffected.
 - Build with JUCE. VST3 and AU first, through JUCE's own wrappers; CLAP at milestone 4b through a shim of our own written against the CLAP C API with `clap-helpers`. Neither `clap-juce-extensions` nor `clap-wrapper` is used (decided 2026-11-04: JUCE 9.0.5 has no native CLAP and nothing on `develop` points to one, so nothing waits on JUCE). The shim interface is written for CLAP's capabilities from the start; VST3 and AU answer *unsupported* where they must.
 - Slot-count variants are five plugin IDs (8/16/32/64/128), decided by consequence the same day: with JUCE each ID is its own binary and VST3 cannot hide slots. The process-wide registry therefore lives in a shared core library loaded by every binary, after WFS-DIY's Bridge.
 - AAX is deferred; its parameter list is frozen at instantiation and Avid's SDK agreement conflicts with an open-source distribution.

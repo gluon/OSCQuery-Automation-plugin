@@ -7,7 +7,8 @@ history at commit `aaac2c4` (`spikes/phase1_formats/`).
 
 ## Verdict
 
-**Pass, with two amendments to the PRD proposed** (see *For the author*).
+**Pass.** Two amendments to the PRD followed, decided by the author on 2026-11-08 (see *For the
+author*).
 
 1. **VST3 rename: works in every host but one.** Samplitude Suite 2026 (build 26215), Live
    12.4.16 and Bitwig 6.1.4 follow `kParamTitlesChanged` at once on lanes already drawn, during
@@ -127,13 +128,14 @@ prefix". REAPER's AU lanes show no clump name; GarageBand's AU groups do.
 1. **AU hidden slots.** The Binding model rule ("hidden where the format allows (CLAP
    `is_hidden`, AU `kAudioUnitParameterFlag_IsHidden`)") and the format table's AU column name a
    flag AUv2 does not have, and the one means AUv2 has loses automation in REAPER and the slots
-   themselves in GarageBand. **Proposed:** AU behaves as VST3, unbound slots named `(unbound)` and
-   never hidden; CLAP's `is_hidden` is untouched. The rule is in a section `CLAUDE.md` copies
-   verbatim, so the change is made in the PRD and copied.
+   themselves in GarageBand. **Decided 2026-11-08 and applied:** AU behaves as VST3, unbound
+   slots named `(unbound)` and never hidden; CLAP's `is_hidden` is untouched. Amended in the PRD
+   (rule, format table, a dated Decisions line) and copied into `CLAUDE.md`.
 2. **The format table's rename cells.** VST3, "Reaper honours it, others inconsistently", is the
    wrong way round on today's hosts: Samplitude 26215, Live 12.4.16 and Bitwig 6.1.4 follow on
    lanes already drawn, during playback too; REAPER renames the parameter only. AU, "Logic
-   partial", is unmeasured for Logic; GarageBand follows, REAPER as for VST3.
+   partial", is unmeasured for Logic; GarageBand follows, REAPER as for VST3. **Applied
+   2026-11-08.**
 3. **Stale lanes drive the wrong target silently**, in every host; a REAPER user's one-step fix
    for the title is offline/online. Whether the plugin can refresh REAPER's titles itself (REAPER
    exposes its API to VST3 plugins) is a question for Phase 3.
