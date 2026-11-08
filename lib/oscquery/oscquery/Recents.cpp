@@ -140,6 +140,7 @@ namespace oqa::oscquery
     };
 
     //==============================================================================
+    Recents::Recents() : Recents (Options()) {}
     Recents::Recents (Options options) : impl (std::make_unique<Impl> (std::move (options))) {}
     Recents::~Recents() = default;
 

@@ -79,7 +79,9 @@ namespace oqa::oscquery
             int capacity = 32;
         };
 
-        explicit Recents (Options options = Options());
+        /** The standard per-user file, capacity 32. */
+        Recents();
+        explicit Recents (Options options);
         ~Recents();
 
         Recents (const Recents&) = delete;
