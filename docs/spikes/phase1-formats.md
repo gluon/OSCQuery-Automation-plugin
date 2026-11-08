@@ -26,6 +26,11 @@ Windows by the author on 2026-11-08. The Mac mini's hosts driven by hand
   has no hidden flag. Leaving an unbound slot out of `kAudioUnitProperty_ParameterList` does hide
   it in REAPER, but REAPER then deletes that slot's lane and its points, and they do not come back
   when the slot is bound again.
+- **An AU that never hides behaves like the VST3 in REAPER** (7.85, the Mac mini, spike 0.0.2
+  with `no-hide`): all eight slots stay listed, unbound ones as `(unbound)`, and unbind and rebind
+  keep every lane and point. The automation REAPER deleted was the hiding's doing, not AU's. One
+  AU quirk remains: after offline/online or a reload every AU lane reads "(unbound) / OQA Spike 8",
+  the names the slots had when REAPER created the plugin, before their state was restored.
 - **REAPER keeps AU lanes on the parameter ID, not the index:** a lane stayed on its slot while
   other slots left and re-entered the list beneath it.
 - **pluginval at strictness 5:** the spike's VST3 passes on Windows and on macOS. **auval:**
@@ -101,10 +106,12 @@ groups: the clump is a property of the slot, not of what it is bound to.
 | | Logic | AU | *no host* |
 | Hide an unbound slot | any | VST3 | Not available in the format; slots read `(unbound)`. REAPER and Samplitude list them without complaint, and Samplitude lets them be automated like any other. |
 | | REAPER 7.80, Mac mini | AU | **Hides, destructively.** Unbound slots are absent from REAPER's list (3 parameters, REAPER's own). Unbinding a slot that has a lane deletes the lane and its points; binding it again brings neither back. |
+| | REAPER 7.85, Mac mini, hiding off (`no-hide`) | AU | Not hidden, by design of the run: the eight slots stay listed. Unbind and rebind keep all three lanes and their points. |
 | | GarageBand 10.4.14, Mac mini | AU | Hidden for good: no slot is ever offered, bound or not (above). |
 | | Live, Mac mini | AU | *pending*; spike 0.0.2 can switch hiding off (`~/.oqa-spike-phase1/no-hide`) for comparison |
 | Stale lane after rebind | REAPER, Windows and Mac | VST3 | Points kept on the slot's ID through unbind and rebind; the lane drives the new target under the old title. Fixed by reopening the project or setting the plugin offline and online (all titles refresh, state and points intact). Re-applying the lane's state chunk does not refresh it. |
 | | REAPER 7.80, Mac mini | AU | With list-omission hiding, an unbind deletes the lane, so there is no stale lane, and no automation. After offline/online, the surviving lane's title lost its parameter name (" / OQA Spike 8"). |
+| | REAPER 7.85, Mac mini, hiding off | AU | As VST3: the lane keeps its points and drives the new target under its old title. After offline/online or a reload, every lane reads "(unbound) / OQA Spike 8" while the parameters carry their bound names: REAPER takes AU lane titles from the plugin as it is created, before its state is restored. |
 | | Samplitude Suite 2026, Windows | VST3 | Curves are neither removed nor changed by bind, unbind or rebinding to another path: the curve drives the new target under its new name. Saved, closed and reopened: every curve, bound or not, and every binding and name come back. |
 | | Bitwig 6.1.4, Windows | VST3 | Slot 3 rebound several times: nothing lost, and the lane shows the current name each time. Saved and reloaded: bindings and curves come back. |
 | | Live 12.4.16, Windows | VST3 | Nothing lost through bind, unbind and rebind during playback; saved and reloaded, everything comes back. |
@@ -128,8 +135,9 @@ group in name prefix". AU lanes show no clump name.
 1. **AU hidden slots.** The Binding model rule ("hidden where the format allows (CLAP
    `is_hidden`, AU `kAudioUnitParameterFlag_IsHidden`)") and the format table's AU column name
    a flag AUv2 does not have, and the one way to hide that AUv2 does have cost the automation in
-   REAPER. **Proposed:** AU behaves as VST3 (unbound slots named `(unbound)`, never hidden),
-   unless Live shows something better. CLAP's `is_hidden` is untouched by
+   REAPER, and GarageBand never offers a slot that was hidden at load. With hiding off, REAPER
+   keeps every AU lane and point through unbind and rebind. **Proposed:** AU behaves as VST3
+   (unbound slots named `(unbound)`, never hidden), unless Live shows something better. CLAP's `is_hidden` is untouched by
    this. Since the rule is in a section `CLAUDE.md` copies verbatim, the change is made in the
    PRD and copied.
 2. **The format table's VST3 rename cell ("Reaper honours it, others inconsistently") is the
