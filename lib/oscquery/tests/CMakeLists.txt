@@ -29,6 +29,8 @@ add_executable(oqa_oscquery_tests
     MdnsTests.cpp
     FinderTests.cpp
     TransportTests.cpp
+    FixedEncoderTests.cpp
+    RawUdpSenderTests.cpp
     RecentsTests.cpp
     LargeTreeTests.cpp
     "${CMAKE_SOURCE_DIR}/tests/support/TreeGen.h")

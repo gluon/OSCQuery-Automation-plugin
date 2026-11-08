@@ -36,6 +36,8 @@ add_library(oqa_oscquery STATIC
     oscquery/osc/Framing.cpp
     oscquery/osc/Bundler.h          # messages into bundles under the MTU
     oscquery/osc/Bundler.cpp
+    oscquery/osc/FixedEncoder.h     # the same bytes into a caller's buffer, for a realtime thread
+    oscquery/osc/FixedEncoder.cpp
 
     # One HTTP GET over a raw socket (juce::URL rewrites `?HOST_INFO`); the UDP
     # endpoint that names each datagram's sender; the TCP sender.
@@ -47,6 +49,8 @@ add_library(oqa_oscquery STATIC
     oscquery/net/UdpEndpoint.cpp
     oscquery/net/TcpSender.h
     oscquery/net/TcpSender.cpp
+    oscquery/net/RawUdpSender.h     # resolved once, non-blocking sendto, for a realtime thread
+    oscquery/net/RawUdpSender.cpp
 
     # HOST_INFO as the Core profile reads it, and the tree model.
     oscquery/HostInfo.h
