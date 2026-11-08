@@ -90,13 +90,21 @@ Each plugin instance owns a fixed pool of **N generic slots** (N = 32 by default
 
 Sibling repositories on the author's machine, both GPLv3, both on JUCE 9.0.5:
 
-- **WFS-DIY** (`../WFS_DIY_v1`): `Plugin/Source/Shared/OscQueryClient.{h,cpp}` (HTTP GET,
-  websocket LISTEN/IGNORE, `PATH_CHANGED`), `OscTransport`, `RateLimiter`, and the Bridge
-  shared-library pattern (`BridgeApi.h`, `BridgeLoader`). `Source/Network/OSCQueryServer.cpp` is
-  the first conformance subject. `Plugin/Scripts`, `Plugin/Installer` and
-  `.github/workflows/plugins-ci.yml` are the installer and CI patterns to copy.
-- **go.dot** (`../go.dot`): `src/wfg/engine/oscquery/Mdns.{h,cpp}` and `Discovery.{h,cpp}`,
-  multicast DNS written in-house: codec, browser on every interface, announcer.
+- **WFS-DIY** (`../WFS_DIY_v1`): `Plugin/Source/Shared/OscQueryClient.{h,cpp}` is the
+  behavioural reference for talking to WFS-DIY's server (the LISTEN shape, re-LISTEN on open);
+  nothing is copied from it (no licence header, no HOST_INFO parsing). `OscTransport` is **not**
+  used: OSC comes from go.dot (decided 2026-11-08). `RateLimiter` is the idea for Phase 3's
+  per-slot limiter, and the Bridge shared-library pattern (`BridgeApi.h`, `BridgeLoader`) is
+  Phase 3's registry. `Source/Network/OSCQueryServer.cpp` is the first conformance subject.
+  `Plugin/Scripts`, `Plugin/Installer` and `.github/workflows/plugins-ci.yml` are the installer
+  and CI patterns to copy.
+- **go.dot** (`../go.dot`, at `1c8aaa0a`), copied into `lib/oscquery/` in Phase 2:
+  `src/wfg/engine/oscquery/Mdns.{h,cpp}`, `Discovery.{h,cpp}`, `MulticastJoin.{h,cpp}`
+  (multicast DNS written in-house: codec, browser on every interface, announcer);
+  `src/wfg/engine/osc/OscValue`, `OscAddress`, `OscCodec` (OSC 1.1, pure), `UdpEndpoint`,
+  `SocketBuffers`; `oscquery/OscQueryClient::get` (the raw-socket HTTP GET). Its own JSON
+  (`json/JsonValue`) is not used: the tree model stays on `juce::JSON`, whose number text is
+  locale-independent (`tests/LocaleTests.cpp`).
 
 Copied files keep their original header and gain a one-line origin note. Nothing is taken from
 ossia, libossia or any other OSCQuery implementation.

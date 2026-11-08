@@ -20,13 +20,18 @@
     plugin or the conformance CLI at it by hand, and for anything outside the
     test suite that needs a device.
 
-        oqa-mock-device --fixture <tree.json> [--port N] [--name "Some name"]
+        oqa-mock-device (--fixture <tree.json> | --generate <leaves>) [--port N]
+                        [--name "Some name"] [--no-websocket] [--extensions A,B,C]
+                        [--host-info-only] [--notify-unlisted] [--tcp] [--osc-ip IP]
 
     Prints one line, "oqa-mock-device http <port> osc <port>", once it answers,
-    then serves until interrupted (Ctrl-C or SIGTERM).
+    then serves until interrupted (Ctrl-C or SIGTERM). --generate serves a
+    synthetic tree of that many leaves (tests/support/TreeGen.h), for the
+    large-tree check by hand.
 */
 
 #include "MockDevice.h"
+#include "../support/TreeGen.h"
 
 #include <atomic>
 #include <csignal>
@@ -40,7 +45,9 @@ namespace
 
     int usage()
     {
-        std::cerr << "usage: oqa-mock-device --fixture <tree.json> [--port N] [--name NAME]\n";
+        std::cerr << "usage: oqa-mock-device (--fixture <tree.json> | --generate <leaves>) [--port N] [--name NAME]\n"
+                     "                       [--no-websocket] [--extensions A,B,C] [--host-info-only]\n"
+                     "                       [--notify-unlisted] [--tcp] [--osc-ip IP]\n";
         return 64;
     }
 }
@@ -48,6 +55,7 @@ namespace
 int main (int argc, char** argv)
 {
     juce::File fixture;
+    int generate = 0;
     oqatest::MockDevice::Options options;
 
     for (int i = 1; i < argc; ++i)
@@ -57,20 +65,43 @@ int main (int argc, char** argv)
 
         if (arg == "--fixture" && hasValue)
             fixture = juce::File::getCurrentWorkingDirectory().getChildFile (juce::String (argv[++i]));
+        else if (arg == "--generate" && hasValue)
+            generate = juce::String (argv[++i]).getIntValue();
         else if (arg == "--port" && hasValue)
             options.httpPort = juce::String (argv[++i]).getIntValue();
         else if (arg == "--name" && hasValue)
             options.name = juce::String (argv[++i]);
+        else if (arg == "--no-websocket")
+            options.websocket = false;
+        else if (arg == "--extensions" && hasValue)
+        {
+            options.extensions.clear();
+            options.extensions.addTokens (juce::String (argv[++i]), ",", "");
+            options.extensions.trim();
+            options.extensions.removeEmptyStrings();
+        }
+        else if (arg == "--host-info-only")
+            options.hostInfoOnly = true;
+        else if (arg == "--notify-unlisted")
+            options.notifyUnlisted = true;
+        else if (arg == "--tcp")
+            options.oscTransport = "TCP";
+        else if (arg == "--osc-ip" && hasValue)
+            options.oscIp = juce::String (argv[++i]);
         else
             return usage();
     }
 
-    if (fixture == juce::File())
+    if (fixture == juce::File() && generate <= 0)
         return usage();
 
     oqatest::MockDevice device (options);
 
-    if (! device.loadTreeFromFile (fixture))
+    if (generate > 0)
+    {
+        device.loadTree (oqatest::generateTree (generate));
+    }
+    else if (! device.loadTreeFromFile (fixture))
     {
         std::cerr << "oqa-mock-device: cannot read a JSON tree from " << fixture.getFullPathName() << "\n";
         return 66;

@@ -58,9 +58,9 @@ These change the build, not the design. Each is re-checked at the phase that dep
 
 | Piece | Origin | What changes |
 | --- | --- | --- |
-| HTTP GET, websocket, LISTEN/IGNORE, notifications | WFS-DIY `Plugin/Source/Shared/OscQueryClient` | Loses the WFS-specific float-only callback; gains a typed tree model, `HOST_INFO` parsing with `EXTENSIONS`, subtree GET, `PATH_REMOVED`/`PATH_RENAMED`, reconnect with backoff |
+| HTTP GET, websocket, LISTEN/IGNORE, notifications | go.dot `src/wfg/engine/oscquery/OscQueryClient::get` (the raw-socket GET, chunked bodies); WFS-DIY `Plugin/Source/Shared/OscQueryClient` as the behavioural reference only (amended 2026-11-08: it has no licence header, parses no `HOST_INFO` and decodes one message; nothing copied) | A typed tree model, `HOST_INFO` parsing with `EXTENSIONS`, subtree GET, all four `PATH_*`, reconnect with backoff: `lib/oscquery/oscquery/Device` |
 | DNS-SD browse and announce | go.dot `src/wfg/engine/oscquery/Mdns`, `Discovery` | Extracted with no dependency on go.dot's engine; the announcer serves the plugin's own server in Phase 6 |
-| OSC encode/decode, UDP send | WFS-DIY `OscTransport` plus `juce_osc` | Adds bundles with timetags, MTU splitting, SLIP over TCP, a non-blocking `sendto` path |
+| OSC encode/decode, UDP send and receive | go.dot `src/wfg/engine/osc/OscValue`, `OscAddress`, `OscCodec`, `UdpEndpoint`, `SocketBuffers` (decided by the author 2026-11-08, replacing WFS-DIY `OscTransport` plus `juce_osc`: JUCE's byte-level OSC streams are private to its `.cpp` files and `juce::OSCArgument` has no bool, int64, double or time tag) | Adds bundles under the MTU with one timetag (`osc/Bundler`), SLIP and length-prefix framing (`osc/Framing`), a TCP sender (`net/TcpSender`); the non-blocking `sendto` path waits for Phase 3 |
 | Rate limiter | WFS-DIY `RateLimiter` | Becomes per slot and default off, per the PRD |
 | Shared library across plugin binaries | WFS-DIY Bridge (`BridgeApi.h`, `BridgeLoader`) | Hosts the device registry so every slot-count variant and every format in the process shares one client per device (see Phase 3) |
 | Websocket/HTTP transport | `juce_simpleweb` (vendored in both repos) | Unchanged; TLS compiled out as in WFS-DIY |
@@ -247,6 +247,49 @@ to a path and prints its changes, with no address typed; the test suite passes o
 repo later (Phase 8 splits it).
 
 **Companion in WFS-DIY:** none yet; the library must cope with WFS-DIY exactly as it is.
+
+**Record, 2026-11-08.** Built in `lib/oscquery/` in two commits on `main` after the target's
+first (2a: the target and go.dot's OSC codec; then the rest of the library; then the example and
+the records). Report of the bench: [`docs/bench/2026-11-08-phase2-library.md`](bench/2026-11-08-phase2-library.md).
+
+- *Decided by the author the same day:* the library's **working name** is `oqa::oscquery`
+  (namespace, target, `<oscquery/...>` includes), renamed when Phase 8 splits it out; **OSC comes
+  from go.dot**, not from WFS-DIY's `OscTransport` plus `juce_osc` (the table above is amended);
+  the **TCP sender is built now, framing selectable, SLIP the default**, the PRD having decided
+  SLIP for the plugin while the spec draft still marks it *(proposed)*.
+- *Implementer's decisions, the author's to overrule:* `juce::JSON` stays the tree's JSON (go.dot's
+  own parser exists for shortest-round-trip doubles and >int64 literals, which a device tree has
+  no need of; `tests/LocaleTests.cpp` proves the number text locale-independent). A notification
+  that *arrives* is handled whether or not `EXTENSIONS` lists it, because WFS-DIY sends
+  `PATH_CHANGED` without listing it; nothing is ever *sent* that is unlisted. `treeHash()` runs over
+  every leaf with a `TYPE`, whatever its `ACCESS`, so two clients a device treats differently (C6)
+  agree; the algorithm is C5's *(proposed)* one and changes if the reviewers change it. Every
+  callback but `onState` fires on the Device's own thread; `onState` fires on the thread that
+  changed the state, the caller's for the blocking calls. No `juce::Timer`, no `MessageManager`.
+- *Lazy loading, as OSCQuery allows it:* the proposal has no depth-limit field and `GET /` is the
+  whole tree, so a tree above 5,000 nodes (`Device::Options::largeTreeThreshold`) is fetched once
+  and never whole again, every later change arriving by subtree GET of the path a notification
+  names; containers a device sends without `CONTENTS` are `loaded = false` until fetched. The
+  PRD's "device advertises a depth limit" has no field to read.
+- *Found on the way:* `juce::var` answers `isObject()` for an array too, and the `DynamicObject`
+  behind an array is null (a crash on `EXTENSIONS` given as a list, caught by the suite). WFS-DIY's
+  `OscQueryClient` decodes the first argument of `,fff` from the wrong offset (type-tag block
+  assumed four bytes); not copied. juce_simpleweb's client closes an idle connection after 1000 s
+  on its own; the reconnect path covers it.
+- *The mock device gained:* `hostInfoOnly`, `notifyUnlisted`, `oscTransport` (a TCP listener behind
+  `OSC_PORT`), `oscIp`, a reader behind `OSC_PORT` (datagrams, or a TCP stream's bytes), binary
+  websocket frames kept, `setValueBundle`, `closeAllConnections`; the runner the matching flags and
+  `--generate N` from `tests/support/TreeGen.h`. Still missing: a distinct `WS_PORT`, per-client
+  `ACCESS` (Phase 5).
+- *Done-when:* `oqa_oscquery_tests`, **90 cases, 31,830 assertions under C and fr-FR on Windows**,
+  as `oscquery.C` and `oscquery.fr_FR` in CTest; the three-platform run is CI's at the push that
+  closes this record. The example prints go.dot's tree (820 nodes) and the mock's and subscribes
+  with no address typed; **WFS-DIY's tree is not yet printed**: its OSCQuery server is off by default
+  (`networkOscQueryEnabled`), switched on in its Network tab, which the author does; the row is
+  open in the bench report. L5 on loopback: 10,000 leaves fetched and parsed in 1.4 s, Debug.
+  DNS-SD browse found nothing on this Windows machine with go.dot announcing beside it (four
+  processes already on 5353); the browser and announcer are proven against each other on loopback,
+  and the real-network row waits for the home network.
 
 ---
 
