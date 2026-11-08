@@ -89,7 +89,7 @@ groups: the clump is a property of the slot, not of what it is bound to.
 | | REAPER 7.80, Mac mini | AU | Parameter list follows at once; the existing lane keeps its old title. |
 | | Samplitude Suite 2026 (build 26015), Windows | VST3 | The automation menu keeps the old names during playback and takes the new ones once playback stops; renames while stopped show at once. The eight slots are one flat numbered list ("1: Device A /param/1" … "7: (unbound)"); the Device A / B groups do not appear. |
 | | Live 12, Windows | VST3 | *pending, checklist* |
-| | Bitwig 6.1.4, Windows | VST3 | *pending, checklist* |
+| | Bitwig 6.1.4, Windows | VST3 | Lanes are titled with the slot's current name ("Device A /param/30", "OQA Spike 8" beneath); no group shown. Saved and reloaded: bindings and curves as expected. *Whether an existing lane follows during playback: to confirm.* |
 | | Nuendo | VST3 | *no host* |
 | | Live 12.4.3, Mac mini | AU, VST3 | *pending, checklist* |
 | | GarageBand 10.4.14, Mac mini | AU | *pending, checklist* |
