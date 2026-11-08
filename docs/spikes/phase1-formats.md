@@ -12,7 +12,7 @@ Windows by the author on 2026-11-08. The Mac mini's hosts driven by hand
   its parameter had when the lane was made; a VST3 lane catches up when the project is reopened
   or the plugin is set offline and online. A lane made after a bind takes the current name.
 - **Every other VST3 host on the bench follows: Samplitude Suite 2026 (build 26215), Bitwig
-  6.1.4 and Live 12.4.16, all on Windows.** An existing lane takes each new name at once, during
+  6.1.4 and Live 12.4.16 on Windows, and Live 12.4.16 on the Mac mini.** An existing lane takes each new name at once, during
   playback too, and nothing is lost through bind, unbind and rebind. REAPER is the only host
   measured so far whose lanes keep an old title. (A first run on Samplitude build 26015 showed
   names waiting for the stop; the author doubts his own handling there, and that build is
@@ -103,7 +103,8 @@ groups: the clump is a property of the slot, not of what it is bound to.
 | | Live 12.4.16, Windows | VST3 | **Follows at once, during playback too:** renames and bind/unbind while playing update the names, an existing clip envelope's chooser included ("Device A /param/20"). |
 | | Bitwig 6.1.4, Windows | VST3 | **Follows at once, during playback too.** Slot 3's lane, rebound several times, carries each new name ("Device A /param/30", "OQA Spike 8" beneath); no group shown. |
 | | Nuendo | VST3 | *no host* |
-| | Live 12.4.3, Mac mini | AU, VST3 | *pending, checklist* |
+| | Live 12.4.16, Mac mini | VST3 | **Follows at once, during playback too**, as on Windows; all eight slots listed, bound or not. (The set saved, `test OQA spike 8.als`, records the device as `PluginDevice` / `Vst3PluginInfo`.) |
+| | Live 12.4.16, Mac mini | AU | *Not run*: the AU proposal does not depend on it. |
 | | GarageBand 10.4.14, Mac mini, hiding off | AU | **Follows at once, during playback too**; curves survive rename, unbind and rebind. |
 | | GarageBand 10.4.14, Mac mini | AU | With list-omission hiding, the spike's slots are never offered for automation (the built-in EQ is), not even bound slots after saving and reopening: the plugin loads with every slot unbound, so its list is empty when GarageBand reads it, and GarageBand does not read it again. Loading it asks to lower GarageBand's security (the AU declares file and network access). Not pursued further: GarageBand is not a target (the author, 2026-11-08). |
 | | Bitwig 6.1.4, Mac mini | VST3 | *pending, checklist* |
@@ -113,13 +114,13 @@ groups: the clump is a property of the slot, not of what it is bound to.
 | | REAPER 7.85, Mac mini, hiding off (`no-hide`) | AU | Not hidden, by design of the run: the eight slots stay listed. Unbind and rebind keep all three lanes and their points. |
 | | GarageBand 10.4.14, Mac mini | AU | Hidden for good: no slot is ever offered, bound or not (above). |
 | | GarageBand 10.4.14, Mac mini, hiding off (`no-hide`) | AU | All eight slots offered, **grouped by clump** as "Device A" and "Device B" (the first host to show the groups); listed in what looks like alphabetical order, so `(unbound)` slots come first and a slot moves in the list when it is bound. |
-| | Live, Mac mini | AU | *pending*; spike 0.0.2 can switch hiding off (`~/.oqa-spike-phase1/no-hide`) for comparison |
+| | Live 12.4.16, Mac mini | AU | *Not run.* |
 | Stale lane after rebind | REAPER, Windows and Mac | VST3 | Points kept on the slot's ID through unbind and rebind; the lane drives the new target under the old title. Fixed by reopening the project or setting the plugin offline and online (all titles refresh, state and points intact). Re-applying the lane's state chunk does not refresh it. |
 | | REAPER 7.80, Mac mini | AU | With list-omission hiding, an unbind deletes the lane, so there is no stale lane, and no automation. After offline/online, the surviving lane's title lost its parameter name (" / OQA Spike 8"). |
 | | REAPER 7.85, Mac mini, hiding off | AU | As VST3: the lane keeps its points and drives the new target under its old title. After offline/online or a reload, every lane reads "(unbound) / OQA Spike 8" while the parameters carry their bound names: REAPER takes AU lane titles from the plugin as it is created, before its state is restored. |
 | | Samplitude Suite 2026, Windows | VST3 | Curves are neither removed nor changed by bind, unbind or rebinding to another path: the curve drives the new target under its new name. Saved, closed and reopened: every curve, bound or not, and every binding and name come back. |
 | | Bitwig 6.1.4, Windows | VST3 | Slot 3 rebound several times: nothing lost, and the lane shows the current name each time. Saved and reloaded: bindings and curves come back. |
-| | Live 12.4.16, Windows | VST3 | Nothing lost through bind, unbind and rebind during playback; saved and reloaded, everything comes back. |
+| | Live 12.4.16, Windows and Mac mini | VST3 | Nothing lost through bind, unbind and rebind during playback; saved and reloaded, everything comes back. |
 | | the other hosts | | *pending* |
 | pluginval, strictness 5 | Windows | VST3 | SUCCESS |
 | | Mac mini (arm64) | VST3 | SUCCESS |

@@ -115,8 +115,8 @@ ossia, libossia or any other OSCQuery implementation.
   2026-11-04:
   - `ssh macmini`: Mac mini, Apple silicon, macOS 15.8.2, Xcode 26.3, cmake 4.2 and ninja from
     Homebrew (`/opt/homebrew/bin` is not on the non-interactive `PATH`; export it). Hosts:
-    REAPER 7.80, Ableton Live 12.4.3 Suite, GarageBand 10.4.14, Bitwig Studio 6.1.4 (installed
-    2026-11-04). **No Logic.** `auval` present; pluginval 1.0.4 unpacked by
+    REAPER (7.85 on 2026-11-08; it updates itself), Ableton Live 12.4.16 Suite, GarageBand
+    10.4.14, Bitwig Studio 6.1.4 (installed 2026-11-04). **No Logic.** `auval` present; pluginval 1.0.4 unpacked by
     `scripts/farm-check.sh` under `~/Documents/pluginval`.
     WFS-DIY.app and Go.dot.app installed; checkouts under `~/Documents/go.dot` and
     `~/Documents/WFS-DIY_JUCE`, a JUCE tree at `~/JUCE`.
