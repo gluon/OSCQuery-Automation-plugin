@@ -14,6 +14,9 @@ Bitwig, GarageBand) are *pending*.
 - **Samplitude Suite 2026 (build 26015), VST3: deferred.** Bind, unbind and rename during
   playback leave the names in the automation menu as they were; they take the new names once
   playback stops. Curves survive bind, unbind and rebind unchanged.
+- **Bitwig 6.1.4 (Windows), VST3: follows.** An existing lane takes each new name as the slot is
+  rebound, and nothing is lost: the first host where the PRD's "rename after bind" works on lanes
+  already drawn.
 - **Stale lanes are real, and quiet.** Automation stays on the slot's stable ID through unbind
   and rebind, so a curve drawn for one target goes on driving the next one under the old title.
   The PRD's "Drop stale automation: not available" for VST3 is confirmed; the plugin's own editor
@@ -89,7 +92,7 @@ groups: the clump is a property of the slot, not of what it is bound to.
 | | REAPER 7.80, Mac mini | AU | Parameter list follows at once; the existing lane keeps its old title. |
 | | Samplitude Suite 2026 (build 26015), Windows | VST3 | The automation menu keeps the old names during playback and takes the new ones once playback stops; renames while stopped show at once. The eight slots are one flat numbered list ("1: Device A /param/1" … "7: (unbound)"); the Device A / B groups do not appear. |
 | | Live 12, Windows | VST3 | *pending, checklist* |
-| | Bitwig 6.1.4, Windows | VST3 | Lanes are titled with the slot's current name ("Device A /param/30", "OQA Spike 8" beneath); no group shown. Saved and reloaded: bindings and curves as expected. *Whether an existing lane follows during playback: to confirm.* |
+| | Bitwig 6.1.4, Windows | VST3 | **An existing lane follows.** Slot 3's lane, rebound several times, carries each new name ("Device A /param/30", "OQA Spike 8" beneath); no group shown. During playback: not checked. |
 | | Nuendo | VST3 | *no host* |
 | | Live 12.4.3, Mac mini | AU, VST3 | *pending, checklist* |
 | | GarageBand 10.4.14, Mac mini | AU | *pending, checklist* |
@@ -101,6 +104,7 @@ groups: the clump is a property of the slot, not of what it is bound to.
 | Stale lane after rebind | REAPER, Windows and Mac | VST3 | Points kept on the slot's ID through unbind and rebind; the lane drives the new target under the old title. Fixed by reopening the project or setting the plugin offline and online (all titles refresh, state and points intact). Re-applying the lane's state chunk does not refresh it. |
 | | REAPER 7.80, Mac mini | AU | With list-omission hiding, an unbind deletes the lane, so there is no stale lane, and no automation. After offline/online, the surviving lane's title lost its parameter name (" / OQA Spike 8"). |
 | | Samplitude Suite 2026, Windows | VST3 | Curves are neither removed nor changed by bind, unbind or rebinding to another path: the curve drives the new target. Its name follows once playback stops. Saved, closed and reopened: every curve, bound or not, and every binding and name come back. |
+| | Bitwig 6.1.4, Windows | VST3 | Slot 3 rebound several times: nothing lost, and the lane shows the current name each time. Saved and reloaded: bindings and curves come back. |
 | | the other hosts | | *pending* |
 | pluginval, strictness 5 | Windows | VST3 | SUCCESS |
 | | Mac mini (arm64) | VST3 | SUCCESS |
@@ -109,7 +113,7 @@ groups: the clump is a property of the slot, not of what it is bound to.
 Checked and ruled out, Samplitude: dragging an automation handle during playback moves the handle
 to the play cursor or the cursor back to the handle. It does the same on a bound slot and on the
 track's own volume curve, in Read mode: Samplitude's way of editing during playback, not the
-plugin.
+plugin. Bitwig 6.1.4 does not do it: points edit freely during playback, wherever the cursor is.
 
 REAPER puts a VST3 unit's name in each lane title (`Device A /bank 2 / OQA Spike 8 /
 Device A`), so in REAPER the device grouping reaches the lane in VST3, against the PRD's "Flat;
