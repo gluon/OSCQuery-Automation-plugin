@@ -96,12 +96,13 @@ groups: the clump is a property of the slot, not of what it is bound to.
 | | Bitwig 6.1.4, Windows | VST3 | **Follows at once, during playback too.** Slot 3's lane, rebound several times, carries each new name ("Device A /param/30", "OQA Spike 8" beneath); no group shown. |
 | | Nuendo | VST3 | *no host* |
 | | Live 12.4.3, Mac mini | AU, VST3 | *pending, checklist* |
-| | GarageBand 10.4.14, Mac mini | AU | *pending, checklist* |
+| | GarageBand 10.4.14, Mac mini | AU | With list-omission hiding, the spike's slots are never offered for automation (the built-in EQ is), not even bound slots after saving and reopening: the plugin loads with every slot unbound, so its list is empty when GarageBand reads it, and GarageBand does not read it again. Loading it asks to lower GarageBand's security (the AU declares file and network access). Not pursued further: GarageBand is not a target (the author, 2026-11-08). |
 | | Bitwig 6.1.4, Mac mini | VST3 | *pending, checklist* |
 | | Logic | AU | *no host* |
 | Hide an unbound slot | any | VST3 | Not available in the format; slots read `(unbound)`. REAPER and Samplitude list them without complaint, and Samplitude lets them be automated like any other. |
 | | REAPER 7.80, Mac mini | AU | **Hides, destructively.** Unbound slots are absent from REAPER's list (3 parameters, REAPER's own). Unbinding a slot that has a lane deletes the lane and its points; binding it again brings neither back. |
-| | Live, GarageBand, Mac mini | AU | *pending, checklist* |
+| | GarageBand 10.4.14, Mac mini | AU | Hidden for good: no slot is ever offered, bound or not (above). |
+| | Live, Mac mini | AU | *pending*; spike 0.0.2 can switch hiding off (`~/.oqa-spike-phase1/no-hide`) for comparison |
 | Stale lane after rebind | REAPER, Windows and Mac | VST3 | Points kept on the slot's ID through unbind and rebind; the lane drives the new target under the old title. Fixed by reopening the project or setting the plugin offline and online (all titles refresh, state and points intact). Re-applying the lane's state chunk does not refresh it. |
 | | REAPER 7.80, Mac mini | AU | With list-omission hiding, an unbind deletes the lane, so there is no stale lane, and no automation. After offline/online, the surviving lane's title lost its parameter name (" / OQA Spike 8"). |
 | | Samplitude Suite 2026, Windows | VST3 | Curves are neither removed nor changed by bind, unbind or rebinding to another path: the curve drives the new target under its new name. Saved, closed and reopened: every curve, bound or not, and every binding and name come back. |
@@ -128,7 +129,7 @@ group in name prefix". AU lanes show no clump name.
    `is_hidden`, AU `kAudioUnitParameterFlag_IsHidden`)") and the format table's AU column name
    a flag AUv2 does not have, and the one way to hide that AUv2 does have cost the automation in
    REAPER. **Proposed:** AU behaves as VST3 (unbound slots named `(unbound)`, never hidden),
-   unless Live or GarageBand shows something better tomorrow. CLAP's `is_hidden` is untouched by
+   unless Live shows something better. CLAP's `is_hidden` is untouched by
    this. Since the rule is in a section `CLAUDE.md` copies verbatim, the change is made in the
    PRD and copied.
 2. **The format table's VST3 rename cell ("Reaper honours it, others inconsistently") is the
@@ -138,7 +139,11 @@ group in name prefix". AU lanes show no clump name.
 3. **Stale lanes drive the wrong target silently** in VST3; a REAPER user's one-step fix is
    offline/online. Whether the plugin can refresh REAPER's titles itself (REAPER exposes its API
    to VST3 plugins) is a question for Phase 3, not measured here.
-4. **Mac bundles need an ad-hoc signature over the whole bundle** from the first build that a
+4. **The plugin needs the network in sandboxed AU hosts.** GarageBand asks the user to lower its
+   security to load an AU that declares file or network access, and the real plugin cannot work
+   without the network. Logic sandboxes AUs the same way; Phase 7 states what the user will be
+   asked, and why.
+5. **Mac bundles need an ad-hoc signature over the whole bundle** from the first build that a
    host is meant to load: a post-build `codesign --force --deep --sign -` for the plugin targets
    (Phase 3, or now in CI), real signing in Phase 7.
 
