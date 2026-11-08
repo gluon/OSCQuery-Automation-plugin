@@ -57,17 +57,45 @@ function(oqa_add_plugin_variant slots code)
 
     target_sources(${target} PRIVATE
         PluginProcessor.h
-        PluginProcessor.cpp)
+        PluginProcessor.cpp
+        SlotParameter.h
+        SlotParameter.cpp)
 
     target_compile_definitions(${target} PRIVATE
         OQA_SLOT_COUNT=${slots})
 
+    # The core and the client library, and the JUCE modules they need beyond what
+    # juce_audio_processors brings (juce_simpleweb for the websocket, cryptography for the
+    # tree hash, data_structures for the recents store). The plugin compiles its own JUCE
+    # through juce_add_plugin; oqa::core and oqa::oscquery carry headers and switches only.
     target_link_libraries(${target}
         PRIVATE
+            oqa::core
+            oqa::oscquery
             juce::juce_audio_processors
+            juce::juce_cryptography
+            juce::juce_data_structures
+            juce_simpleweb
             oqa::juce_config
             oqa::warnings
             juce::juce_recommended_config_flags)
+
+    # The shared core library beside the plugin bundle after every build, where the
+    # loader looks first (walking up from the plugin's own module), so a dev build shares a
+    # registry as an installed one will. WFS-DIY's dev builds never found their bridge.
+    foreach(format IN LISTS OQA_PLUGIN_FORMATS)
+        set(format_target ${target}_${format})
+        if(TARGET ${format_target})
+            add_dependencies(${format_target} oqa_core_shared)
+            # The binary sits in <bundle>/Contents/<arch>/; three up is the folder holding
+            # the bundle, VST3 and AU alike.
+            add_custom_command(TARGET ${format_target} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                        "$<TARGET_FILE:oqa_core_shared>"
+                        "$<TARGET_FILE_DIR:${format_target}>/../../../"
+                COMMENT "Copying the shared core library beside the ${format} bundle")
+        endif()
+    endforeach()
 endfunction()
 
 oqa_add_plugin_variant(32 Q032)

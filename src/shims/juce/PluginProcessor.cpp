@@ -17,18 +17,51 @@
 
 #include "PluginProcessor.h"
 
-// The five plugin IDs are five slot counts (PRD, Binding model). Phase 0 builds one.
+#include <core/rt/RtCheck.h>
+
+// The five plugin IDs are five slot counts (PRD, Binding model). Phase 3 builds one.
 static_assert (OQA_SLOT_COUNT == 8 || OQA_SLOT_COUNT == 16 || OQA_SLOT_COUNT == 32
                    || OQA_SLOT_COUNT == 64 || OQA_SLOT_COUNT == 128,
                "OQA_SLOT_COUNT must be one of the five variants");
 
 namespace oqa::shim
 {
+    namespace
+    {
+        std::string instanceLabel()
+        {
+            static std::atomic<int> counter { 0 };
+            return std::string (JucePlugin_Name) + " #" + std::to_string (++counter);
+        }
+    }
+
     PluginProcessor::PluginProcessor()
         : juce::AudioProcessor (BusesProperties()
                                     .withInput ("Input", juce::AudioChannelSet::stereo(), true)
-                                    .withOutput ("Output", juce::AudioChannelSet::stereo(), true))
+                                    .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
+          loaded (core::RegistryLoader::load()),
+          core (loaded.api, slotCount, instanceLabel())
     {
+        slots.reserve (static_cast<std::size_t> (slotCount));
+
+        for (int i = 0; i < slotCount; ++i)
+        {
+            auto parameter = std::make_unique<SlotParameter> (i);
+            slots.push_back (parameter.get());
+            addParameter (parameter.release());
+        }
+
+        bindingsChanged();
+
+        /*  A slow look at the core's revision, so a binding made by anything
+            but this editor (a reload, a future headless path) renames too. */
+        startTimer (250);
+    }
+
+    PluginProcessor::~PluginProcessor()
+    {
+        stopTimer();
+        core.disconnect();
     }
 
     const juce::String PluginProcessor::getName() const
@@ -45,17 +78,38 @@ namespace oqa::shim
         return ! out.isDisabled() && in == out;
     }
 
-    void PluginProcessor::prepareToPlay (double, int) {}
-    void PluginProcessor::releaseResources() {}
+    //==============================================================================
+    void PluginProcessor::prepareToPlay (double, int)
+    {
+        core.connect();
+    }
+
+    void PluginProcessor::releaseResources()
+    {
+        core.disconnect();
+    }
 
     void PluginProcessor::processBlock (juce::AudioBuffer<float>&, juce::MidiBuffer&)
     {
-        // Nothing. Input and output share the buffer and have the same layout,
-        // so leaving it alone is the pass-through.
+        /*  Audio: nothing. Input and output share the buffer and have the same
+            layout, so leaving it alone is the pass-through. */
+        const core::rt::ScopedRealtimeCheck region;
+
+        for (std::size_t i = 0; i < slots.size(); ++i)
+            values[i] = slots[i]->getValue();
+
+        core.processBlock (values.data(), slotCount);
     }
 
-    bool PluginProcessor::hasEditor() const { return false; }
-    juce::AudioProcessorEditor* PluginProcessor::createEditor() { return nullptr; }
+    //==============================================================================
+    bool PluginProcessor::hasEditor() const { return true; }
+
+    juce::AudioProcessorEditor* PluginProcessor::createEditor()
+    {
+        /*  Phase 3d: the host's generic view of the slots. The editor proper,
+            with the device browser and the slot table, is Phase 3e's. */
+        return new juce::GenericAudioProcessorEditor (*this);
+    }
 
     bool PluginProcessor::acceptsMidi() const { return false; }
     bool PluginProcessor::producesMidi() const { return false; }
@@ -67,10 +121,40 @@ namespace oqa::shim
     const juce::String PluginProcessor::getProgramName (int) { return {}; }
     void PluginProcessor::changeProgramName (int, const juce::String&) {}
 
-    // No state yet. The state chunk (PRD, Session persistence) is Phase 3's, and
-    // carries a version from its first commit.
-    void PluginProcessor::getStateInformation (juce::MemoryBlock&) {}
-    void PluginProcessor::setStateInformation (const void*, int) {}
+    //==============================================================================
+    void PluginProcessor::getStateInformation (juce::MemoryBlock& destination)
+    {
+        const auto json = core.saveState();
+        destination.replaceAll (json.data(), json.size());
+    }
+
+    void PluginProcessor::setStateInformation (const void* data, int sizeInBytes)
+    {
+        if (data == nullptr || sizeInBytes <= 0)
+            return;
+
+        std::string error;
+        core.loadState (std::string_view (static_cast<const char*> (data), static_cast<std::size_t> (sizeInBytes)), error);
+        bindingsChanged();
+    }
+
+    //==============================================================================
+    void PluginProcessor::bindingsChanged()
+    {
+        const auto& chunk = core.chunk();
+
+        for (auto* parameter : slots)
+            parameter->follow (chunk.slots[parameter->slotIndex()]);
+
+        shownRevision = core.revision();
+        updateHostDisplay (ChangeDetails().withParameterInfoChanged (true));
+    }
+
+    void PluginProcessor::timerCallback()
+    {
+        if (core.revision() != shownRevision)
+            bindingsChanged();
+    }
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()

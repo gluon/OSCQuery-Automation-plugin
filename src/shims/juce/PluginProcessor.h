@@ -18,23 +18,48 @@
 #pragma once
 
 /*
-    THE JUCE SHIM'S PROCESSOR, PHASE 0: a plugin that does nothing, on purpose.
+    THE JUCE SHIM'S PROCESSOR: VST3 everywhere, AU on macOS, thin on purpose
+    (devplan: "the editor is a client of the core; the three format shims are
+    thin"). It owns one core::Instance and does three things with it:
 
-    Audio passes through untouched (PRD non-goal: no audio processing in the
-    plugin), there are no parameters yet, no editor and no state. It exists so
-    that CI builds, validates and uploads a real VST3 (and AU on macOS) from the
-    first commit, and so that the plugin's identity is fixed before anything is
-    saved against it. The slots arrive in Phase 3, through the core.
+      prepareToPlay      connect() to the registry, every time (Logic restarts
+                         its hosting process; WFS-DIY learnt it the hard way)
+      releaseResources   disconnect(); the destructor too, because a host need
+      and the destructor not call releaseResources (JUCE's LV2 wrapper never does)
+      processBlock       audio passes through untouched; the slots' values go
+                         to the core, which posts what moved and ends the block
+
+    The state chunk is the core's JSON, as bytes. Names follow the bindings:
+    whenever the core's revision moves, every SlotParameter is told its slot
+    and the host is told the parameter info changed (VST3 kParamTitlesChanged,
+    AU PropertyChanged; Samplitude, Live and Bitwig follow on drawn lanes,
+    REAPER on reopen: the Phase 1 bench).
+
+    The registry is the shared core library's when one is beside the plugin,
+    this binary's own otherwise; the status says which.
 */
+
+#include "SlotParameter.h"
+
+#include <core/Instance.h>
+#include <core/registry/RegistryLoader.h>
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
+#include <array>
+#include <cstdint>
+#include <vector>
+
 namespace oqa::shim
 {
-    class PluginProcessor final : public juce::AudioProcessor
+    class PluginProcessor final : public juce::AudioProcessor,
+                                  private juce::Timer
     {
     public:
         PluginProcessor();
+        ~PluginProcessor() override;
+
+        static constexpr int slotCount = OQA_SLOT_COUNT;
 
         const juce::String getName() const override;
 
@@ -61,7 +86,26 @@ namespace oqa::shim
         void getStateInformation (juce::MemoryBlock& destination) override;
         void setStateInformation (const void* data, int sizeInBytes) override;
 
+        //==============================================================================
+        /** The core, for the editor. Message thread. */
+        core::Instance& instance() noexcept { return core; }
+        const core::Instance& instance() const noexcept { return core; }
+
+        /** The loader's decision for this binary: shared library or alone, and why. */
+        const core::LoadedCore& loadedCore() const noexcept { return loaded; }
+
+        /** Tell the parameters and the host that the bindings changed. Message thread. */
+        void bindingsChanged();
+
     private:
+        void timerCallback() override;
+
+        const core::LoadedCore& loaded;
+        core::Instance core;
+        std::vector<SlotParameter*> slots;
+        std::array<float, slotCount> values {};
+        std::uint64_t shownRevision = 0;
+
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PluginProcessor)
     };
 }
