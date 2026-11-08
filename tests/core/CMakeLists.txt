@@ -27,7 +27,8 @@ add_executable(oqa_core_tests
     ChangeRingTests.cpp
     TimeTagTests.cpp
     RateLimiterTests.cpp
-    RegistryTests.cpp)
+    RegistryTests.cpp
+    LoaderTests.cpp)
 
 target_include_directories(oqa_core_tests PRIVATE "${CMAKE_SOURCE_DIR}/tests")
 target_include_directories(oqa_core_tests SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/ThirdParty/doctest")
@@ -35,7 +36,11 @@ target_include_directories(oqa_core_tests SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/Th
 target_compile_definitions(oqa_core_tests PRIVATE
     OQA_TEST_FIXTURES_DIR="${CMAKE_SOURCE_DIR}/tests/fixtures"
     OQA_TEST_STATE_DIR="${CMAKE_SOURCE_DIR}/tests/state"
+    OQA_CORE_SHARED_PATH="$<TARGET_FILE:oqa_core_shared>"
     OQA_LOCALE_FR="${OQA_LOCALE_FR}")
+
+# The loader's tests open the shared library this build makes.
+add_dependencies(oqa_core_tests oqa_core_shared)
 
 # oqa::oscquery named here although oqa::core carries it: GNU ld scans archives once, in
 # order, and CMake appends a transitive archive after the direct ones, which put the

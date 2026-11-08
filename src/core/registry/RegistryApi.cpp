@@ -16,9 +16,9 @@
 */
 
 /*
-    THE C ABI OVER THE REGISTRY. Compiled into the shared core library, where
-    oqa_core_api() is the export, and into every plugin binary, where the same
-    table is reached as oqa::core::staticCoreApi(). The functions are the
+    THE C ABI OVER THE REGISTRY. Compiled into every binary as
+    oqa::core::staticCoreApi(); the shared core library exports the same table
+    as oqa_core_api() (core-shared/CoreExport.cpp). The functions are the
     same; only the registry behind them differs: the library's is the one the
     whole process shares.
 */
@@ -193,10 +193,3 @@ namespace oqa::core
         return &table;
     }
 }
-
-#if defined (OQA_CORE_BUILDING_SHARED)
-extern "C" OQA_CORE_EXPORT const OqaCoreApi* oqa_core_api (void)
-{
-    return &table;
-}
-#endif

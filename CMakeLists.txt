@@ -42,6 +42,13 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Hidden by default, everywhere: the shared core library (src/core/core-shared) exports one
+# function and nothing else, so the JUCE compiled into it never meets the JUCE compiled into
+# a plugin that loads it. juce_add_plugin sets the same for the plugins; executables do not
+# mind. Set before any target exists so the static libraries the shared one links have it.
+set(CMAKE_CXX_VISIBILITY_PRESET hidden)
+set(CMAKE_VISIBILITY_INLINES_HIDDEN ON)
+
 # The DLL runtime on every config, set before any third-party target exists so that JUCE,
 # the plugin and the tests agree. A plugin loaded into a host must not drag a static CRT
 # of its own across the boundary.

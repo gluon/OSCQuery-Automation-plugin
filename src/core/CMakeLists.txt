@@ -46,10 +46,17 @@ add_library(oqa_core STATIC
     registry/Registry.cpp
     registry/RegistryApi.cpp
     Instance.h
-    Instance.cpp)
+    Instance.cpp
+
+    # 3c: finding the shared core library beside the plugin, or doing without.
+    registry/RegistryLoader.h
+    registry/RegistryLoader.cpp)
 add_library(oqa::core ALIAS oqa_core)
 
 set_target_properties(oqa_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 target_include_directories(oqa_core PUBLIC "${CMAKE_SOURCE_DIR}/src")
-target_link_libraries(oqa_core PUBLIC oqa::oscquery PRIVATE oqa::warnings)
+target_link_libraries(oqa_core PUBLIC oqa::oscquery ${CMAKE_DL_LIBS} PRIVATE oqa::warnings)
+
+# The shared core library: the same registry, exported once, for every binary in a process.
+add_subdirectory(core-shared)
