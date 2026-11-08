@@ -10,11 +10,13 @@ For the next Claude Code session on this repository, and for the author. Read th
   `oscquery.C` and `oscquery.fr_FR` in CTest. `lib/oscquery/README.md` lists every unit and where
   it came from. The example `oscquery-dump` is the done-when; the bench report is
   `docs/bench/2026-11-08-phase2-library.md`.
-- **Two rows of the bench are the author's:** WFS-DIY's tree is not yet printed because its
-  OSCQuery server is off by default (Network tab, "OSC Query"); switch it on, then
-  `oscquery-dump 127.0.0.1:5005 --listen-first` and move an input fader. DNS-SD browse found
-  nothing on this Windows machine with go.dot announcing beside it; try it on the home network
-  with go.dot serving on the Mac mini (`wfg serve …`), and `dns-sd -B _oscjson._tcp` there.
+- **The done-when is met against WFS-DIY** (its OSC Query switched on by the author, who is at
+  home: 172.22.1.11): the tree printed, a position subscribed, its changes printed as OSC moved it.
+  **One bench row is still open:** DNS-SD browse found nothing on this Windows machine with go.dot
+  announcing beside it; try it on the home network with go.dot serving on the Mac mini
+  (`wfg serve …`), and `dns-sd -B _oscjson._tcp` there. Two shell lessons for the next bench:
+  Git Bash rewrites `/wfs/...` arguments into Windows paths unless `MSYS_NO_PATHCONV=1`, and
+  WFS-DIY does not push a change back to a websocket client at the same IP as the UDP sender.
 - **CI is green on Linux, macOS and Windows** (run 42509175235), after two fixes the Windows
   build had not asked for: GCC and clang refuse a nested struct's default member initialisers in
   a default argument of the enclosing class, and libc++ has no floating-point `std::to_chars`

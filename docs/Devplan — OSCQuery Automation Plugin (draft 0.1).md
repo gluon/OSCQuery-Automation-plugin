@@ -285,10 +285,11 @@ the records). Report of the bench: [`docs/bench/2026-11-08-phase2-library.md`](b
   as `oscquery.C` and `oscquery.fr_FR` in CTest; **CI green on Linux, macOS and Windows** (run
   42509175235) after two portability fixes GCC and clang asked for (a nested struct's default
   member initialisers in a default argument; floating-point `std::to_chars` absent below macOS
-  13.3, this plugin's floor being 11.0). The example prints go.dot's tree (820 nodes) and the mock's and subscribes
-  with no address typed; **WFS-DIY's tree is not yet printed**: its OSCQuery server is off by default
-  (`networkOscQueryEnabled`), switched on in its Network tab, which the author does; the row is
-  open in the bench report. L5 on loopback: 10,000 leaves fetched and parsed in 1.4 s, Debug.
+  13.3, this plugin's floor being 11.0). The example prints **WFS-DIY's tree (1,393 nodes, 1,347 leaves)**, go.dot's (820
+  nodes) and the mock's, and subscribed to a WFS-DIY input position with no address typed in code
+  it printed the current value and then three changes sent over UDP as they landed (WFS-DIY's
+  OSCQuery server is off by default, `networkOscQueryEnabled`; the author switched it on in its
+  Network tab). L5 on loopback: 10,000 leaves fetched and parsed in 1.4 s, Debug.
   DNS-SD browse found nothing on this Windows machine with go.dot announcing beside it (four
   processes already on 5353); the browser and announcer are proven against each other on loopback,
   and the real-network row waits for the home network.
