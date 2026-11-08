@@ -14,7 +14,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 # The root only sets things up, in order. Targets live in cmake/OqaThirdParty.cmake
-# (everything vendor), src/ (the plugin) and tests/ (the suite and the mock device).
+# (everything vendor), lib/oscquery/ (the client library and its tests), src/ (the plugin)
+# and tests/ (the suite and the mock device).
 #
 # Quick start:   cmake --preset vs        && cmake --build --preset vs-debug     (Windows)
 #                cmake --preset dev       && cmake --build --preset dev-debug    (anywhere, Ninja)
@@ -51,11 +52,16 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 include(OqaOptions)
 include(OqaThirdParty)
 
-add_subdirectory(src)
-
 # enable_testing(), not include(CTest): CTest's module adds a dozen dashboard targets and
-# cache entries nobody here uses.
+# cache entries nobody here uses. Called before the first directory that adds a test:
+# lib/oscquery carries its own.
 if(OQA_BUILD_TESTS)
     enable_testing()
+endif()
+
+add_subdirectory(lib/oscquery)
+add_subdirectory(src)
+
+if(OQA_BUILD_TESTS)
     add_subdirectory(tests)
 endif()

@@ -117,6 +117,7 @@ target_compile_definitions(oqa_deps INTERFACE
     JUCE_MODULE_AVAILABLE_juce_core=1
     JUCE_MODULE_AVAILABLE_juce_events=1
     JUCE_MODULE_AVAILABLE_juce_cryptography=1
+    JUCE_MODULE_AVAILABLE_juce_data_structures=1
     JUCE_MODULE_AVAILABLE_juce_simpleweb=1
     OQA_VERSION_STRING="${PROJECT_VERSION}")
 
@@ -154,4 +155,5 @@ target_link_libraries(oqa_juce
         juce::juce_core           # String, File, var, JSON, sockets
         juce::juce_events         # ScopedJuceInitialiser_GUI, Thread, MessageManager
         juce::juce_cryptography   # juce_simpleweb includes it unconditionally
+        juce::juce_data_structures # PropertiesFile, for the library's recents store
         juce_simpleweb)           # HTTP + WebSocket server and WebSocket client
