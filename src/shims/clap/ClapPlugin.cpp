@@ -71,6 +71,8 @@ namespace oqa::clapshim
 
     ClapPlugin::~ClapPlugin()
     {
+        stopJuce();
+
         if (timerId != CLAP_INVALID_ID && _host.canUseTimerSupport())
             _host.timerSupportUnregister (timerId);
 
@@ -80,6 +82,7 @@ namespace oqa::clapshim
     //==============================================================================
     bool ClapPlugin::init() noexcept
     {
+        startJuce();
         core.connect();
         recordStanding();
         refreshSettings();
@@ -268,6 +271,10 @@ namespace oqa::clapshim
             flush, so one is asked for until it has. */
         if (openGestures.load (std::memory_order_relaxed) > 0 && ! isProcessing() && _host.canUseParams())
             _host.paramsRequestFlush();
+
+      #if defined (__linux__)
+        pumpJuceIfUnwatched();
+      #endif
 
         if (++ticks % slowEveryTicks != 0)
             return;

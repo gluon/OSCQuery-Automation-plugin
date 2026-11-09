@@ -20,8 +20,12 @@ diagnosis without the editor. **5b-3** record (`ClapRecord.cpp`): the values a d
 drained on the audio thread in `process` and `flush` into `PARAM_GESTURE_BEGIN`, `PARAM_VALUE` and
 `PARAM_GESTURE_END` out-events, the gesture closed after `gesture_timeout_ms`; the registry's wake
 asks the host to flush, and the 50 ms timer keeps asking while a gesture is open and the host is not
-processing. To come: the JUCE editor in the host's window (5b-4), the loader reusing a core already
-in the process (5b-5).
+processing. **5b-4** the editor in the host's window (`ClapGui.cpp`: embedded on win32,
+cocoa and x11, resizable within the editor's own limits, sizes in the pixels CLAP defines for each
+window api; JUCE initialised in `init` on the host's main thread; on Linux JUCE's file descriptors
+are watched through the host's posix-fd support, `LinuxEventPump`, or polled from the timer).
+**5b-5** lives in the core's loader: a core library already loaded in the process, by a VST3 in
+another folder say, is reused rather than loaded twice.
 
 `tests/clap/` is a host of our own that loads the built module and drives it through the C API;
 clap-validator runs on it in CI.

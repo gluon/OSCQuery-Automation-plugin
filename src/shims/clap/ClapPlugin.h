@@ -68,6 +68,12 @@
                           and the host is not processing, so it closes.
       state               the core's JSON chunk over clap_istream and
                           clap_ostream, the parameters' values in it
+      gui (5b-4)          the one editor (editor::EditorRoot) in the host's
+                          window on win32, cocoa and x11, embedded only;
+                          JUCE initialised in init() on the host's main
+                          thread; on Linux JUCE's descriptors watched through
+                          the host's posix-fd support (LinuxEventPump), or
+                          polled from the timer (ClapGui.cpp)
 
     The registry is the shared core library's when one is beside the module,
     this binary's own otherwise; the status says which.
@@ -77,13 +83,17 @@
     see it), in Release it is ignored.
 */
 
+#include "LinuxEventPump.h"
 #include "StatusExtension.h"
 
 #include <core/Instance.h>
 #include <core/receive/Gesture.h>
 #include <core/registry/RegistryLoader.h>
+#include <editor/EditorRoot.h>
 
 #include <clap/helpers/plugin.hh>
+
+#include <juce_events/juce_events.h>
 
 #include <atomic>
 #include <cstdint>
@@ -142,6 +152,28 @@ namespace oqa::clapshim
         bool implementsTimerSupport() const noexcept override { return true; }
         void onTimer (clap_id timerId) noexcept override;
 
+        //  clap_plugin_gui: the editor in the host's window (ClapGui.cpp)
+        bool implementsGui() const noexcept override { return true; }
+        bool guiIsApiSupported (const char* api, bool isFloating) noexcept override;
+        bool guiGetPreferredApi (const char** api, bool* isFloating) noexcept override;
+        bool guiCreate (const char* api, bool isFloating) noexcept override;
+        void guiDestroy() noexcept override;
+        bool guiSetScale (double scale) noexcept override;
+        bool guiGetSize (std::uint32_t* width, std::uint32_t* height) noexcept override;
+        bool guiCanResize() const noexcept override;
+        bool guiGetResizeHints (clap_gui_resize_hints_t* hints) noexcept override;
+        bool guiAdjustSize (std::uint32_t* width, std::uint32_t* height) noexcept override;
+        bool guiSetSize (std::uint32_t width, std::uint32_t height) noexcept override;
+        bool guiSetParent (const clap_window_t* window) noexcept override;
+        bool guiShow() noexcept override;
+        bool guiHide() noexcept override;
+
+      #if defined (__linux__)
+        //  clap_plugin_posix_fd_support: JUCE's descriptors, watched by the host
+        bool implementsPosixFdSupport() const noexcept override { return true; }
+        void onPosixFd (int fd, clap_posix_fd_flags_t flags) noexcept override;
+      #endif
+
     private:
         static constexpr std::uint32_t timerPeriodMs = 50;
         static constexpr int slowEveryTicks = 5;     ///< the revision poll, the status and the settings, every 250 ms
@@ -168,6 +200,17 @@ namespace oqa::clapshim
 
         /** The registry's settings this shim reads (gesture_timeout_ms). Main thread. */
         void refreshSettings() noexcept;
+
+        /** JUCE up on the host's main thread (init), and down again (destroy). */
+        void startJuce() noexcept;
+        void stopJuce() noexcept;
+
+        /** The peer's scale once parented: physical pixels per logical one; 1 before. */
+        double guiScale() const noexcept;
+
+      #if defined (__linux__)
+        void pumpJuceIfUnwatched() noexcept;
+      #endif
 
         const core::LoadedCore& loaded;
         const int count;
@@ -203,5 +246,13 @@ namespace oqa::clapshim
         //  The status extension's strings, kept until the next call.
         std::string statusText, settingsText;
         const oqa_clap_status_t statusExtension;
+
+        //  GUI (5b-4). Declared after everything the editor reads; JUCE's
+        //  initialiser before the editor, so the editor goes first.
+        std::unique_ptr<juce::ScopedJuceInitialiser_GUI> juceInit;
+      #if defined (__linux__)
+        std::unique_ptr<LinuxEventPump> pump;
+      #endif
+        std::unique_ptr<editor::EditorRoot> editor;
     };
 }
