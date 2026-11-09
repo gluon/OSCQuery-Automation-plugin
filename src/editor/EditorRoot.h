@@ -31,8 +31,16 @@
                state and rates, the core's warnings
 
     BINDING IS CLICK A SLOT, THEN CLICK A LEAF. A multi-argument leaf takes
-    consecutive slots from the one selected. Drag-and-drop and the bulk
-    operations are Phase 6.
+    consecutive slots from the one selected. Every bind writes the hash of the
+    tree shown into the chunk (Phase 5a: the "tree changed since the bind"
+    notice compares with it). Drag-and-drop and the bulk operations are Phase 6.
+
+    PHASE 5: the device list's *Identity…* arms the next leaf click to set the
+    selected device's identity leaf instead of binding; a stale slot's *Rebind*
+    binds it to where the device said the path went, or, when it said nothing,
+    selects the slot and its device's tree for the next leaf click; *Export*
+    and *Import* read and write the state chunk through a file chooser (no
+    modal of our own: the system's).
 
     THE EDITOR IS A CLIENT OF THE CORE: every change goes through
     core::Instance, and the processor is told so it renames its parameters.
@@ -75,7 +83,12 @@ namespace oqa::editor
     private:
         void timerCallback() override;
         void deviceSelected (int sessionDeviceIndex);
+        void leafClicked (const oscquery::Node& node);
         void bindSelectedSlotTo (const oscquery::Node& node, int deviceIndex);
+        void rebind (int slot);
+        void exportBindings();
+        void importBindings();
+        void tellHost();
 
         Host host;
 
@@ -88,6 +101,11 @@ namespace oqa::editor
         juce::StretchableLayoutResizerBar divider { &layout, 1, true };
 
         std::uint64_t shownRevision = 0;
+
+        //  Phase 5.
+        int identityDevice = -1;        ///< the device whose identity the next leaf click sets, or -1
+        std::unique_ptr<juce::FileChooser> chooser;
+        juce::String editorNote;        ///< the editor's own word for the warnings line (a refused import), until the next action
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (EditorRoot)
     };

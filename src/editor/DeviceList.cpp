@@ -19,6 +19,23 @@
 
 namespace oqa::editor
 {
+    namespace
+    {
+        juce::String agoText (juce::int64 ms)
+        {
+            if (ms < 0)
+                return "never seen";
+
+            if (ms < 2000)
+                return "seen just now";
+
+            if (ms < 120000)
+                return "seen " + juce::String (ms / 1000) + " s ago";
+
+            return "seen " + juce::String (ms / 60000) + " min ago";
+        }
+    }
+
     DeviceList::DeviceList (core::Instance& instanceIn)
         : instance (instanceIn)
     {
@@ -27,6 +44,42 @@ namespace oqa::editor
 
         list.setRowHeight (26);
         addAndMakeVisible (list);
+
+        pointButton.setTooltip ("Point the selected device at the next device clicked, or at the address typed below. Every instance follows.");
+        pointButton.onClick = [this]
+        {
+            pointArmed = pointArmed == selected ? -1 : selected;
+            updateButtons();
+        };
+        addAndMakeVisible (pointButton);
+
+        identityButton.setTooltip ("The next read-only leaf clicked in the tree becomes this device's identity leaf: what tells it from another of the same name.");
+        identityButton.onClick = [this]
+        {
+            const auto& chunk = instance.chunk();
+
+            if (selected < 0 || selected >= static_cast<int> (chunk.devices.size()))
+                return;
+
+            if (chunk.devices[static_cast<std::size_t> (selected)].identityPath.has_value())
+            {
+                instance.setDeviceIdentity (selected, std::nullopt, std::nullopt);
+                identityArmed = false;
+
+                if (onIdentityArm != nullptr)
+                    onIdentityArm (selected, false);
+            }
+            else
+            {
+                identityArmed = ! identityArmed;
+
+                if (onIdentityArm != nullptr)
+                    onIdentityArm (selected, identityArmed);
+            }
+
+            updateButtons();
+        };
+        addAndMakeVisible (identityButton);
 
         manualEntry.setTextToShowWhenEmpty ("host:port", juce::Colours::grey);
         manualEntry.onReturnKey = [this] { addManual(); };
@@ -37,18 +90,17 @@ namespace oqa::editor
 
         recents.load();
 
-        oscquery::Finder::Options options;
-        options.browse = true;
-        finder.start (options);
+        /*  The registry's Finder, one per process (5b): started for this
+            editor, and told every recent address so it is probed and listed. */
+        instance.finderEnsure();
 
         for (const auto& entry : recents.all())
-            finder.addManual (entry.host, entry.port);
+            instance.finderAddManual (entry.host, entry.port);
+
+        updateButtons();
     }
 
-    DeviceList::~DeviceList()
-    {
-        finder.stop();
-    }
+    DeviceList::~DeviceList() = default;
 
     void DeviceList::resized()
     {
@@ -60,7 +112,33 @@ namespace oqa::editor
         entry.removeFromRight (4);
         manualEntry.setBounds (entry);
 
+        auto buttons = area.removeFromBottom (26).reduced (0, 2);
+        pointButton.setBounds (buttons.removeFromLeft (buttons.getWidth() / 2 - 2));
+        buttons.removeFromLeft (4);
+        identityButton.setBounds (buttons);
+
         list.setBounds (area.withTrimmedBottom (4));
+    }
+
+    void DeviceList::updateButtons()
+    {
+        const auto& chunk = instance.chunk();
+        const bool haveSession = selected >= 0 && selected < static_cast<int> (chunk.devices.size());
+        const bool hasIdentity = haveSession && chunk.devices[static_cast<std::size_t> (selected)].identityPath.has_value();
+
+        pointButton.setEnabled (haveSession);
+        pointButton.setButtonText (pointArmed >= 0 && pointArmed == selected ? "Point: click a device" : "Point...");
+        pointButton.setToggleState (pointArmed >= 0 && pointArmed == selected, juce::dontSendNotification);
+
+        identityButton.setEnabled (haveSession);
+        identityButton.setButtonText (hasIdentity ? "Clear identity" : (identityArmed ? "Identity: click a leaf" : "Identity..."));
+        identityButton.setToggleState (identityArmed && ! hasIdentity, juce::dontSendNotification);
+    }
+
+    void DeviceList::identityDone()
+    {
+        identityArmed = false;
+        updateButtons();
     }
 
     void DeviceList::addManual()
@@ -77,9 +155,46 @@ namespace oqa::editor
         if (host.isEmpty() || port <= 0 || port > 65535)
             return;
 
-        finder.addManual (host.toStdString(), port);
-        finder.refresh();
         manualEntry.clear();
+
+        /*  Armed: the typed address is where the selected device now is. */
+        if (pointArmed >= 0)
+        {
+            point (pointArmed, host, port);
+            return;
+        }
+
+        instance.finderAddManual (host.toStdString(), port);
+    }
+
+    void DeviceList::point (int deviceIndex, const juce::String& host, int port)
+    {
+        const auto& chunk = instance.chunk();
+
+        if (deviceIndex < 0 || deviceIndex >= static_cast<int> (chunk.devices.size()))
+            return;
+
+        const auto& ref = chunk.devices[static_cast<std::size_t> (deviceIndex)];
+        instance.pointDevice (deviceIndex, host.toStdString(), port);
+        rememberRecent (juce::String (ref.name), host, port, ref.identityPath, ref.identityValue);
+        pointArmed = -1;
+        selected = deviceIndex;
+        updateButtons();
+
+        if (onDeviceSelected != nullptr)
+            onDeviceSelected (selected);
+    }
+
+    void DeviceList::rememberRecent (const juce::String& name, const juce::String& host, int port,
+                                     const std::optional<std::string>& identityPath, const std::optional<std::string>& identityValue)
+    {
+        oscquery::Recents::Entry entry;
+        entry.name = name.toStdString();
+        entry.host = host.toStdString();
+        entry.port = port;
+        entry.identityPath = identityPath;
+        entry.identityValue = identityValue;
+        recents.touch (entry);
     }
 
     //==============================================================================
@@ -87,7 +202,9 @@ namespace oqa::editor
     {
         rows.clear();
 
-        /*  This session's devices, with the registry's word. */
+        /*  This session's devices, with the registry's word (5b: where each
+            stands with the device at its address), and under an unresolved
+            one the candidates found under its name. */
         const auto& chunk = instance.chunk();
         const auto* devices = registryStatus.getProperty ("devices", {}).getArray();
 
@@ -99,23 +216,96 @@ namespace oqa::editor
             row.name = juce::String (ref.name);
             row.host = juce::String (ref.lastHost);
             row.port = ref.lastPort;
+            row.identity = ref.identityValue.has_value() ? juce::String (*ref.identityValue) : juce::String();
             row.deviceIndex = static_cast<int> (i);
 
+            juce::var d;
+
             if (devices != nullptr && static_cast<int> (i) < devices->size())
+                d = (*devices)[static_cast<int> (i)];
+
+            if (! d.isObject())
             {
-                const auto& d = (*devices)[static_cast<int> (i)];
-                row.reachable = static_cast<bool> (d.getProperty ("reachable", false));
-                const auto state = d.getProperty ("state", "").toString();
-                const bool treeLoaded = static_cast<bool> (d.getProperty ("tree_loaded", false));
-                row.state = state == "unreachable" ? "unreachable"
-                          : (treeLoaded ? "ready" : (row.reachable ? "reading tree" : state));
+                row.state = "unresolved";
+                rows.push_back (row);
+                continue;
+            }
+
+            row.reachable = static_cast<bool> (d.getProperty ("reachable", false));
+            const auto registryHost = d.getProperty ("host", "").toString();
+            const auto registryPort = static_cast<int> (d.getProperty ("port", 0));
+
+            if (registryHost.isNotEmpty() && registryPort > 0)
+            {
+                row.host = registryHost;
+                row.port = registryPort;
+            }
+
+            const auto resolution = d.getProperty ("resolution", "").toString();
+            const auto state = d.getProperty ("state", "").toString();
+            const bool treeLoaded = static_cast<bool> (d.getProperty ("tree_loaded", false));
+            const auto seen = static_cast<juce::int64> (d.getProperty ("last_seen_ms", -1));
+
+            if (resolution == "confirmed" || resolution == "pointed")
+            {
+                row.state = state == "unreachable" ? "unreachable, " + agoText (seen)
+                          : (treeLoaded ? (resolution == "pointed" ? "pointed, ready" : "ready")
+                                        : (row.reachable ? "reading tree" : state));
+            }
+            else if (resolution == "mismatch")
+            {
+                row.state = "answers as '" + d.getProperty ("answered_name", "").toString() + "'";
+            }
+            else if (resolution == "searching")
+            {
+                row.state = "searching, " + agoText (seen);
+            }
+            else if (resolution == "unresolved")
+            {
+                const auto* candidates = d.getProperty ("candidates", {}).getArray();
+                row.state = "unresolved: " + juce::String (candidates != nullptr ? candidates->size() : 0) + " found";
             }
             else
             {
-                row.state = "unresolved";
+                row.state = row.reachable ? "identifying" : state;
+            }
+
+            /*  A device the registry has since found or been pointed at
+                elsewhere is a recent at that address too. */
+            if ((resolution == "confirmed" || resolution == "pointed") && registryHost.isNotEmpty() && registryPort > 0)
+            {
+                const auto known = recents.find (ref.name, ref.identityValue);
+
+                if (! known.has_value() || known->host != registryHost.toStdString() || known->port != registryPort)
+                    rememberRecent (row.name, registryHost, registryPort, ref.identityPath, ref.identityValue);
             }
 
             rows.push_back (row);
+
+            if (resolution == "unresolved")
+            {
+                if (const auto* candidates = d.getProperty ("candidates", {}).getArray())
+                {
+                    for (const auto& c : *candidates)
+                    {
+                        Row candidate;
+                        candidate.source = Row::Source::candidate;
+                        candidate.name = "   " + row.name;
+                        candidate.host = c.getProperty ("host", "").toString();
+                        candidate.port = static_cast<int> (c.getProperty ("port", 0));
+                        candidate.identity = c.getProperty ("identity", "").toString();
+                        candidate.reachable = true;
+                        candidate.deviceIndex = static_cast<int> (i);
+                        const bool identityMatch = static_cast<bool> (c.getProperty ("identity_match", false));
+                        const bool hashKnown = static_cast<bool> (c.getProperty ("hash_known", false));
+                        const bool hashMatch = static_cast<bool> (c.getProperty ("hash_match", false));
+                        candidate.state = juce::String ("candidate")
+                                        + (ref.identityPath.has_value() ? (identityMatch ? ", identity matches" : ", identity differs") : juce::String())
+                                        + (hashKnown ? (hashMatch ? ", same tree" : ", other tree") : juce::String());
+                        rows.push_back (candidate);
+                    }
+                }
+            }
         }
 
         const auto alreadyListed = [this] (const juce::String& host, int port, const juce::String& name)
@@ -127,23 +317,31 @@ namespace oqa::editor
             return false;
         };
 
-        for (const auto& candidate : finder.candidates())
+        /*  The registry's Finder: found and typed, probed. */
+        if (const auto* found = registryStatus.getProperty ("found", {}).getArray())
         {
-            const auto host = juce::String (candidate.host);
-            const auto name = candidate.hostInfo.has_value() ? juce::String (candidate.hostInfo->name) : juce::String();
+            for (const auto& f : *found)
+            {
+                const auto host = f.getProperty ("host", "").toString();
+                const auto port = static_cast<int> (f.getProperty ("port", 0));
+                const bool reachable = static_cast<bool> (f.getProperty ("reachable", false));
+                const bool probed = static_cast<bool> (f.getProperty ("probed", false));
+                const bool manual = static_cast<bool> (f.getProperty ("manual", false));
+                const auto name = reachable ? f.getProperty ("name", "").toString() : juce::String();
 
-            if (alreadyListed (host, candidate.port, name))
-                continue;
+                if (alreadyListed (host, port, name))
+                    continue;
 
-            Row row;
-            row.source = candidate.manual ? Row::Source::manual : Row::Source::found;
-            row.name = name.isNotEmpty() ? name : host + ":" + juce::String (candidate.port);
-            row.host = host;
-            row.port = candidate.port;
-            row.reachable = candidate.reachable;
-            row.state = candidate.reachable ? (candidate.manual ? "typed" : "found")
-                      : (candidate.probed ? "unreachable" : "probing");
-            rows.push_back (row);
+                Row row;
+                row.source = manual ? Row::Source::manual : Row::Source::found;
+                row.name = name.isNotEmpty() ? name : host + ":" + juce::String (port);
+                row.host = host;
+                row.port = port;
+                row.reachable = reachable;
+                row.joinable = reachable;
+                row.state = reachable ? (manual ? "typed" : "found") : (probed ? "unreachable" : "probing");
+                rows.push_back (row);
+            }
         }
 
         for (const auto& entry : recents.all())
@@ -158,6 +356,7 @@ namespace oqa::editor
             row.name = juce::String (entry.name);
             row.host = host;
             row.port = entry.port;
+            row.identity = entry.identityValue.has_value() ? juce::String (*entry.identityValue) : juce::String();
             row.reachable = false;
             row.state = "recent";
             rows.push_back (row);
@@ -165,6 +364,7 @@ namespace oqa::editor
 
         list.updateContent();
         list.repaint();
+        updateButtons();
     }
 
     int DeviceList::getNumRows()
@@ -183,19 +383,25 @@ namespace oqa::editor
         if (rowIsSelected)
             g.fillAll (colours.findColour (juce::ListBox::backgroundColourId).brighter (0.2f));
 
-        const auto dot = row.source == Row::Source::session
-                           ? (row.reachable ? juce::Colours::limegreen : juce::Colours::orangered)
-                           : (row.reachable ? juce::Colours::cornflowerblue : juce::Colours::grey);
+        const bool session = row.source == Row::Source::session;
+        const auto dot = session ? (row.reachable ? juce::Colours::limegreen : juce::Colours::orangered)
+                       : row.source == Row::Source::candidate ? juce::Colours::gold
+                       : (row.reachable ? juce::Colours::cornflowerblue : juce::Colours::grey);
 
         g.setColour (dot);
         g.fillEllipse (6.0f, height / 2.0f - 4.0f, 8.0f, 8.0f);
 
-        g.setColour (colours.findColour (juce::ListBox::textColourId).withAlpha (row.reachable || row.source == Row::Source::session ? 1.0f : 0.6f));
+        const auto name = row.identity.isNotEmpty() ? row.name + "  (id " + row.identity + ")" : row.name;
+        const int stateWidth = juce::jlimit (90, 220, width / 3);
+        const int addressWidth = juce::jmax (60, (width - 20 - stateWidth) * 2 / 5);
+        const int nameWidth = juce::jmax (40, width - 20 - stateWidth - addressWidth);
+
+        g.setColour (colours.findColour (juce::ListBox::textColourId).withAlpha (row.reachable || session ? 1.0f : 0.6f));
         g.setFont (juce::FontOptions (13.0f));
-        g.drawText (row.name, 20, 0, width / 2 - 20, height, juce::Justification::centredLeft, true);
+        g.drawText (name, 20, 0, nameWidth, height, juce::Justification::centredLeft, true);
         g.setFont (juce::FontOptions (11.0f));
-        g.drawText (row.host + ":" + juce::String (row.port), width / 2, 0, width / 2 - 70, height, juce::Justification::centredLeft, true);
-        g.drawText (row.state, width - 72, 0, 68, height, juce::Justification::centredRight, true);
+        g.drawText (row.host + ":" + juce::String (row.port), 20 + nameWidth, 0, addressWidth, height, juce::Justification::centredLeft, true);
+        g.drawText (row.state, width - stateWidth - 4, 0, stateWidth, height, juce::Justification::centredRight, true);
     }
 
     void DeviceList::listBoxItemClicked (int rowNumber, const juce::MouseEvent&)
@@ -205,25 +411,50 @@ namespace oqa::editor
 
         auto row = rows[static_cast<std::size_t> (rowNumber)];
 
+        /*  A candidate beneath an unresolved device: this is where it is. */
+        if (row.source == Row::Source::candidate)
+        {
+            point (row.deviceIndex, row.host, row.port);
+            return;
+        }
+
+        /*  Armed to point: a found, typed or recent row is the new address. */
+        if (pointArmed >= 0 && row.source != Row::Source::session)
+        {
+            point (pointArmed, row.host, row.port);
+            return;
+        }
+
         if (row.source != Row::Source::session)
         {
-            /*  Joining the session: the chunk gets the device, the registry
-                starts it, and the recents remember it. A candidate not yet
-                reachable is still added: the registry will say unreachable. */
+            /*  Joining the session, once the device has said its NAME: the
+                chunk gets the device, the registry starts it, and the recents
+                remember it. A row still probing, or unreachable, waits. */
+            if (! row.joinable && row.source != Row::Source::recent)
+            {
+                list.deselectAllRows();
+                return;
+            }
+
             core::DeviceRef ref;
             ref.name = row.name.toStdString();
             ref.lastHost = row.host.toStdString();
             ref.lastPort = row.port;
-            row.deviceIndex = instance.addDevice (ref);
 
-            oscquery::Recents::Entry entry;
-            entry.name = ref.name;
-            entry.host = ref.lastHost;
-            entry.port = ref.lastPort;
-            recents.touch (entry);
+            if (row.source == Row::Source::recent)
+                if (const auto known = recents.find (ref.name, std::nullopt))
+                {
+                    ref.identityPath = known->identityPath;
+                    ref.identityValue = known->identityValue;
+                }
+
+            row.deviceIndex = instance.addDevice (ref);
+            rememberRecent (row.name, row.host, row.port, ref.identityPath, ref.identityValue);
         }
 
         selected = row.deviceIndex;
+        pointArmed = -1;
+        updateButtons();
 
         if (onDeviceSelected != nullptr)
             onDeviceSelected (selected);

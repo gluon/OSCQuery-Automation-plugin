@@ -24,13 +24,20 @@
     value once").
 
     The selected row is the slot the next leaf click binds. The state colour
-    follows the PRD's failure table as far as Phase 4 knows it: unbound grey,
-    active green, bound but without a range (inactive until min and max are
-    entered) amber, bound to a device the registry cannot reach red, receiving
-    from a device without LISTEN that has not yet been told this plugin's UDP
-    port amber with the port in the value cell. A receiving slot's value cell
-    also shows what the device last said ("rx"), beside the host's value,
-    because a lane in Read mode ignores the push and shows its own.
+    follows the PRD's failure table: unbound grey, active green, bound but
+    without a range (inactive until min and max are entered) amber, bound to a
+    device the registry cannot reach orange-red, receiving from a device
+    without LISTEN that has not yet been told this plugin's UDP port amber with
+    the port in the value cell; since Phase 5: stale (the path gone, retyped or
+    moved, from the registry's `slots`) red with the old path shown and, where
+    the device said where it went, the new one beside it, the Test button
+    reading Rebind; unauthorised (ACCESS as reported to this client excludes
+    write) amber, the value cell saying so. A receiving slot's value cell also
+    shows what the device last said ("rx"), beside the host's value, because a
+    lane in Read mode ignores the push and shows its own.
+
+    EXPORT AND IMPORT (Phase 5c) are two buttons by the title; the file is the
+    state chunk itself. The editor does the choosing and the writing.
 */
 
 #include <core/Instance.h>
@@ -59,6 +66,20 @@ namespace oqa::editor
 
         /** After the editor changed a binding: tell the host too. */
         std::function<void()> onChanged;
+
+        /** The Rebind button of a stale slot (Phase 5): the editor rebinds, or arms the slot for the next leaf. */
+        std::function<void (int slot)> onRebind;
+
+        std::function<void()> onExport;
+        std::function<void()> onImport;
+
+        /** The registry's word on a bound slot: {id, state, detail, renamed_to}, or void. */
+        juce::var slotStatus (int row) const;
+
+        /** The registry's state of a slot: "ok", "pending", "missing", "retyped", "renamed", "unauthorised", "inactive", or "". */
+        juce::String slotState (int row) const;
+
+        bool slotStale (int row) const;
 
         void resized() override;
 
@@ -90,6 +111,8 @@ namespace oqa::editor
         juce::var status;
 
         juce::Label title { {}, "Slots" };
+        juce::TextButton exportButton { "Export..." };
+        juce::TextButton importButton { "Import..." };
         juce::TableListBox table { "slots", this };
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SlotTable)

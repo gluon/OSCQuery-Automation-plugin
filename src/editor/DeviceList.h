@@ -24,12 +24,24 @@
     unreachable, not hidden").
 
     THREE SOURCES, ONE LIST. This session's devices first, with the registry's
-    state (reachable, tree loaded, unreachable); then what the Finder has:
+    word on each (Phase 5b: identifying, ready, searching, unresolved with the
+    candidates found under its name listed beneath it, answering as another
+    name, pointed); then what the registry's Finder has (Phase 5b moved it out
+    of the editor: one browser per process, read from the status's `found`):
     DNS-SD's and the typed entries, each probed with HOST_INFO before it is
     listed with its NAME; then the per-user recents. A row that is already a
     session device is shown once. Selecting a row that is not yet in the
-    session adds it (that is how a device joins the chunk), so the tree pane
-    can show it: the registry fetches the tree.
+    session adds it (that is how a device joins the chunk), once it has
+    answered HOST_INFO, so the chunk holds the device's NAME and never a
+    placeholder.
+
+    POINTING (PRD, "Reopening a session", step 2: "the user points at it once
+    ... and every instance follows"). *Point…* arms the selected session device:
+    the next click on a found, typed or recent row, or Add on the manual field,
+    points it there; a candidate row beneath an unresolved device points at
+    that candidate in one click. *Identity…* arms the tree pane: the next
+    read-only leaf clicked becomes the device's identity leaf (the editor does
+    the setting); the button clears it when one is set.
 
     MANUAL ENTRY is a host:port field and a button, because multicast often
     does not cross a show network's VLANs (PRD), and because on this very
@@ -38,7 +50,6 @@
 
 #include <core/Instance.h>
 
-#include <oscquery/Finder.h>
 #include <oscquery/Recents.h>
 
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -58,6 +69,9 @@ namespace oqa::editor
         /** Called with the chunk's device index when a device is chosen. */
         std::function<void (int deviceIndex)> onDeviceSelected;
 
+        /** The user wants the next leaf clicked to be (true) or no longer be (false) the selected device's identity. */
+        std::function<void (int deviceIndex, bool arm)> onIdentityArm;
+
         /** Re-read the three sources and repaint; called by the editor's timer. */
         void refresh (const juce::var& registryStatus);
 
@@ -66,33 +80,45 @@ namespace oqa::editor
         /** The session device index selected, or -1. */
         int selectedDevice() const noexcept { return selected; }
 
+        /** The editor set or cleared an identity: the arm is spent. */
+        void identityDone();
+
     private:
         struct Row
         {
-            enum class Source { session, found, manual, recent };
+            enum class Source { session, candidate, found, manual, recent };
             Source source = Source::session;
             juce::String name;
             juce::String host;
             int port = 0;
+            juce::String identity;     ///< the identity value, when set or read
             juce::String state;        ///< words for the row's right-hand side
             bool reachable = false;
-            int deviceIndex = -1;      ///< the chunk's, when source == session
+            bool joinable = true;      ///< a found row that has answered HOST_INFO (its NAME is known)
+            int deviceIndex = -1;      ///< the chunk's, when source == session or candidate
         };
 
         int getNumRows() override;
         void paintListBoxItem (int row, juce::Graphics& g, int width, int height, bool selected) override;
         void listBoxItemClicked (int row, const juce::MouseEvent&) override;
         void addManual();
+        void point (int deviceIndex, const juce::String& host, int port);
+        void rememberRecent (const juce::String& name, const juce::String& host, int port,
+                             const std::optional<std::string>& identityPath, const std::optional<std::string>& identityValue);
+        void updateButtons();
 
         core::Instance& instance;
-        oscquery::Finder finder;
         oscquery::Recents recents;
 
         std::vector<Row> rows;
         int selected = -1;
+        int pointArmed = -1;           ///< the session device the next click points, or -1
+        bool identityArmed = false;
 
         juce::Label title { {}, "Devices" };
         juce::ListBox list { "devices", this };
+        juce::TextButton pointButton { "Point..." };
+        juce::TextButton identityButton { "Identity..." };
         juce::TextEditor manualEntry;
         juce::TextButton addButton { "Add" };
 

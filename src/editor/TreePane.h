@@ -52,6 +52,12 @@ namespace oqa::editor
         /** True when the pane holds a tree with this hash, so a refresh can be skipped. */
         bool holds (const juce::String& treeHash) const noexcept { return shownHash == treeHash; }
 
+        /** The hash of the tree shown, empty for none: what a bind writes into the chunk (Phase 5a). */
+        juce::String currentHash() const noexcept { return shownHash; }
+
+        /** A word in the title about what the next click does ("click a read-only leaf..."); empty for none. */
+        void setPrompt (const juce::String& prompt);
+
         std::function<void (const oscquery::Node& node)> onLeafClicked;
 
         void resized() override;
@@ -60,9 +66,12 @@ namespace oqa::editor
         class Item;
 
         void rebuild();
+        void updateTitle();
 
         std::optional<oscquery::Tree> tree;
         juce::String shownHash;
+        juce::String deviceLabel;
+        juce::String prompt;
 
         juce::Label title { {}, "No device selected" };
         juce::TextEditor search;

@@ -141,7 +141,7 @@ namespace oqa::editor
         juce::ComboBox box;
     };
 
-    /** Test, or Clear. */
+    /** Test (Rebind on a stale slot), or Clear. */
     class SlotTable::ButtonCell final : public juce::Component
     {
     public:
@@ -154,7 +154,15 @@ namespace oqa::editor
         void setRow (int newRow)
         {
             row = newRow;
-            button.setEnabled (table.instance.chunk().slots[row].bound());
+            const auto& slot = table.instance.chunk().slots[row];
+            button.setEnabled (slot.bound());
+
+            if (column == Column::test)
+            {
+                stale = table.slotStale (row);
+                button.setButtonText (stale ? "Rebind" : "Test");
+                button.setTooltip (stale ? table.slotStatus (row).getProperty ("detail", "").toString() : juce::String());
+            }
         }
 
         void resized() override { button.setBounds (getLocalBounds().reduced (2)); }
@@ -164,6 +172,14 @@ namespace oqa::editor
         {
             if (column == Column::test)
             {
+                if (stale)
+                {
+                    if (table.onRebind != nullptr)
+                        table.onRebind (row);
+
+                    return;
+                }
+
                 std::string error;
                 table.instance.testSend (row, table.slotValue (row), error);
             }
@@ -173,6 +189,8 @@ namespace oqa::editor
                 table.changed();
             }
         }
+
+        bool stale = false;
 
         SlotTable& table;
         Column column;
@@ -186,6 +204,14 @@ namespace oqa::editor
     {
         title.setFont (juce::FontOptions (15.0f, juce::Font::bold));
         addAndMakeVisible (title);
+
+        exportButton.setTooltip ("Write this instance's bindings to a JSON file: the state chunk, for another instance, DAW or client.");
+        exportButton.onClick = [this] { if (onExport != nullptr) onExport(); };
+        addAndMakeVisible (exportButton);
+
+        importButton.setTooltip ("Replace this instance's bindings from a JSON file written by Export or by tools/convert-mapping.py.");
+        importButton.onClick = [this] { if (onImport != nullptr) onImport(); };
+        addAndMakeVisible (importButton);
 
         auto& header = table.getHeader();
         header.addColumn ("#", Column::index, 30, 30, 40);
@@ -210,8 +236,33 @@ namespace oqa::editor
     void SlotTable::resized()
     {
         auto area = getLocalBounds();
-        title.setBounds (area.removeFromTop (24));
+        auto top = area.removeFromTop (24);
+        importButton.setBounds (top.removeFromRight (80).reduced (0, 2));
+        top.removeFromRight (4);
+        exportButton.setBounds (top.removeFromRight (80).reduced (0, 2));
+        title.setBounds (top);
         table.setBounds (area);
+    }
+
+    juce::var SlotTable::slotStatus (int row) const
+    {
+        if (const auto* slots = status.getProperty ("slots", {}).getArray())
+            for (const auto& s : *slots)
+                if (static_cast<int> (s.getProperty ("id", -1)) == row)
+                    return s;
+
+        return {};
+    }
+
+    juce::String SlotTable::slotState (int row) const
+    {
+        return slotStatus (row).getProperty ("state", "").toString();
+    }
+
+    bool SlotTable::slotStale (int row) const
+    {
+        const auto state = slotState (row);
+        return state == "missing" || state == "retyped" || state == "renamed";
     }
 
     void SlotTable::refresh (const juce::var& registryStatus)
@@ -278,6 +329,13 @@ namespace oqa::editor
         if (! slot.active())
             return juce::Colours::orange;
 
+        /*  The registry's word against the device's tree (Phase 5a). */
+        if (slotStale (row))
+            return juce::Colours::red;
+
+        if (slotState (row) == "unauthorised")
+            return juce::Colours::orange;
+
         if (! deviceReachable (slot.deviceIndex))
             return juce::Colours::orangered;
 
@@ -301,10 +359,21 @@ namespace oqa::editor
                     return juce::String (chunk.devices[static_cast<std::size_t> (slot.deviceIndex)].name);
                 return {};
             case Column::path:
+            {
                 if (! slot.bound())
                     return {};
-                return juce::String (slot.path) + (slot.argIndex > 0 || chunk.slots.groupOf (row).size() > 1
-                                                       ? " [" + juce::String (slot.argIndex) + "]" : juce::String());
+
+                auto text = juce::String (slot.path) + (slot.argIndex > 0 || chunk.slots.groupOf (row).size() > 1
+                                                            ? " [" + juce::String (slot.argIndex) + "]" : juce::String());
+
+                /*  A moved path: the old one the lane holds, and where the device says it went. */
+                const auto movedTo = slotStatus (row).getProperty ("renamed_to", "").toString();
+
+                if (movedTo.isNotEmpty())
+                    text += "  ->  " + movedTo;
+
+                return text;
+            }
             case Column::value:
             {
                 if (! slot.bound())
@@ -317,6 +386,18 @@ namespace oqa::editor
 
                 if (! slot.active())
                     return juce::String (normalised, 3) + " (no range)";
+
+                /*  Stale or unauthorised (Phase 5a): the registry's words. */
+                const auto state = slotState (row);
+
+                if (slotStale (row))
+                    return "stale: " + slotStatus (row).getProperty ("detail", "").toString();
+
+                if (state == "unauthorised")
+                    return slotStatus (row).getProperty ("detail", "").toString();
+
+                if (state == "pending")
+                    return slotStatus (row).getProperty ("detail", "").toString();
 
                 if (waitingForPort (slot))
                     return "waiting for UDP port " + juce::String (static_cast<int> (status.getProperty ("receive_port", 0)));

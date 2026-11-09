@@ -17,6 +17,7 @@
 
 #include "EditorRoot.h"
 
+#include <core/Identity.h>
 #include <core/Instance.h>
 
 namespace oqa::editor
@@ -34,12 +35,16 @@ namespace oqa::editor
         addAndMakeVisible (divider);
 
         devices.onDeviceSelected = [this] (int index) { deviceSelected (index); };
-        tree.onLeafClicked = [this] (const oscquery::Node& node) { bindSelectedSlotTo (node, devices.selectedDevice()); };
-        slots.onChanged = [this]
+        devices.onIdentityArm = [this] (int deviceIndex, bool arm)
         {
-            if (host.bindingsChanged != nullptr)
-                host.bindingsChanged();
+            identityDevice = arm ? deviceIndex : -1;
+            tree.setPrompt (arm ? "click a read-only leaf to make it the identity" : juce::String());
         };
+        tree.onLeafClicked = [this] (const oscquery::Node& node) { leafClicked (node); };
+        slots.onChanged = [this] { tellHost(); };
+        slots.onRebind = [this] (int slot) { rebind (slot); };
+        slots.onExport = [this] { exportBindings(); };
+        slots.onImport = [this] { importBindings(); };
 
         status.setCoreNote (host.coreNote);
         status.onReceivePortChanged = [this] (int port)
@@ -94,8 +99,22 @@ namespace oqa::editor
     {
         const auto statusVar = juce::JSON::parse (juce::String (host.instance.statusJson()));
 
+        /*  The registry's warnings as they stand now (a plan rebuilt when the
+            tree lands, a device re-identified: Phase 5), not as they were at
+            the last push; the instance's own when the registry has none. */
+        std::vector<std::string> warnings;
+
+        if (const auto* live = statusVar.getProperty ("warnings", {}).getArray())
+            for (const auto& w : *live)
+                warnings.push_back (w.toString().toStdString());
+        else
+            warnings = host.instance.warnings();
+
+        if (editorNote.isNotEmpty())
+            warnings.insert (warnings.begin(), editorNote.toStdString());
+
         devices.refresh (statusVar);
-        status.refresh (statusVar, host.instance.warnings());
+        status.refresh (statusVar, warnings);
 
         if (host.instance.revision() != shownRevision)
         {
@@ -149,6 +168,36 @@ namespace oqa::editor
             host.bindingsChanged();
     }
 
+    void EditorRoot::tellHost()
+    {
+        editorNote.clear();
+
+        if (host.bindingsChanged != nullptr)
+            host.bindingsChanged();
+    }
+
+    void EditorRoot::leafClicked (const oscquery::Node& node)
+    {
+        /*  Armed for the identity (Phase 5b): a read-only leaf with a value is
+            what tells this device from another of the same name. Anything
+            else leaves the arm as it is. */
+        if (identityDevice >= 0)
+        {
+            if (node.bindableForRecord() && node.hasValue && ! node.value.empty())
+            {
+                host.instance.setDeviceIdentity (identityDevice, node.fullPath, core::identityText (node.value));
+                identityDevice = -1;
+                tree.setPrompt ({});
+                devices.identityDone();
+                tellHost();
+            }
+
+            return;
+        }
+
+        bindSelectedSlotTo (node, devices.selectedDevice());
+    }
+
     void EditorRoot::bindSelectedSlotTo (const oscquery::Node& node, int deviceIndex)
     {
         const int slot = slots.selectedSlot();
@@ -171,13 +220,102 @@ namespace oqa::editor
             return;
         }
 
-        if (host.bindingsChanged != nullptr)
-            host.bindingsChanged();
+        /*  The tree this bind was made against (Phase 5a): the notice "the
+            tree changed since the bind" compares the live tree with it. */
+        if (const auto hash = tree.currentHash(); hash.isNotEmpty())
+            host.instance.setDeviceTreeHash (deviceIndex, hash.toStdString());
+
+        tellHost();
 
         /*  Ready for the next leaf: the slot after the ones just bound. */
         const int next = slot + static_cast<int> (juce::jmax<std::size_t> (1, node.argumentCount()));
 
         if (next < host.instance.slotCount())
             slots.selectSlot (next);
+    }
+
+    /*  A stale slot's Rebind (Phase 5a; PRD: "a renamed path shows stale and
+        is rebound in one click"): where the device said the path went, the
+        slot is bound there now; where it said nothing, the slot is selected
+        and its device's tree shown, for the next leaf click. */
+    void EditorRoot::rebind (int slot)
+    {
+        const auto& chunk = host.instance.chunk();
+
+        if (slot < 0 || slot >= host.instance.slotCount() || ! chunk.slots[slot].bound())
+            return;
+
+        const auto bound = chunk.slots[slot];
+        const auto movedTo = slots.slotStatus (slot).getProperty ("renamed_to", "").toString().toStdString();
+
+        if (! movedTo.empty())
+        {
+            if (const auto json = host.instance.deviceTreeJson (bound.deviceIndex, movedTo))
+            {
+                std::string error;
+                const auto parsed = juce::JSON::parse (juce::String (*json));
+
+                if (const auto node = oscquery::Tree::parseNode (parsed, movedTo, error))
+                {
+                    std::string why;
+
+                    if (host.instance.bind (slot, *node, static_cast<std::size_t> (juce::jmax (0, bound.argIndex)), bound.deviceIndex, why))
+                    {
+                        if (const auto whole = host.instance.deviceTreeJson (bound.deviceIndex))
+                            if (const auto wholeTree = oscquery::Tree::parse (*whole, error))
+                                host.instance.setDeviceTreeHash (bound.deviceIndex, wholeTree->treeHash());
+
+                        tellHost();
+                        return;
+                    }
+                }
+            }
+        }
+
+        slots.selectSlot (slot);
+        deviceSelected (bound.deviceIndex);
+    }
+
+    void EditorRoot::exportBindings()
+    {
+        const auto suggested = juce::File::getSpecialLocation (juce::File::userDocumentsDirectory).getChildFile ("oscquery-bindings.json");
+        chooser = std::make_unique<juce::FileChooser> ("Export bindings", suggested, "*.json");
+
+        chooser->launchAsync (juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles
+                              | juce::FileBrowserComponent::warnAboutOverwriting,
+                              [this] (const juce::FileChooser& fc)
+                              {
+                                  const auto file = fc.getResult();
+
+                                  if (file == juce::File())
+                                      return;
+
+                                  file.replaceWithText (juce::String (host.instance.saveState()), false, false, "\n");
+                              });
+    }
+
+    void EditorRoot::importBindings()
+    {
+        const auto start = juce::File::getSpecialLocation (juce::File::userDocumentsDirectory);
+        chooser = std::make_unique<juce::FileChooser> ("Import bindings", start, "*.json");
+
+        chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+                              [this] (const juce::FileChooser& fc)
+                              {
+                                  const auto file = fc.getResult();
+
+                                  if (file == juce::File())
+                                      return;
+
+                                  /*  A file that is not a chunk is refused with
+                                      the reason where the warnings go; the
+                                      bindings stay as they were. */
+                                  std::string error;
+                                  const bool ok = host.instance.loadState (file.loadFileAsString().toStdString(), error);
+                                  tellHost();
+
+                                  if (! ok)
+                                      editorNote = "import refused: " + file.getFileName() + ": " + juce::String (error);
+                              });
     }
 }

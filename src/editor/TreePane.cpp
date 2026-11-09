@@ -166,10 +166,26 @@ namespace oqa::editor
     {
         tree = std::move (newTree);
         shownHash = tree.has_value() ? juce::String (tree->treeHash()) : juce::String();
-        title.setText (tree.has_value() ? deviceName + ": " + juce::String (static_cast<int> (tree->leafCount())) + " leaves"
-                                        : (deviceName.isEmpty() ? "No device selected" : deviceName + ": no tree yet"),
-                       juce::dontSendNotification);
+        deviceLabel = deviceName;
+        updateTitle();
         rebuild();
+    }
+
+    void TreePane::setPrompt (const juce::String& newPrompt)
+    {
+        prompt = newPrompt;
+        updateTitle();
+    }
+
+    void TreePane::updateTitle()
+    {
+        auto text = tree.has_value() ? deviceLabel + ": " + juce::String (static_cast<int> (tree->leafCount())) + " leaves"
+                                     : (deviceLabel.isEmpty() ? juce::String ("No device selected") : deviceLabel + ": no tree yet");
+
+        if (prompt.isNotEmpty())
+            text += "   -   " + prompt;
+
+        title.setText (text, juce::dontSendNotification);
     }
 
     void TreePane::rebuild()
