@@ -382,8 +382,10 @@ Reaper on Windows and the Mac mini, the records, the amendments.
   saying so in the status bar, where WFS-DIY's plugins go silent; the shared library is built with
   hidden visibility and exports the C ABI only, so two copies of JUCE in one process do not meet;
   one value per slot per block, because JUCE's `AudioProcessor` delivers no sample-accurate
-  parameter events (the CLAP shim will, Phase 5b); the device key in Phase 3 is `NAME` plus last
-  host:port, re-identification being Phase 5's.
+  parameter events (the CLAP shim will, Phase 5b); the device key is `NAME` plus the identity
+  leaf's value, resolved to one host:port (corrected 2026-11-09 while planning Phase 5: this
+  sentence read "`NAME` plus last host:port"; `Registry.cpp` has keyed by name and identity since
+  3c), re-identification being Phase 5's.
 
 **Record, 2026-11-08 (built; the DAW rows of the done-when open).** Built in eight commits on
 `main`, 3a to 3e: `src/core` (`oqa::core`), the shared core library `OSCQuery-Automation-Core` and
@@ -596,6 +598,68 @@ mock devices.
 (L2); a read-only leaf carrying something unique per installation, if WFS-DIY has one to
 publish, so it can serve as an identity leaf (optional, not a profile requirement). Per-client `ACCESS` (C6) if WFS-DIY's
 client table is to be reflected; otherwise it stays a documented gap in its matrix row.
+
+**Planned, 2026-11-09.** Broken into five subphases, each one commit on `main` with its tests, as
+Phase 4 was: **5a** verification in the registry (every bound path checked against the tree for
+existence and `TYPE` when a plan is built: `pending`, `ok`, `missing`, `retyped`, `renamed` with
+where it went, `unauthorised`; stale slots in no group, their lanes untouched; `PATH_REMOVED` and
+`PATH_RENAMED` wired to the rebuild, the renames remembered; the chunk's `tree_hash` against the
+live tree, one warning line; `last_seen`; the mock's per-client `ACCESS`); **5b** re-identification
+(HOST_INFO `NAME` and the identity leaf compared before anything is sent or LISTENed; a resolver
+thread; the library's Finder moved into the registry, one browser per process; candidates by
+`NAME`, told apart by identity leaf then `tree_hash`, one adopted, several or none left
+`unresolved` with the candidates in the status; pointing through the Instance, every instance
+following, the address written into each chunk on its next save; two additive ABI entries for the
+editor's device list); **5c** export and import (the chunk itself is the file), the ToscA/OSCar
+converter in `tools/`, and one test per row of the PRD's failure-states table; **5d** the editor
+(found devices from the status, the session rows with identity, resolution and last seen, *Point*
+and *Identity* on a device row, stale slots red with the old path and a one-click *Rebind*,
+unauthorised amber, Export and Import); **5e** the bench against WFS-DIY and go.dot across this
+machine and the Mac mini, the records, the amendments.
+
+- *Decided by the author the same day:* **the Finder lives in the registry**, one browser per
+  process, editors reading the found devices from the status; **a device pointed at by hand is used
+  whatever `NAME` answers**, with a warning line, the chunk's name kept; **the export file is the
+  state chunk itself**, no envelope and no second schema; **the converter's fixtures are written
+  from the ToscA user manual and the OSCar forum examples**, swapped for real files when one turns
+  up. Pointing in Phase 5 is any instance's device pane; the Monitor's list is Phase 6.
+- *Facts found while planning:* the device key has been `NAME` plus the identity leaf's value since
+  3c (the Phase 3 record said last host:port; corrected in place), but **nothing compares
+  HOST_INFO's `NAME` with the chunk's**, so a wrong device at the last address is driven as the
+  right one; **`tree_hash` is never filled** (the editor builds its `DeviceRef` from name, host and
+  port), so every chunk saved so far holds `""`; a device still being probed **joins the session
+  named `host:port`**; `applyBindings` never checks a bound path against the tree (a missing node
+  gives empty tags and default values); `onPathRemoved`, `onPathRenamed` and `onError` are the
+  three callbacks not wired, the library already patching its tree and dropping the subscriptions
+  under a removed or renamed path; `setDeviceAddress` and its ABI entry exist with one test and no
+  caller in the plugin, and `entryFor` ignores a later chunk's different address; one Finder per
+  open editor today; `Device::readValue` reads one leaf over HTTP before the tree is loaded (what
+  an identity read needs); the mock renames, removes, retypes and adds with the notifications,
+  restarts on a fresh port keeping its tree, runs two at once, but has no per-client `ACCESS` and
+  does not announce over DNS-SD (`FinderTests.cpp` has a loopback responder to move into
+  `tests/support/`); `generic-device.json`'s `/system/serial` is the identity leaf the fixture was
+  written for. The chunk needs no new field: `tree_hash`, `identity_path` and `identity_value`
+  have been there since 3b; stale is derived, not stored. ToscA's mapping is XML, `<tosca prefix>`
+  over `<parameter index name min max scaling>`, the address `prefix` plus `name`; OSCar's is
+  `<oscar>` over `<parameter pattern min max default>` with `$1` in the pattern (user manual 4 and
+  the IRCAM forum; no formal schema published).
+- *Implementer's decisions, the author's to overrule:* stale is never written into the chunk, so a
+  device repaired later un-stales the slot by itself; a stale slot joins no group (nothing sent,
+  nothing LISTENed) and keeps its lane and its name in the host; an `unauthorised` slot still
+  receives when its direction says so (the PRD's "bindable for record but not for send"); until a
+  device is confirmed nothing is sent or LISTENed to it, and a `NAME` mismatch stops that Device
+  and starts the search; the resolver is one normal-priority thread per registry that snapshots
+  under the registry lock, does its HTTP outside it and re-takes the lock to apply, stopped first
+  in `shutdown()`; the Finder starts on the first device needing a search or the first editor
+  asking, and never stops before shutdown; candidates by `NAME` exclude the address that just
+  failed, and a candidate's identity leaf or tree is read through a temporary `Device` with a
+  3 s timeout; `tree_hash` is written at every bind and rebind from the tree the editor shows, so
+  the notice clears once the user has acted; the mock's allow-list is by remote address and the C6
+  test flips it within one process, loopback giving both clients one address; the converter writes
+  a version-1 chunk with direction `both` and `host_param_id` = index − 1, and the imported paths
+  then meet 5a's check, a path the device does not serve showing stale; the two ABI entries
+  (`finderEnsure`, `finderAddManual`) are additive, version unchanged, an older library refused by
+  the loader's size check as in Phase 4.
 
 ---
 
