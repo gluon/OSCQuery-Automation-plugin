@@ -169,6 +169,12 @@ namespace oqa::core
             only for instances that posted recently anyway. */
         void setInstanceActive (InstanceRecord* instance, bool active);
 
+        //==============================================================================
+        //  Commands (6b-3): writes to the plugin's own server, queued for the
+        //  instance they name, drained on the shim's main thread.
+        void setCommandWake (InstanceRecord* instance, void (*wake) (void* context), void* context);
+        std::string pollCommandsJson (InstanceRecord* instance);
+
         /*  The instance's bindings, from its chunk: devices are resolved (and
             started) and a plan built. False with the reason when the chunk
             names what cannot be bound at all; slots that cannot go are left

@@ -40,7 +40,8 @@ add_executable(oqa_core_tests
     SettingsTests.cpp
     StatusTests.cpp
     TimingTests.cpp
-    ServerTests.cpp)
+    ServerTests.cpp
+    CommandTests.cpp)
 
 target_include_directories(oqa_core_tests PRIVATE "${CMAKE_SOURCE_DIR}/tests")
 target_include_directories(oqa_core_tests SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/ThirdParty/doctest")

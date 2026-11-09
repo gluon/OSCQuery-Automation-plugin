@@ -176,7 +176,12 @@ namespace oqa::core::server
             shownValues.clear();
         }
 
-        oscquery::server::OscQueryServer::Callbacks callbacks;     // writes: 6b-3
+        oscquery::server::OscQueryServer::Callbacks callbacks;
+        callbacks.onWrite = [this] (const std::string& client, const std::string& path, const oscquery::osc::Values& values)
+        {
+            if (hooks.write)
+                hooks.write (client, path, values);
+        };
 
         if (! server.start (std::move (options), std::move (callbacks), error))
         {
@@ -360,6 +365,7 @@ namespace oqa::core::server
     juce::var PluginServer::buildVar (const juce::var& status, const std::map<std::pair<std::uint32_t, int>, float>& values) const
     {
         constexpr int readOnly = 1;
+        constexpr int writable = 3;
 
         auto root = container ("/");
         auto plugins = container (ns::pluginRoot);
@@ -379,7 +385,7 @@ namespace oqa::core::server
                 const auto pluginPath = ns::pluginPath (id);
                 auto plugin = container (pluginPath);
                 add (plugin, ns::label, leaf (ns::join (pluginPath, ns::label), "s", readOnly, i.getProperty ("label", "")));
-                add (plugin, ns::instance, leaf (ns::join (pluginPath, ns::instance), "i", readOnly, static_cast<int> (i.getProperty ("instance", 1)), rangeMinMax (1, 9999)));
+                add (plugin, ns::instance, leaf (ns::join (pluginPath, ns::instance), "i", writable, static_cast<int> (i.getProperty ("instance", 1)), rangeMinMax (1, 9999), "what $instance stands for in this instance's paths"));
                 add (plugin, ns::active, leaf (ns::join (pluginPath, ns::active), "i", readOnly, static_cast<bool> (i.getProperty ("active", true)) ? 1 : 0, rangeMinMax (0, 1)));
 
                 auto slots = container (ns::join (pluginPath, ns::slot));
@@ -398,27 +404,28 @@ namespace oqa::core::server
 
                     if (found == bound.end())
                     {
-                        add (slot, ns::path, leaf (ns::join (slotPath, ns::path), "s", readOnly, "", {}, "the bound OSC path; empty while unbound"));
+                        add (slot, ns::path, leaf (ns::join (slotPath, ns::path), "s", writable, "", {}, "the OSC path to bind; a second string names the device"));
+                        add (slot, ns::device, leaf (ns::join (slotPath, ns::device), "s", writable, "", {}, "the device's NAME for the next path written"));
                         add (slot, ns::state, leaf (ns::join (slotPath, ns::state), "s", readOnly, "unbound"));
                     }
                     else
                     {
                         const auto& s = found->second;
-                        add (slot, ns::path, leaf (ns::join (slotPath, ns::path), "s", readOnly, s.getProperty ("path", ""), {}, "the bound OSC path; empty while unbound"));
-                        add (slot, ns::device, leaf (ns::join (slotPath, ns::device), "s", readOnly, s.getProperty ("device", ""), {}, "the device's NAME"));
+                        add (slot, ns::path, leaf (ns::join (slotPath, ns::path), "s", writable, s.getProperty ("path", ""), {}, "the bound OSC path; empty unbinds; a second string names the device"));
+                        add (slot, ns::device, leaf (ns::join (slotPath, ns::device), "s", writable, s.getProperty ("device", ""), {}, "the device's NAME"));
                         add (slot, ns::state, leaf (ns::join (slotPath, ns::state), "s", readOnly, s.getProperty ("state", "pending")));
                         add (slot, ns::argIndex, leaf (ns::join (slotPath, ns::argIndex), "i", readOnly, static_cast<int> (s.getProperty ("arg_index", 0)), rangeMinMax (0, 3)));
                         add (slot, ns::type, leaf (ns::join (slotPath, ns::type), "s", readOnly, s.getProperty ("type", "f"), rangeVals ({ "f", "i", "T", "F" })));
 
                         auto range = container (ns::join (slotPath, ns::range));
                         const auto rangePath = ns::join (slotPath, ns::range);
-                        add (range, ns::min, leaf (ns::join (rangePath, ns::min), "f", readOnly, static_cast<double> (s.getProperty ("range_min", 0.0)), rangeMinMax (-deviceUnitsBound, deviceUnitsBound), "device units"));
-                        add (range, ns::max, leaf (ns::join (rangePath, ns::max), "f", readOnly, static_cast<double> (s.getProperty ("range_max", 1.0)), rangeMinMax (-deviceUnitsBound, deviceUnitsBound), "device units"));
+                        add (range, ns::min, leaf (ns::join (rangePath, ns::min), "f", writable, static_cast<double> (s.getProperty ("range_min", 0.0)), rangeMinMax (-deviceUnitsBound, deviceUnitsBound), "device units"));
+                        add (range, ns::max, leaf (ns::join (rangePath, ns::max), "f", writable, static_cast<double> (s.getProperty ("range_max", 1.0)), rangeMinMax (-deviceUnitsBound, deviceUnitsBound), "device units"));
                         add (slot, ns::range, range);
 
-                        add (slot, ns::scaling, leaf (ns::join (slotPath, ns::scaling), "s", readOnly, s.getProperty ("scaling", "linear"), rangeVals ({ "linear", "log", "exp" })));
-                        add (slot, ns::direction, leaf (ns::join (slotPath, ns::direction), "s", readOnly, s.getProperty ("direction", "send"), rangeVals ({ "send", "receive", "both" })));
-                        add (slot, ns::displayName, leaf (ns::join (slotPath, ns::displayName), "s", readOnly, s.getProperty ("display_name", "")));
+                        add (slot, ns::scaling, leaf (ns::join (slotPath, ns::scaling), "s", writable, s.getProperty ("scaling", "linear"), rangeVals ({ "linear", "log", "exp" })));
+                        add (slot, ns::direction, leaf (ns::join (slotPath, ns::direction), "s", writable, s.getProperty ("direction", "send"), rangeVals ({ "send", "receive", "both" })));
+                        add (slot, ns::displayName, leaf (ns::join (slotPath, ns::displayName), "s", writable, s.getProperty ("display_name", "")));
 
                         const auto v = values.find ({ id, n });
                         add (slot, ns::value, leaf (ns::join (slotPath, ns::value), "f", readOnly, static_cast<double> (v != values.end() ? v->second : 0.0f), rangeMinMax (0, 1), "the host's value, normalised"));

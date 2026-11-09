@@ -121,6 +121,17 @@ namespace oqa::shim
         void handleAsyncUpdate() override;
         void closeGestures();
         void refreshSettings();
+        void applyCommands();
+
+        /*  Commands from the plugin's own server (Phase 6b-3): the registry
+            wakes, this marshals to the message thread, where the core applies
+            them and the host is told the bindings changed. */
+        struct CommandUpdater final : public juce::AsyncUpdater
+        {
+            explicit CommandUpdater (PluginProcessor& p) : owner (p) {}
+            void handleAsyncUpdate() override { owner.applyCommands(); }
+            PluginProcessor& owner;
+        };
 
         const core::LoadedCore& loaded;
         core::Instance core;
@@ -132,6 +143,8 @@ namespace oqa::shim
         core::GestureTracker gestures { slotCount };
         double gestureTimeoutMs = 200.0;
         int ticksSinceSlowWork = 0;
+
+        CommandUpdater commands { *this };
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PluginProcessor)
     };

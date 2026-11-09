@@ -19,6 +19,9 @@
 #include <core/registry/Registry.h>
 #include <core/registry/SettingsFile.h>
 #include <core/server/PluginServer.h>
+#include <core/server/ServerNamespace.h>
+
+#include <deque>
 
 #include <core/Identity.h>
 #include <core/registry/ChangeRing.h>
@@ -373,6 +376,20 @@ namespace oqa::core
 
         /** Each slot's last posted host value, for the server's `value` leaves (6b-2). Written by post(). */
         std::unique_ptr<std::atomic<float>[]> lastValues;
+
+        /*  Commands from the server (6b-3), under the registry's lock, drained
+            by the shim's main thread through pollCommandsJson; the wake only
+            signals. */
+        struct Command
+        {
+            int slot = -1;
+            std::string kind, text, text2;
+            double number = 0.0;
+        };
+
+        std::deque<Command> commands;
+        void (*commandWake) (void* context) = nullptr;
+        void* commandWakeContext = nullptr;
 
         std::atomic<const InstancePlan*> plan { nullptr };
         std::vector<std::unique_ptr<InstancePlan>> plans;       // every plan ever, the live one last
@@ -2380,6 +2397,85 @@ namespace oqa::core
             return out;
         }
 
+        /*  A WRITE TO THE PLUGIN'S OWN SERVER (6b-3), on the server's thread:
+            the path names an instance and a slot (ServerNamespace.h); the
+            leaf and the arguments make a command, queued for the instance and
+            its wake signalled under the lock, as deliver() does for values. A
+            path the namespace does not know is dropped: the server only passes
+            writes to leaves it serves as writable. */
+        void onServerWrite (const std::string& path, const oscquery::osc::Values& values)
+        {
+            juce::StringArray segments;
+            segments.addTokens (juce::String (path), "/", "");
+            segments.removeEmptyStrings();
+
+            if (segments.size() < 3 || segments[0] != juce::String (server::ns::pluginRoot + 1))
+                return;
+
+            const auto id = static_cast<std::uint32_t> (segments[1].getLargeIntValue());
+            InstanceRecord::Command command;
+
+            const auto textAt = [&] (int i) -> std::string
+            {
+                return i < static_cast<int> (values.size()) && values[static_cast<std::size_t> (i)].isString()
+                           ? values[static_cast<std::size_t> (i)].getString() : std::string();
+            };
+            const auto numberAt = [&] (int i) -> double
+            {
+                if (i >= static_cast<int> (values.size()))
+                    return 0.0;
+
+                const auto& v = values[static_cast<std::size_t> (i)];
+                return v.isFloat32() ? v.getFloat32() : v.isFloat64() ? v.getFloat64()
+                     : v.isInt32() ? v.getInt32() : v.isInt64() ? static_cast<double> (v.getInt64()) : 0.0;
+            };
+
+            if (segments.size() == 3 && segments[2] == juce::String (server::ns::instance))
+            {
+                command.kind = "instance";
+                command.number = numberAt (0);
+            }
+            else if (segments.size() >= 5 && segments[2] == juce::String (server::ns::slot))
+            {
+                command.slot = segments[3].getIntValue();
+                const auto leaf = segments[4];
+
+                if (leaf == juce::String (server::ns::path))
+                {
+                    command.text = textAt (0);
+                    command.text2 = textAt (1);
+                    command.kind = command.text.empty() ? "unbind" : "bind";
+                }
+                else if (leaf == juce::String (server::ns::device))        { command.kind = "device"; command.text = textAt (0); }
+                else if (leaf == juce::String (server::ns::displayName))   { command.kind = "display_name"; command.text = textAt (0); }
+                else if (leaf == juce::String (server::ns::scaling))       { command.kind = "scaling"; command.text = textAt (0); }
+                else if (leaf == juce::String (server::ns::direction))     { command.kind = "direction"; command.text = textAt (0); }
+                else if (segments.size() >= 6 && leaf == juce::String (server::ns::range))
+                {
+                    command.kind = segments[5] == juce::String (server::ns::min) ? "range_min" : "range_max";
+                    command.number = numberAt (0);
+                }
+                else
+                    return;
+            }
+            else
+                return;
+
+            const std::lock_guard<std::mutex> guard (lock);
+            const auto found = instances.find (id);
+
+            if (found == instances.end())
+                return;
+
+            auto* instance = found->second.get();
+
+            if (instance->commands.size() < 256)
+                instance->commands.push_back (std::move (command));
+
+            if (instance->commandWake != nullptr)
+                instance->commandWake (instance->commandWakeContext);
+        }
+
         /*  Received values to their instances' rings, one wake per instance
             touched. On a Device thread (or the UDP receiver's), under the
             registry's lock, so the instance and its wake are alive for the
@@ -2451,6 +2547,10 @@ namespace oqa::core
         {
             if (impl->resolver != nullptr)
                 impl->resolver->setAnnounce ({}, 0, 0);
+        };
+        hooks.write = [this] (const std::string&, const std::string& path, const oscquery::osc::Values& values)
+        {
+            impl->onServerWrite (path, values);
         };
         impl->server = std::make_unique<server::PluginServer> (std::move (hooks));
 
@@ -2563,6 +2663,41 @@ namespace oqa::core
         impl->instances.emplace (out->id, std::move (record));
         impl->serverChanged();
         return out;
+    }
+
+    void Registry::setCommandWake (InstanceRecord* instance, void (*wake) (void* context), void* context)
+    {
+        if (instance == nullptr)
+            return;
+
+        const std::lock_guard<std::mutex> guard (impl->lock);
+        instance->commandWake = wake;
+        instance->commandWakeContext = context;
+    }
+
+    std::string Registry::pollCommandsJson (InstanceRecord* instance)
+    {
+        juce::Array<juce::var> list;
+
+        if (instance != nullptr)
+        {
+            const std::lock_guard<std::mutex> guard (impl->lock);
+
+            while (! instance->commands.empty())
+            {
+                const auto& c = instance->commands.front();
+                auto* o = new juce::DynamicObject();
+                o->setProperty ("slot", c.slot);
+                o->setProperty ("kind", juce::String (c.kind));
+                o->setProperty ("text", juce::String (c.text));
+                o->setProperty ("text2", juce::String (c.text2));
+                o->setProperty ("number", c.number);
+                list.add (juce::var (o));
+                instance->commands.pop_front();
+            }
+        }
+
+        return juce::JSON::toString (juce::var (list), false).toStdString();
     }
 
     void Registry::setInstanceActive (InstanceRecord* instance, bool active)
@@ -3069,6 +3204,7 @@ namespace oqa::core
                     i->setProperty ("label", juce::String (record->label));
                     i->setProperty ("slot_count", record->slotCount);
                     i->setProperty ("active", record->active.load (std::memory_order_relaxed));
+                    i->setProperty ("instance", record->lastChunk != nullptr ? record->lastChunk->instanceNumber : 1);
 
                     juce::Array<juce::var> slots;
 

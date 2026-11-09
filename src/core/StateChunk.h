@@ -106,6 +106,11 @@ namespace oqa::core
         /** Every slot's host value, 0-1, in slot order; empty when the chunk carried none. */
         std::vector<float> values;
 
+        /*  The number `$instance` stands for in this instance's paths (PRD,
+            Binding model; decided 2026-11-09: user-set, default 1). Written
+            only when it is not 1, so every chunk saved before keeps its bytes. */
+        int instanceNumber = 1;
+
         /** Top-level fields this version does not read. */
         juce::NamedValueSet extras;
 

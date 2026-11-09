@@ -37,8 +37,13 @@
     land (6b-3); a bound slot has the rest of its leaves. The host's current
     values are pulled twenty times a second and streamed to whoever LISTENs.
 
-    Read-only in 6b-2: every leaf ACCESS 1. 6b-3 opens the writable ones and
-    maps writes to commands for the instance.
+    WRITES (6b-3): a slot's path (one string, with the device's NAME as an
+    optional second string), device, range/min, range/max, scaling, direction,
+    display_name and an instance's number are ACCESS 3; a write from a client
+    the allow-list admits goes to Hooks::write, which the registry turns into
+    a command for the instance (Registry::Impl::onServerWrite). The result is
+    asynchronous by design: the shim applies it on its main thread, the next
+    plan says what it made of it, and the tree follows.
 */
 
 #include <core/registry/Registry.h>
@@ -80,6 +85,9 @@ namespace oqa::core::server
             /** Announce over DNS-SD under `name`, and stop announcing. */
             std::function<void (const std::string& name, int httpPort, int oscPort)> announce;
             std::function<void()> unannounce;
+
+            /** A write from an admitted client to a writable leaf (6b-3). Server thread. */
+            std::function<void (const std::string& client, const std::string& path, const oscquery::osc::Values& values)> write;
         };
 
         explicit PluginServer (Hooks hooks);

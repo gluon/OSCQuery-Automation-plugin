@@ -17,6 +17,10 @@
 
 #include <core/Instance.h>
 
+#include <oscquery/tree/Tree.h>
+
+#include <cmath>
+
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -64,6 +68,7 @@ namespace oqa::core
         {
             handle = api->instanceRegister (label.c_str(), count);
             registerWake();
+            registerCommandWake();
         }
 
         push();
@@ -75,6 +80,263 @@ namespace oqa::core
             api->instanceUnregister (handle);
 
         handle = nullptr;
+    }
+
+    //==============================================================================
+    bool Instance::canCommand() const noexcept
+    {
+        return tableHas (api, &OqaCoreApi::instanceSetCommandWake) && tableHas (api, &OqaCoreApi::instancePollCommandsJson);
+    }
+
+    void Instance::commandWakeTrampoline (void* context)
+    {
+        auto* self = static_cast<Instance*> (context);
+
+        if (self != nullptr && self->commandWake)
+            self->commandWake();
+    }
+
+    void Instance::registerCommandWake()
+    {
+        if (handle != nullptr && canCommand())
+            api->instanceSetCommandWake (handle, commandWake ? &Instance::commandWakeTrampoline : nullptr, this);
+    }
+
+    void Instance::setCommandWake (std::function<void()> wake)
+    {
+        commandWake = std::move (wake);
+        registerCommandWake();
+    }
+
+    int Instance::pollCommands()
+    {
+        if (handle == nullptr || ! canCommand())
+            return 0;
+
+        char* text = api->instancePollCommandsJson (handle);
+
+        if (text == nullptr)
+            return 0;
+
+        const auto list = juce::JSON::parse (juce::String (takeError (text)));
+        int applied = 0;
+
+        if (const auto* commands = list.getArray())
+        {
+            for (const auto& command : *commands)
+            {
+                std::string why;
+
+                if (applyCommand (command, why))
+                    ++applied;
+                else
+                    lastWarnings.push_back ("server write refused: " + why);
+            }
+        }
+
+        return applied;
+    }
+
+    bool Instance::applyCommand (const juce::var& command, std::string& why)
+    {
+        const auto kind = command.getProperty ("kind", "").toString().toStdString();
+        const auto slot = static_cast<int> (command.getProperty ("slot", -1));
+        const auto text = command.getProperty ("text", "").toString().toStdString();
+        const auto text2 = command.getProperty ("text2", "").toString().toStdString();
+        const auto number = static_cast<double> (command.getProperty ("number", 0.0));
+
+        if (kind == "instance")
+        {
+            setInstanceNumber (static_cast<int> (std::lround (number)));
+            return true;
+        }
+
+        if (slot < 0 || slot >= count)
+        {
+            why = "slot " + std::to_string (slot) + " is not one of " + std::to_string (count);
+            return false;
+        }
+
+        auto& current = state.slots[slot];
+
+        if (kind == "unbind")
+        {
+            unbind (slot);
+            pendingDevice.erase (slot);
+            return true;
+        }
+
+        if (kind == "bind")
+        {
+            int device = -1;
+            std::string deviceName = text2;
+
+            if (deviceName.empty())
+            {
+                if (const auto pending = pendingDevice.find (slot); pending != pendingDevice.end())
+                    deviceName = pending->second;
+            }
+
+            if (! deviceName.empty())
+                device = deviceIndexFor (deviceName);
+            else if (current.bound())
+                device = current.deviceIndex;
+            else if (! state.devices.empty())
+                device = 0;
+
+            if (device < 0)
+            {
+                why = deviceName.empty() ? std::string ("slot ") + std::to_string (slot) + ": no device to bind on; name one"
+                                         : "device "" + deviceName + "" is known to nobody here";
+                return false;
+            }
+
+            if (! bindPath (slot, device, text, 0, why))
+                return false;
+
+            pendingDevice.erase (slot);
+            return true;
+        }
+
+        if (kind == "device")
+        {
+            if (! current.bound())
+            {
+                pendingDevice[slot] = text;
+                return true;
+            }
+
+            const auto device = deviceIndexFor (text);
+
+            if (device < 0)
+            {
+                why = "device "" + text + "" is known to nobody here";
+                return false;
+            }
+
+            return bindPath (slot, device, current.path, static_cast<std::size_t> (std::max (0, current.argIndex)), why);
+        }
+
+        if (! current.bound())
+        {
+            why = "slot " + std::to_string (slot) + " is unbound; bind it first";
+            return false;
+        }
+
+        if (kind == "display_name")   { setDisplayName (slot, text); return true; }
+
+        if (kind == "scaling")
+        {
+            if (const auto scaling = scalingFromName (text)) { setScaling (slot, *scaling); return true; }
+            why = "scaling "" + text + "": linear, log or exp";
+            return false;
+        }
+
+        if (kind == "direction")
+        {
+            if (const auto direction = directionFromName (text)) { setDirection (slot, *direction); return true; }
+            why = "direction "" + text + "": send, receive or both";
+            return false;
+        }
+
+        if (kind == "range_min" || kind == "range_max")
+        {
+            if (! std::isfinite (number))
+            {
+                why = "range: not a number";
+                return false;
+            }
+
+            const auto min = current.rangeMin.value_or (number);
+            const auto max = current.rangeMax.value_or (number);
+            setRange (slot, kind == "range_min" ? number : min, kind == "range_max" ? number : max);
+            return true;
+        }
+
+        why = "no such command "" + kind + """;
+        return false;
+    }
+
+    bool Instance::bindPath (int slot, int deviceIndex, const std::string& path, std::size_t argument, std::string& why)
+    {
+        if (deviceIndex < 0 || deviceIndex >= static_cast<int> (state.devices.size()))
+        {
+            why = "no such device";
+            return false;
+        }
+
+        const auto json = deviceTreeJson (deviceIndex, path);
+
+        if (! json.has_value())
+        {
+            why = "the device "" + state.devices[static_cast<std::size_t> (deviceIndex)].name + "" has not served " + path + " (not reached, or no such path)";
+            return false;
+        }
+
+        std::string error;
+        const auto node = oscquery::Tree::parseNode (juce::JSON::parse (juce::String (*json)), path, error);
+
+        if (! node.has_value())
+        {
+            why = path + ": " + error;
+            return false;
+        }
+
+        const bool ok = node->argumentCount() > 1 ? bindAll (slot, *node, deviceIndex, why)
+                                                  : bind (slot, *node, argument, deviceIndex, why);
+
+        if (! ok)
+            return false;
+
+        if (const auto whole = deviceTreeJson (deviceIndex))
+            if (const auto tree = oscquery::Tree::parse (*whole, error))
+                setDeviceTreeHash (deviceIndex, tree->treeHash());
+
+        return true;
+    }
+
+    int Instance::deviceIndexFor (const std::string& name)
+    {
+        for (std::size_t i = 0; i < state.devices.size(); ++i)
+            if (state.devices[i].name == name)
+                return static_cast<int> (i);
+
+        /*  Not in the chunk: the registry's devices (another instance's) or
+            the Finder's list name an address for it. */
+        const auto status = juce::JSON::parse (juce::String (processStatusJson()));
+
+        for (const char* list : { "devices", "found" })
+        {
+            if (const auto* entries = status.getProperty (list, {}).getArray())
+            {
+                for (const auto& d : *entries)
+                {
+                    if (d.getProperty ("name", "").toString().toStdString() != name)
+                        continue;
+
+                    DeviceRef ref;
+                    ref.name = name;
+                    ref.lastHost = d.getProperty ("host", "").toString().toStdString();
+                    ref.lastPort = static_cast<int> (d.getProperty ("port", 0));
+
+                    if (ref.lastHost.empty() || ref.lastPort <= 0)
+                        continue;
+
+                    if (const auto identity = d.getProperty ("identity_value", {}); identity.isString() && identity.toString().isNotEmpty())
+                        ref.identityValue = identity.toString().toStdString();
+
+                    return addDevice (ref);
+                }
+            }
+        }
+
+        return -1;
+    }
+
+    void Instance::setInstanceNumber (int number)
+    {
+        state.instanceNumber = std::clamp (number, 1, 9999);
+        push();
     }
 
     void Instance::setActive (bool active)

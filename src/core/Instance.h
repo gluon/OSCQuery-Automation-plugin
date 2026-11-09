@@ -52,6 +52,7 @@
 #include <atomic>
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -204,6 +205,31 @@ namespace oqa::core
         /** The registry's view of everything (every device, every instance, the settings, the Finder): the Monitor's. */
         std::string processStatusJson() const;
 
+        //==============================================================================
+        //  Commands (Phase 6b-3): writes to the plugin's own OSCQuery server,
+        //  queued in the registry for this instance; `wake` is called on a
+        //  registry thread and must only signal; pollCommands, on the main
+        //  thread, applies them (bind, unbind, device, range, scaling,
+        //  direction, display name, the instance number) and says how many,
+        //  what could not be done going to warnings().
+
+        void setCommandWake (std::function<void()> wake);
+        int pollCommands();
+        bool canCommand() const noexcept;
+
+        /*  Bind a slot to a path by name, the node read from the device's tree
+            as the registry serves it (the editor's rebind and the server's
+            writes share this). A node with several arguments takes consecutive
+            slots. False with the reason. */
+        bool bindPath (int slot, int deviceIndex, const std::string& path, std::size_t argument, std::string& why);
+
+        /** The chunk's device with this NAME, added from the registry's known or found devices when it is not yet there; -1 when nobody knows it. */
+        int deviceIndexFor (const std::string& name);
+
+        /** The number $instance stands for in this instance's paths (the chunk's `instance`). */
+        int instanceNumber() const noexcept { return state.instanceNumber; }
+        void setInstanceNumber (int number);
+
         /** The registry's process-wide settings as JSON (direct_send, receive_port, gesture_timeout_ms...). */
         std::string settingsJson() const;
 
@@ -216,8 +242,11 @@ namespace oqa::core
     private:
         void push();
         void registerWake();
+        void registerCommandWake();
         std::string takeError (char* text) const;
         static void wakeTrampoline (void* context);
+        static void commandWakeTrampoline (void* context);
+        bool applyCommand (const juce::var& command, std::string& why);
 
         const OqaCoreApi* api;
         int count;
@@ -235,5 +264,9 @@ namespace oqa::core
         //  Record: written on the message thread, read by the audio thread and the editor.
         std::function<void()> receiveWake;
         std::unique_ptr<std::atomic<float>[]> received;
+
+        //  Commands (6b-3).
+        std::function<void()> commandWake;
+        std::map<int, std::string> pendingDevice;      ///< a device NAME written to an unbound slot, for its next path
     };
 }

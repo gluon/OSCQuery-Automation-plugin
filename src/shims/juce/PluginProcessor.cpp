@@ -58,6 +58,7 @@ namespace oqa::shim
         /*  Record: the registry wakes us once per message a device streams;
             the values are pushed to the host on the message thread. */
         core.setReceiveWake ([this] { triggerAsyncUpdate(); });
+        core.setCommandWake ([this] { commands.triggerAsyncUpdate(); });
 
         /*  Registered for the plugin's life (Phase 6): the plugin's own server
             and the Monitor keep this instance's row whether or not the host
@@ -75,6 +76,7 @@ namespace oqa::shim
     {
         stopTimer();
         cancelPendingUpdate();
+        commands.cancelPendingUpdate();
         closeGestures();
         core.disconnect();
     }
@@ -222,6 +224,12 @@ namespace oqa::shim
 
             parameter->setValueNotifyingHost (normalised);
         });
+    }
+
+    void PluginProcessor::applyCommands()
+    {
+        if (core.pollCommands() > 0)
+            bindingsChanged();
     }
 
     void PluginProcessor::closeGestures()

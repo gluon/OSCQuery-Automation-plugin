@@ -93,6 +93,14 @@ namespace oqatest::claphost
 
             setEnvironment ("OQA_CORE_LIBRARY", OQA_CORE_SHARED_PATH);
 
+            /*  The module's registry (the shared library's) reads a settings
+                file of this harness's own, with the plugin's server on and
+                loopback writes allowed (Phase 6b-3), before it exists. */
+            const auto settings = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                                      .getChildFile ("oqa-clap-tests-" + juce::String::toHexString (juce::Random::getSystemRandom().nextInt64()) + ".registry.json");
+            settings.replaceWithText ("{ \"server_enabled\": true, \"server_allow\": \"any\" }");
+            setEnvironment ("OQA_SETTINGS_FILE", settings.getFullPathName().toStdString().c_str());
+
           #if defined (_WIN32)
             auto* handle = LoadLibraryW (juce::String (out.path).toWideCharPointer());
             if (handle == nullptr) { out.error = "LoadLibrary failed: " + std::to_string (GetLastError()); return out; }

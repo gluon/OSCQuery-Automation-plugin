@@ -42,6 +42,9 @@ typedef struct oqa_clap_status
 
     /** The registry's process-wide settings. */
     const char* (CLAP_ABI *settings_json) (const clap_plugin_t* plugin);
+
+    /** The registry's view of everything: every device, every instance, the server, the Finder (the Monitor's). */
+    const char* (CLAP_ABI *process_status_json) (const clap_plugin_t* plugin);
 } oqa_clap_status_t;
 
 #ifdef __cplusplus

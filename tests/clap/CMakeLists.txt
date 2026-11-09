@@ -24,7 +24,8 @@ add_executable(oqa_clap_tests
     ClapTests.cpp
     ClapParamsTests.cpp
     ClapRecordTests.cpp
-    ClapGuiTests.cpp)
+    ClapGuiTests.cpp
+    ClapServerTests.cpp)
 
 target_include_directories(oqa_clap_tests PRIVATE "${CMAKE_SOURCE_DIR}/tests" "${CMAKE_SOURCE_DIR}/src")
 target_include_directories(oqa_clap_tests SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/ThirdParty/doctest")

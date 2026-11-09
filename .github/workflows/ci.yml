@@ -62,6 +62,9 @@ jobs:
 
       # The ToscA/OSCar converter (Phase 5c) against its fixtures: the committed
       # expected outputs are what it writes today.
+      - name: oqa-bind.py loads and answers --help (Phase 6b-3)
+        run: python3 tools/oqa-bind.py --help > /dev/null
+
       - name: convert-mapping.py reproduces its fixtures
         run: |
           python3 tools/convert-mapping.py tests/fixtures/mappings/tosca-example.xml --device Renderer --host 192.0.2.10 --port 5005 --instance 3 | diff - tests/fixtures/mappings/tosca-example.expected.json

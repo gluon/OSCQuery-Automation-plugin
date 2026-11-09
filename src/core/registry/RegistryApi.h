@@ -150,6 +150,16 @@ typedef struct OqaCoreApi
         pushed next, and every instance's chunk takes it on its next save.
         Returns 0, or 1 when the registry has no such device. */
     int (*deviceSetTiming) (const char* name, const char* identityValue, int honoursTimetags, double offsetMs);
+
+    /*  Additive, 2026-11-09 (Phase 6b-3). Writes to the plugin's own OSCQuery
+        server become commands for the instance they name, queued in the
+        registry: instanceSetCommandWake's `wake (context)` is called on a
+        registry thread once per command queued and must only signal (the
+        shim marshals to its main thread); instancePollCommandsJson drains the
+        queue as one JSON array ([{slot, kind, text, text2, number}, ...]),
+        freed with freeString, that Instance::pollCommands applies. */
+    void (*instanceSetCommandWake) (OqaInstance* instance, void (*wake) (void* context), void* context);
+    char* (*instancePollCommandsJson) (OqaInstance* instance);
 } OqaCoreApi;
 
 /*  The shared library's export. Declared with the export attribute only

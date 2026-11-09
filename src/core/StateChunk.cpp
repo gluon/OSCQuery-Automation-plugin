@@ -32,6 +32,7 @@ namespace oqa::core
             constexpr const char* devices         = "devices";
             constexpr const char* slots           = "slots";
             constexpr const char* values          = "values";
+            constexpr const char* instance        = "instance";
 
             constexpr const char* name            = "name";
             constexpr const char* lastHost        = "last_host";
@@ -68,7 +69,7 @@ namespace oqa::core
             key::scaling, key::direction, key::displayName, key::rangeOverridden, key::unit, key::critical
         };
 
-        const std::set<std::string> topKeys { key::version, key::devices, key::slots, key::values };
+        const std::set<std::string> topKeys { key::version, key::devices, key::slots, key::values, key::instance };
 
         /*  juce::var::isObject() is true for an array too, and the DynamicObject
             behind an array is null (learnt in Phase 2). */
@@ -426,6 +427,9 @@ namespace oqa::core
                                           + std::to_string (slotCount) + " slots; the rest dropped");
         }
 
+        if (const auto n = object->getProperty (key::instance); n.isInt() || n.isInt64() || n.isDouble())
+            chunk.instanceNumber = std::clamp (static_cast<int> (n), 1, 9999);
+
         keepExtras (*object, topKeys, chunk.extras);
         return chunk;
     }
@@ -464,6 +468,9 @@ namespace oqa::core
 
             object->setProperty (key::values, valueArray);
         }
+
+        if (instanceNumber != 1)
+            object->setProperty (key::instance, instanceNumber);
 
         writeExtras (*object, extras);
         return juce::var (object);

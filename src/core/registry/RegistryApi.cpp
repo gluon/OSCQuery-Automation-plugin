@@ -198,6 +198,16 @@ namespace
         Registry::shared().setInstanceActive (recordOf (instance), active != 0);
     }
 
+    void instanceSetCommandWake (OqaInstance* instance, void (*wake) (void* context), void* context)
+    {
+        Registry::shared().setCommandWake (recordOf (instance), wake, context);
+    }
+
+    char* instancePollCommandsJson (OqaInstance* instance)
+    {
+        return duplicate (Registry::shared().pollCommandsJson (recordOf (instance)));
+    }
+
     int deviceSetTiming (const char* name, const char* identityValue, int honoursTimetags, double offsetMs)
     {
         if (name == nullptr)
@@ -228,7 +238,9 @@ namespace
         finderEnsure,
         finderAddManual,
         instanceSetActive,
-        deviceSetTiming
+        deviceSetTiming,
+        instanceSetCommandWake,
+        instancePollCommandsJson
     };
 }
 

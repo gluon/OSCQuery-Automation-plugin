@@ -130,6 +130,7 @@ namespace oqa::clapshim
         void deactivate() noexcept override;
         clap_process_status process (const clap_process_t* process) noexcept override;
         const void* extension (const char* id) noexcept override;
+        void onMainThread() noexcept override;
 
         //  clap_plugin_audio_ports: one stereo port each way, in place
         bool implementsAudioPorts() const noexcept override { return true; }
@@ -203,6 +204,9 @@ namespace oqa::clapshim
         /** The registry's settings this shim reads (gesture_timeout_ms). Main thread. */
         void refreshSettings() noexcept;
 
+        /** Commands from the plugin's own server applied, the host told (6b-3). Main thread. */
+        void applyCommands() noexcept;
+
         /** JUCE up on the host's main thread (init), and down again (destroy). */
         void startJuce() noexcept;
         void stopJuce() noexcept;
@@ -246,7 +250,7 @@ namespace oqa::clapshim
         std::atomic<double> gestureTimeoutMs { 200.0 };
 
         //  The status extension's strings, kept until the next call.
-        std::string statusText, settingsText;
+        std::string statusText, settingsText, processText;
         const oqa_clap_status_t statusExtension;
 
         //  GUI (5b-4). Declared after everything the editor reads; JUCE's

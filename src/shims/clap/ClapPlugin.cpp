@@ -51,6 +51,7 @@ namespace oqa::clapshim
           statusExtension {
               [] (const clap_plugin_t* p) -> const char* { auto& me = self (p); me.statusText = me.core.statusJson(); return me.statusText.c_str(); },
               [] (const clap_plugin_t* p) -> const char* { auto& me = self (p); me.settingsText = me.core.settingsJson(); return me.settingsText.c_str(); },
+              [] (const clap_plugin_t* p) -> const char* { auto& me = self (p); me.processText = me.core.processStatusJson(); return me.processText.c_str(); },
           }
     {
         for (int i = 0; i < slotCount; ++i)
@@ -67,6 +68,21 @@ namespace oqa::clapshim
             if (_host.canUseParams() && ! isProcessing())
                 _host.paramsRequestFlush();
         });
+
+        /*  Commands from the plugin's own server (6b-3): the host is asked for
+            its main thread; the 250 ms tick is the fallback. */
+        core.setCommandWake ([this] { _host.requestCallback(); });
+    }
+
+    void ClapPlugin::onMainThread() noexcept
+    {
+        applyCommands();
+    }
+
+    void ClapPlugin::applyCommands() noexcept
+    {
+        if (core.pollCommands() > 0)
+            bindingsChanged();
     }
 
     ClapPlugin::~ClapPlugin()
@@ -284,6 +300,7 @@ namespace oqa::clapshim
             return;
 
         refreshSettings();
+        applyCommands();
 
         /*  A binding made by anything but a state load (the editor, Phase
             5b-4; a future headless path) renames too. The clear rule reads

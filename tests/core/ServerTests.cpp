@@ -163,11 +163,13 @@ TEST_CASE ("plugin server: two instances' slot tables, the devices and the serve
     CHECK (static_cast<double> (valueOf (slotA + "/range/max")) == doctest::Approx (*gain.argument (0).range->max));
     REQUIRE (waitUntil ([&] { return valueOf (slotA + "/state").toString() == "ok"; }));
 
-    /*  An unbound slot has a node with its path empty and its state said. */
+    /*  An unbound slot has a node with its path empty, its state said, and a
+        device leaf for the next path written (6b-3); nothing else. */
     const auto unbound = ns::slotPath (static_cast<unsigned long> (idA), 0);
     CHECK (valueOf (unbound + "/path").toString().isEmpty());
     CHECK (valueOf (unbound + "/state").toString() == "unbound");
-    CHECK (oqatest::get (ServerOn::port(), unbound + "/device").status == 404);
+    CHECK (valueOf (unbound + "/device").toString().isEmpty());
+    CHECK (oqatest::get (ServerOn::port(), unbound + "/display_name").status == 404);
 
     const auto slotB = ns::slotPath (static_cast<unsigned long> (idB), 5);
     CHECK (valueOf (slotB + "/path").toString().toStdString() == pan.fullPath);

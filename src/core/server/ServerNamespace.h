@@ -29,8 +29,12 @@
         instance        i           the number $instance stands for in its paths
         active          i 0|1       whether the host runs its audio
         slot/<n>        container   one per slot, n the host parameter index
-          path          s           the bound OSC path; "" unbound (writable: binds)
-          device        s           the device's NAME (writable with path)
+          path          s           the bound OSC path; "" unbound. Writable: a
+                                    string binds (a second string names the
+                                    device), "" unbinds
+          device        s           the device's NAME. Writable: on a bound
+                                    slot rebinds there, on an unbound one names
+                                    the device for the next path written
           state         s           unbound, pending, ok, missing, retyped,
                                     renamed, unauthorised, inactive
           arg_index     i 0..3      (bound only, from here on)
