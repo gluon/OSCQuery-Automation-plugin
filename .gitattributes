@@ -17,6 +17,7 @@ CMakeLists.txt text eol=lf
 *.plist        text eol=lf
 *.plist.in     text eol=lf
 *.rc.in        text eol=lf
+*.map          text eol=lf
 
 # Our own sources and documents.
 *.h    text eol=lf
