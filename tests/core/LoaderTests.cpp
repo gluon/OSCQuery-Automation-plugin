@@ -56,6 +56,45 @@ TEST_CASE ("loader: the library's file name is this platform's, and the candidat
     CHECK (candidates.front().getParentDirectory() == own.getParentDirectory());
 }
 
+TEST_CASE ("loader: a copy of the library already loaded in the process is found, wherever it was loaded from, and comes before the walk")
+{
+    /*  Phase 5b-5: a VST3 and a CLAP each have the library beside them, in
+        different folders; the second binary to load must find the first
+        one's copy, or two registries would share one process. The system's
+        answer, not this build's: the library is loaded by path first, then
+        asked for by name. */
+    const juce::File library (juce::String (OQA_CORE_SHARED_PATH));
+    REQUIRE (library.existsAsFile());
+
+    const auto loaded = RegistryLoader::tryLoad (library);
+    REQUIRE_MESSAGE (loaded.shared, loaded.note);
+
+    const auto found = RegistryLoader::alreadyLoaded();
+    REQUIRE (found != juce::File());
+    CHECK (found.getFileName().toStdString() == RegistryLoader::libraryFileName());
+    CHECK (found.getLinkedTarget() == library.getLinkedTarget());
+
+    /*  A second copy elsewhere: the candidates name the loaded one before
+        any walk from this binary, so it is what tryLoad opens first; and
+        opening the loaded path again hands back the same module. */
+    const auto candidates = RegistryLoader::candidates();
+    REQUIRE (candidates.size() >= 2);
+
+    std::size_t foundAt = candidates.size();
+
+    for (std::size_t i = 0; i < candidates.size(); ++i)
+        if (candidates[i].getLinkedTarget() == found.getLinkedTarget()) { foundAt = i; break; }
+
+    REQUIRE (foundAt < candidates.size());
+
+    for (std::size_t i = foundAt + 1; i < candidates.size(); ++i)
+        CHECK (candidates[i].getParentDirectory() != found.getParentDirectory());
+
+    const auto again = RegistryLoader::tryLoad (found);
+    REQUIRE_MESSAGE (again.shared, again.note);
+    CHECK (again.api == loaded.api);
+}
+
 TEST_CASE ("loader: the shared library built here loads, is version 1, and runs a registry of its own")
 {
     const juce::File library (juce::String (OQA_CORE_SHARED_PATH));

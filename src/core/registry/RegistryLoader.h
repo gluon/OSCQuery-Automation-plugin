@@ -26,12 +26,18 @@
     WHERE IT LOOKS, in order:
       1. the file named by the environment variable OQA_CORE_LIBRARY, if set
          (a bench or a test pointing at a build);
-      2. the directory of this binary's own module (the plugin bundle's
+      2. a copy of the library ALREADY LOADED in this process, wherever it
+         was loaded from (Phase 5b-5): a VST3 in its folder and a CLAP in
+         another each have a copy beside them, and one registry per process
+         is the whole point, so whichever plugin came first decides for the
+         rest; the OS is asked (GetModuleHandle by name, dlopen with
+         RTLD_NOLOAD, the dyld image list);
+      3. the directory of this binary's own module (the plugin bundle's
          binary, found by the address of a function in it, never the host's
          executable), then up to five parents of it, for the library's file
          name: a library installed beside the plugin bundles is found from
          inside any of them;
-      3. the per-OS fixed directory the installer uses.
+      4. the per-OS fixed directory the installer uses.
 
     WHAT IT CHECKS: the one export oqa_core_api() exists, its table says
     OQA_CORE_ABI_VERSION exactly and is at least as large as this binary
@@ -81,6 +87,9 @@ namespace oqa::core
 
         /** This binary's own module file (the plugin's, not the host's). */
         static juce::File ownModuleFile();
+
+        /** The library's file if a copy is already loaded in this process, by whoever loaded it; else an empty File. */
+        static juce::File alreadyLoaded();
 
         /** Every file that would be tried, in order, whether or not it exists. */
         static std::vector<juce::File> candidates();

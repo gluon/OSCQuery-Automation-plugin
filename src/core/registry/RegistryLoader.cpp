@@ -27,6 +27,9 @@
  #include <windows.h>
 #else
  #include <dlfcn.h>
+ #if defined (__APPLE__)
+  #include <mach-o/dyld.h>
+ #endif
 #endif
 
 namespace oqa::core
@@ -89,12 +92,64 @@ namespace oqa::core
       #endif
     }
 
+    juce::File RegistryLoader::alreadyLoaded()
+    {
+        const auto name = juce::String (libraryFileName());
+
+      #if defined (_WIN32)
+        /*  By base name: a module loaded from any path answers to it. */
+        HMODULE module = nullptr;
+
+        if (! GetModuleHandleExW (GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, name.toWideCharPointer(), &module) || module == nullptr)
+            return {};
+
+        wchar_t path[MAX_PATH * 4] = {};
+        const auto length = GetModuleFileNameW (module, path, static_cast<DWORD> (sizeof (path) / sizeof (path[0])));
+        return length > 0 ? juce::File (juce::String (path, length)) : juce::File();
+      #elif defined (__APPLE__)
+        /*  dyld's list of images, by leaf name. */
+        const auto count = _dyld_image_count();
+
+        for (uint32_t i = 0; i < count; ++i)
+        {
+            if (const auto* imageName = _dyld_get_image_name (i))
+            {
+                const juce::File image (juce::String::fromUTF8 (imageName));
+
+                if (image.getFileName() == name)
+                    return image;
+            }
+        }
+
+        return {};
+      #else
+        /*  RTLD_NOLOAD answers only for a library already loaded, by its
+            soname; the path comes from a symbol in it. */
+        void* handle = dlopen (name.toRawUTF8(), RTLD_LAZY | RTLD_NOLOAD);
+
+        if (handle == nullptr)
+            return {};
+
+        juce::File out;
+        Dl_info info {};
+
+        if (void* symbol = dlsym (handle, "oqa_core_api"); symbol != nullptr && dladdr (symbol, &info) != 0 && info.dli_fname != nullptr)
+            out = juce::File (juce::String::fromUTF8 (info.dli_fname));
+
+        dlclose (handle);    // the NOLOAD handle's own count only; the library stays, loaded by whoever loaded it
+        return out;
+      #endif
+    }
+
     std::vector<juce::File> RegistryLoader::candidates()
     {
         std::vector<juce::File> out;
 
         if (const auto env = juce::SystemStats::getEnvironmentVariable ("OQA_CORE_LIBRARY", {}); env.isNotEmpty())
             out.emplace_back (env);
+
+        if (const auto loaded = alreadyLoaded(); loaded != juce::File())
+            out.push_back (loaded);
 
         const auto name = juce::String (libraryFileName());
 
