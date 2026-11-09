@@ -195,6 +195,7 @@ namespace oqa::core::server
         rebuild();
         startThread (Priority::normal);
 
+
         if (hooks.announce)
             hooks.announce (name(), server.httpPort(), server.oscPort());
 
@@ -246,6 +247,7 @@ namespace oqa::core::server
 
     void PluginServer::rebuild()
     {
+
         if (! hooks.processStatus)
             return;
 

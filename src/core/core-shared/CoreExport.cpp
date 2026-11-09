@@ -23,9 +23,31 @@
 
 #define OQA_CORE_BUILDING_SHARED 1
 
+#include <core/registry/Registry.h>
 #include <core/registry/RegistryApi.h>
 
 extern "C" OQA_CORE_EXPORT const OqaCoreApi* oqa_core_api (void)
 {
     return oqa::core::staticCoreApi();
 }
+
+#if defined (_WIN32)
+ #ifndef NOMINMAX
+  #define NOMINMAX
+ #endif
+ #ifndef WIN32_LEAN_AND_MEAN
+  #define WIN32_LEAN_AND_MEAN
+ #endif
+ #include <windows.h>
+
+/*  The process is ending (lpReserved set on detach): the registry's threads
+    are dead already, and its destructor leaves the rest to the OS. A plain
+    FreeLibrary (lpReserved null) still tears down properly. */
+extern "C" BOOL WINAPI DllMain (HINSTANCE, DWORD reason, LPVOID reserved)
+{
+    if (reason == DLL_PROCESS_DETACH && reserved != nullptr)
+        oqa::core::noteProcessExiting();
+
+    return TRUE;
+}
+#endif

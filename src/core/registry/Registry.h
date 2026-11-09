@@ -114,6 +114,15 @@
 
 namespace oqa::core
 {
+    /*  THE PROCESS IS ENDING (Windows, Phase 6b-3): ExitProcess has killed
+        every other thread before the DLLs' static destructors run, so the
+        registry's destructor must not join threads or tear down sockets then;
+        the OS reclaims them. The shared core library's DllMain says so on
+        DLL_PROCESS_DETACH with lpReserved set; the CLAP module's too, for a
+        registry of its own. POSIX exits with the threads alive and joins. */
+    void noteProcessExiting() noexcept;
+    bool processExiting() noexcept;
+
     struct RegistrySettings
     {
         bool directSend = false;           ///< encode and sendto on the audio thread; default off

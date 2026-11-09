@@ -29,6 +29,7 @@
 #include "ClapPlugin.h"
 #include "Descriptors.h"
 
+#include <core/registry/Registry.h>
 #include <core/registry/RegistryApi.h>
 
 #include <clap/helpers/host-proxy.hxx>
@@ -180,10 +181,15 @@ extern "C" CLAP_EXPORT const clap_plugin_entry_t clap_entry = {
 #if defined (_WIN32)
 /*  As JUCE's own wrappers do: the module's instance handle, for the windows
     JUCE creates in this module (Phase 5b-4). */
-extern "C" BOOL WINAPI DllMain (HINSTANCE instance, DWORD reason, LPVOID)
+extern "C" BOOL WINAPI DllMain (HINSTANCE instance, DWORD reason, LPVOID reserved)
 {
     if (reason == DLL_PROCESS_ATTACH)
         juce::Process::setCurrentModuleInstanceHandle (instance);
+
+    /*  The process is ending: a registry of this module's own (the static
+        fallback) is left to the OS, its threads being dead already. */
+    if (reason == DLL_PROCESS_DETACH && reserved != nullptr)
+        oqa::core::noteProcessExiting();
 
     return TRUE;
 }

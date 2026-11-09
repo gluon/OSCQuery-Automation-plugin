@@ -2594,24 +2594,48 @@ namespace oqa::core
         impl->serverSettingsInUse = wanted;
     }
 
+    namespace
+    {
+        std::atomic<bool> exiting { false };
+    }
+
+    void noteProcessExiting() noexcept   { exiting.store (true, std::memory_order_relaxed); }
+    bool processExiting() noexcept       { return exiting.load (std::memory_order_relaxed); }
+
     Registry::~Registry()
     {
+        /*  At a process's end on Windows the threads are gone already, some
+            killed mid-lock; joining them would wait for ever and tearing the
+            sockets down would fail fast. Everything is left to the OS, which
+            is reclaiming the process anyway: the Impl is released, not freed. */
+        if (processExiting())
+        {
+            (void) impl.release();
+            return;
+        }
+
         shutdown();
     }
 
     void Registry::shutdown()
     {
-        /*  The resolver first (it holds entry pointers), then the receiver,
-            then instances (their plans point at devices), then the devices,
-            each stopping its thread and its device. For a process that is
+        /*  The resolver first (it holds entry pointers), then the server, the
+            receiver, then instances (their plans point at devices), then the
+            devices, each stopping its thread and its device. For a process that is
             ending, or a test that wants no thread left when main returns.
             Taken out from under the lock before they are destroyed: a device
             being stopped may be mid-delivery, waiting for that very lock. */
-        if (impl->server != nullptr)
-            impl->server->stop();
-
+        /*  The resolver (and with it the Finder) before the server: the server's
+            stop unannounces, and unannouncing restarts a running Finder, which
+            at a process's end is a thread made during static destruction (the
+            Windows runner's fail-fast under clap-validator, Phase 6b-3). With the
+            Finder already stopped there is nothing to restart. */
         if (impl->resolver != nullptr)
             impl->resolver->stopNow();
+
+
+        if (impl->server != nullptr)
+            impl->server->stop();
 
         impl->receiver.stop();
         impl->receiverPort = -1;
@@ -3404,4 +3428,5 @@ namespace oqa::core
         const std::lock_guard<std::mutex> guard (impl->lock);
         return impl->instances.size();
     }
+
 }
