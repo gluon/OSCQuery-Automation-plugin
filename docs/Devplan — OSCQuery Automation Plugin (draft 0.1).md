@@ -807,6 +807,52 @@ and the Mac mini, `docs/spikes/phase5b-clap.md`, the records, the handoff.
   name, `dlopen` with `RTLD_NOLOAD`, a `dyld` image scan by leaf), the table found still passing the
   version and size check or falling back with a note naming the other plugin's path.
 
+**Record, 2026-11-09 (built; the DAW rows of the done-when open, Phases 3 to 5's with them).**
+Built in six commits on `main`, 5b-0 to 5b-5, in one session, plus the macOS fix below. Reports:
+[`docs/spikes/phase5b-clap.md`](spikes/phase5b-clap.md) (the format matrix the Phase 1 report lacked)
+and [`docs/bench/2026-11-09-phase5b-clap.md`](bench/2026-11-09-phase5b-clap.md).
+
+- *Done so far, measured on this machine (Debug, loopback) through a CLAP host of the tests' own
+  (`tests/clap/`):* the module loads and its factory lists the five variants under the agreed ids;
+  each is created, activated, processed with audio through, deactivated and destroyed; the chunk goes
+  in and out through CLAP's streams byte for byte, in small pieces, the parameters' values with it;
+  every slot a 0–1 parameter, `HIDDEN` and `(unbound)` until bound, then named by its path with
+  `module` = device NAME plus the path's container and text in device units; `rescan (INFO | VALUES)`
+  at a state load; events reach the device from `process` and from `flush`; `clear()` fires for a
+  `missing` slot rebound elsewhere and for nothing else; a value the device streams becomes
+  `GESTURE_BEGIN`, `PARAM_VALUE`, `GESTURE_END` in `process`, or in the flush the wake asked for while
+  the host slept an active plugin; a gesture open at deactivate owes its END to the next flush; a
+  burst of 160 values over eight slots arrives whole and in order; the gui is offered embedded on the
+  platform's api, opens at 1100×620, clamps to the editor's limits, and on Windows sits as a child of
+  the host's window at the size agreed in physical pixels. **clap-validator 0.4.1 on the Release
+  module: 138 passed, 0 failed, 54 skipped.** The loader finds a core already loaded in the process
+  and the registry's resolver restarts after `shutdown()` (`tests/core/`). pluginval 1.0.4 passes the
+  Debug VST3 at strictness 5 with the editor in its new window. The CLAP suite is **13 cases** as
+  `clap.C` and `clap.fr_FR`; the core's is **113** as `core.C` and `core.fr_FR`.
+- *Implementer's decisions, the author's to overrule:* a vendor extension of ours,
+  `io.github.pob31.oqa.status/1`, answers the instance's status and the settings as JSON through the
+  CLAP API, for the test host and for diagnosis without the editor; the shim's `clear()` rule reads
+  the standing it recorded at its last 250 ms tick, so a rebind inside that window after a path
+  vanished is not cleared; the module and the core library each export one symbol at the linker's
+  level too (an export list on Apple, a version script with `-Bsymbolic` on GNU ld); the editor's
+  parenting on macOS and X11 is the bench's, the test executable having no window toolkit there.
+- *Found on the way:* **two copies of JUCE in one process on macOS meet through weak symbols**
+  despite hidden visibility everywhere: the runner aborted freeing a `juce::String` after a `var`
+  made in the module was torn down through the test executable's JUCE, whose `var` type singletons
+  (constexpr inline variables) dyld had coalesced with the module's; the empty-string singleton of one
+  copy, compared against the other's, was freed as if allocated. Windows and Linux never showed it.
+  The test runner prints a backtrace on a fatal signal on POSIX now (it did on Windows), which is how
+  it was read. clap-helpers' checks (`Terminate`, `Maximal` in Debug) taught the harness that `flush`
+  is the audio thread's while the plugin is active and that `set_size` takes only what `adjust_size`
+  returned. A deactivated instance has left the registry, so nothing streams to it. The realtime
+  counters are per module, so the harness cannot count the module's allocations. The clap-validator
+  release zips for Linux and macOS wrap a tarball named 0.3.2 by the release's own tooling.
+- *Still to fill, the author at the DAW:* the done-when's rows in Bitwig and REAPER over CLAP on this
+  machine and the Mac mini (the Phase 3 and 4 done-whens, hide, rename, clear, module, VST3 ↔ CLAP
+  chunk, one registry for both formats, display scaling, keyboard focus), with the Phase 3, 4 and 5
+  rows in the same sitting; the Mac mini and the NUC through `scripts/farm-check.sh`, which builds
+  the CLAP and runs clap-validator now. The install steps are in the bench report.
+
 ---
 
 ## Phase 6 — The editor finished, the plugin's own server, the Monitor · M
