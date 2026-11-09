@@ -382,7 +382,9 @@ Reaper on Windows and the Mac mini, the records, the amendments.
   saying so in the status bar, where WFS-DIY's plugins go silent; the shared library is built with
   hidden visibility and exports the C ABI only, so two copies of JUCE in one process do not meet;
   one value per slot per block, because JUCE's `AudioProcessor` delivers no sample-accurate
-  parameter events (the CLAP shim will, Phase 5b); the device key is `NAME` plus the identity
+  parameter events (this sentence read "the CLAP shim will, Phase 5b"; amended 2026-11-09 while
+  planning Phase 5b: the CLAP shim consumes the offsets and hands the core the block's last value
+  too, the sample-accurate send waiting for a device that honours timetags); the device key is `NAME` plus the identity
   leaf's value, resolved to one host:port (corrected 2026-11-09 while planning Phase 5: this
   sentence read "`NAME` plus last host:port"; `Registry.cpp` has keyed by name and identity since
   3c), re-identification being Phase 5's.
@@ -740,6 +742,70 @@ saved from the VST3 opens in the CLAP with identical bindings and back; `clap-va
 clean on three platforms.
 
 **Needs from the author:** nothing blocking. A Bitwig licence on the bench.
+
+**Planned, 2026-11-09.** Taken before Phase 6 at the author's word, in the plan's order. Broken into
+seven subphases, each one commit on `main` with its tests, as Phase 5 was: **5b-0** the editor
+becomes a `juce::Component` (a thin `EditorWindow` in the JUCE shim keeps pluginval green), because
+`EditorRoot` was an `AudioProcessorEditor` and a CLAP has no `AudioProcessor`; **5b-1** the `.clap`
+module (one binary, a factory listing the five slot-count variants, lifecycle, audio pass-through,
+state over `clap_istream`/`clap_ostream`), a doctest host harness in `tests/clap/` that loads the
+built module and drives it against the mock, clap-validator in CI on three platforms; **5b-2** the
+params extension (hidden while unbound, `module` from the path, `RESCAN_INFO` on bind, rename and
+state load, the `clear()` rule); **5b-3** record (received values drained on the audio thread in
+`process` and `flush`, gesture events, `request_flush` from the wake); **5b-4** the editor in the
+host's window on win32, cocoa and x11, JUCE's file descriptors pumped through the host's posix-fd
+extension on Linux; **5b-5** the loader reusing a core library already loaded in the process, so a
+VST3 and a CLAP in one host share one registry; **5b-6** the bench in Bitwig and REAPER on Windows
+and the Mac mini, `docs/spikes/phase5b-clap.md`, the records, the handoff.
+
+- *Decided by the author the same day:* **the CLAP ids are `io.github.pob31.oqa.Q008` …
+  `Q128`**, the bundle ids the JUCE shim already uses, fixed for good once a session saves one (the
+  macOS bundle's own id is a sixth string, `io.github.pob31.oqa.clap`: one bundle, five plugins);
+  **one value per slot per block**: the shim consumes every parameter event with its sample offset
+  and hands the core each slot's value at block end, the sample-accurate send an open item for a
+  device that honours timetags (the Phase 3 record's "the CLAP shim will" is amended in place);
+  **`clear()` fires only when a slot whose status was `missing` or `retyped` is rebound to a
+  different device or path** (`CLAP_PARAM_CLEAR_AUTOMATIONS`), never on a rename rebind, never on
+  unbind, never on rebinding a live slot; **slot values join the chunk** as a `values` field
+  (normalised, one per slot), written and restored by both shims, version unchanged, because
+  clap-validator's state-reproducibility checks set values, save, reload and compare (the PRD's
+  chunk field list gains the entry).
+- *Facts found while planning:* `CLAP_PARAM_RESCAN_INFO` covers name, module **and `is_hidden`**,
+  immediate while active (`clap/ext/params.h`), so a slot bound during playback is unhidden and
+  renamed in one rescan and `RESCAN_ALL` is never needed; `Registry::pollReceived` pops a lock-free
+  ring and `Instance::pollReceived` uses stack arrays and relaxed atomics, so the audio thread may
+  drain them, `process` and `flush` never being concurrent; `request_flush` is thread-safe off the
+  audio thread, so the registry's wake may call it; JUCE's message queue needs no pump of ours on
+  Windows (a hidden window fed by `PostMessage`) or macOS (a run-loop source on the main loop), and
+  `MessageManager` takes the thread that creates it as the message thread, so JUCE is initialised in
+  the plugin's `init()`, not the entry's; JUCE's VST3 wrapper on Linux registers
+  `LinuxEventLoopInternal::getRegisteredFds()` with the host and invokes them when ready, the shape
+  the CLAP copies through `clap_host_posix_fd_support`; `Component::addToDesktop (0, parent)` takes
+  an HWND, an NSView or an X11 window, so no Objective-C of ours; `FileChooser` is in
+  `juce_gui_basics`, so the CLAP compiles neither `juce_gui_extra` nor `juce_audio_processors`;
+  **the loader walks up from its own module and would load two cores** for a VST3 in
+  `Common Files\VST3\` and a CLAP in `Common Files\CLAP\`, each with the copy the build puts beside
+  it, nothing asking the OS whether the library is already loaded; `Instance` is runtime-sized, so
+  five descriptors in one binary need no `OQA_SLOT_COUNT`; `Registry::shutdown` has no caller in
+  `src/shims/`, and a `.clap` unloaded after a scan on its static fallback core would take the
+  registry's threads down with it; nothing was measured over CLAP in Phase 1.
+- *Implementer's decisions, the author's to overrule:* `connect()` in `init()` and again in
+  `activate()`, `disconnect()` in `deactivate()` and `destroy`, so an editor opened on a
+  never-activated CLAP has a registry; record drains on the audio thread (`PARAM_GESTURE_BEGIN` on
+  a gesture's first value, `PARAM_VALUE` at offset 0, `PARAM_GESTURE_END` once the gesture's age
+  passes `gesture_timeout_ms`), the wake calling `request_flush()`, a 50 ms host timer calling it
+  only while a gesture is open so gestures close when the host is not processing, one monotonic
+  clock read per `process` or `flush` recorded as an exception to the lipogram like the wake
+  notify; `Instance::pollReceived` and `GestureTracker` gain function-pointer overloads so that path
+  takes no `std::function`; rescans do not wait for a timer (`Host::bindingsChanged` and
+  `stateLoad` call `rescan` directly, the 250 ms revision poll covering the rest); `clap_param_info`
+  has `id` = slot index, no cookie, `module` = device NAME plus the path's container, flags
+  `AUTOMATABLE` plus `HIDDEN` when unbound and `STEPPED` for `i` and toggles, text through the slot's
+  own scaling as the JUCE shim's parameter; one stereo port in and out, in-place, copied only when
+  the buffers differ; `clap_entry.deinit` calls the registry's `shutdown` only on the static
+  fallback core; the loader asks the OS for an already-loaded core first (`GetModuleHandleW` by
+  name, `dlopen` with `RTLD_NOLOAD`, a `dyld` image scan by leaf), the table found still passing the
+  version and size check or falling back with a note naming the other plugin's path.
 
 ---
 
