@@ -144,6 +144,12 @@ typedef struct OqaCoreApi
         plugin's life and says here whether the host runs its audio; the
         status (its own and the process-wide one, `instances[]`) shows it. */
     void (*instanceSetActive) (OqaInstance* instance, int active);
+
+    /*  Additive, 2026-11-09 (Phase 6a-3). A device's timing set by hand, for
+        the whole process (the Monitor, any editor): it stands whatever chunk is
+        pushed next, and every instance's chunk takes it on its next save.
+        Returns 0, or 1 when the registry has no such device. */
+    int (*deviceSetTiming) (const char* name, const char* identityValue, int honoursTimetags, double offsetMs);
 } OqaCoreApi;
 
 /*  The shared library's export. Declared with the export attribute only

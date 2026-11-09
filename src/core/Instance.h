@@ -113,6 +113,9 @@ namespace oqa::core
             entry with the same name and identity value. A known device added
             again at another address is pointed there, process-wide (5b). */
         int addDevice (const DeviceRef& device);
+
+        /*  The device's timing, by hand (6a-3): the chunk's device and, through
+            the registry, every instance's on their next save. */
         void setDeviceTiming (int deviceIndex, bool honoursTimetags, double offsetMs);
 
         //==============================================================================

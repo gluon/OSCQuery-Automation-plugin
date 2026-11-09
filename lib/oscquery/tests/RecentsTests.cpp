@@ -108,6 +108,30 @@ TEST_CASE ("recents: touched devices come back newest first from the file, ident
     CHECK_FALSE (again.find ("Nobody").has_value());
 }
 
+TEST_CASE ("recents: a device's timing, set once per rig, comes back from the file with its decimal")
+{
+    INFO ("locale in effect: " << std::string (oqatest::appliedLocaleName()));
+
+    TempFile temp;
+
+    {
+        Recents recents (temp.options());
+        REQUIRE (recents.load());
+        auto e = device ("Renderer T", "192.168.1.30", 5005);
+        e.honoursTimetags = true;
+        e.offsetMs = -12.5;
+        REQUIRE (recents.touch (e));
+    }
+
+    Recents again (temp.options());
+    REQUIRE (again.load());
+    const auto t = again.find ("Renderer T");
+    REQUIRE (t.has_value());
+    CHECK (t->honoursTimetags);
+    CHECK (t->offsetMs == doctest::Approx (-12.5));
+    CHECK (temp.file.loadFileAsString().contains ("-12.5"));
+}
+
 TEST_CASE ("recents: touching a known device moves it first with its new address; same NAME, other identity, is another device")
 {
     TempFile temp;

@@ -35,8 +35,8 @@
     value: a path the Monitor's global settings (Phase 6) will share. A test
     points it at a file of its own.
 
-    Decimals never enter it (ports and times are integers), and the JSON writer
-    is locale-independent anyway; the fr_FR run says so.
+    One decimal enters it (a device's offset in milliseconds, Phase 6a-3); the
+    JSON writer is locale-independent; the fr_FR run says so.
 */
 
 #include <juce_core/juce_core.h>
@@ -63,6 +63,12 @@ namespace oqa::oscquery
 
             /** Milliseconds since the epoch, as juce::Time::currentTimeMillis(). */
             juce::int64 lastSeenMs = 0;
+
+            /*  The device's timing as last set by hand (PRD, Transport: "set
+                once per rig"; Phase 6a-3): a new session on the same rig
+                starts from it. */
+            bool honoursTimetags = false;
+            double offsetMs = 0.0;
 
             /** What one entry is: its NAME, and its identity value when set. */
             bool sameDevice (const Entry& other) const

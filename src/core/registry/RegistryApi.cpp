@@ -198,6 +198,14 @@ namespace
         Registry::shared().setInstanceActive (recordOf (instance), active != 0);
     }
 
+    int deviceSetTiming (const char* name, const char* identityValue, int honoursTimetags, double offsetMs)
+    {
+        if (name == nullptr)
+            return 1;
+
+        return Registry::shared().setDeviceTiming (name, identityValue != nullptr ? identityValue : "", honoursTimetags != 0, offsetMs) ? 0 : 1;
+    }
+
     const OqaCoreApi table {
         OQA_CORE_ABI_VERSION,
         sizeof (OqaCoreApi),
@@ -219,7 +227,8 @@ namespace
         instancePollReceived,
         finderEnsure,
         finderAddManual,
-        instanceSetActive
+        instanceSetActive,
+        deviceSetTiming
     };
 }
 

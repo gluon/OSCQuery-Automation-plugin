@@ -788,11 +788,21 @@ namespace oqa::core
             });
         }
 
-        void setTiming (bool honoursTimetags, double offsetMs)
+        /*  The device's timing (PRD, Transport: "a per-device setting the user
+            ticks in the Monitor", "set once per rig"). Set by hand (the
+            Monitor, any editor) it stands, whatever chunk is pushed next;
+            set by a chunk's push it is the last chunk's word until a hand
+            sets it (6a-3). */
+        void setTiming (bool honoursTimetags, double offsetMs, bool byHand)
         {
             const std::lock_guard<std::mutex> guard (settingsLock);
+
+            if (! byHand && timingByHand)
+                return;
+
             ref.honoursTimetags = honoursTimetags;
-            ref.offsetMs = offsetMs;
+            ref.offsetMs = std::isfinite (offsetMs) ? offsetMs : 0.0;
+            timingByHand = timingByHand || byHand;
         }
 
         /** The chunk's hash of this device's tree at bind time, when the chunk has one. */
@@ -1141,6 +1151,7 @@ namespace oqa::core
             o->setProperty ("port", r.lastPort);
             o->setProperty ("honours_timetags", r.honoursTimetags);
             o->setProperty ("offset_ms", r.offsetMs);
+            o->setProperty ("timing_by_hand", timingByHandNow());
 
             withDevice ([&] (const oscquery::Device& d)
             {
@@ -1905,6 +1916,8 @@ namespace oqa::core
         std::string identityLive;
         std::string resolutionNoteText;
         bool handPointed = false;
+        bool timingByHand = false;              // under settingsLock
+        bool timingByHandNow() const { const std::lock_guard<std::mutex> guard (settingsLock); return timingByHand; }
         std::vector<CandidateInfo> candidates;
         std::atomic<bool> useDevice { false };                 // confirmed or pointed: send and LISTEN
         std::atomic<bool> identified { false };                // compared since this Device answered
@@ -2304,7 +2317,7 @@ namespace oqa::core
 
             if (found != devices.end())
             {
-                found->second->setTiming (ref.honoursTimetags, ref.offsetMs);
+                found->second->setTiming (ref.honoursTimetags, ref.offsetMs, false);
                 found->second->setTreeHash (ref.treeHash);
                 return *found->second;
             }
@@ -3021,6 +3034,19 @@ namespace oqa::core
             return false;
 
         found->second->setAddress (host, port, true);
+        return true;
+    }
+
+    bool Registry::setDeviceTiming (const std::string& name, const std::string& identityValue,
+                                    bool honoursTimetags, double offsetMs)
+    {
+        const std::lock_guard<std::mutex> guard (impl->lock);
+        const auto found = impl->devices.find (keyOf (name, identityValue));
+
+        if (found == impl->devices.end())
+            return false;
+
+        found->second->setTiming (honoursTimetags, offsetMs, true);
         return true;
     }
 

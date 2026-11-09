@@ -233,6 +233,16 @@ namespace oqa::core
                     if (! d.isObject())
                         continue;
 
+                    auto& ref = state.devices[static_cast<std::size_t> (i)];
+
+                    /*  Timing set by hand anywhere in the process (6a-3) is
+                        every chunk's on its next save, as the address is. */
+                    if (static_cast<bool> (d.getProperty ("timing_by_hand", false)))
+                    {
+                        ref.honoursTimetags = static_cast<bool> (d.getProperty ("honours_timetags", ref.honoursTimetags));
+                        ref.offsetMs = static_cast<double> (d.getProperty ("offset_ms", ref.offsetMs));
+                    }
+
                     const auto resolution = d.getProperty ("resolution", "").toString();
 
                     if (resolution != "confirmed" && resolution != "pointed")
@@ -244,7 +254,6 @@ namespace oqa::core
                     if (host.empty() || port <= 0)
                         continue;
 
-                    auto& ref = state.devices[static_cast<std::size_t> (i)];
                     ref.lastHost = host;
                     ref.lastPort = port;
                 }
@@ -349,9 +358,14 @@ namespace oqa::core
         if (deviceIndex < 0 || deviceIndex >= static_cast<int> (state.devices.size()))
             return;
 
-        state.devices[static_cast<std::size_t> (deviceIndex)].honoursTimetags = honoursTimetags;
-        state.devices[static_cast<std::size_t> (deviceIndex)].offsetMs = std::isfinite (offsetMs) ? offsetMs : 0.0;
+        auto& ref = state.devices[static_cast<std::size_t> (deviceIndex)];
+        ref.honoursTimetags = honoursTimetags;
+        ref.offsetMs = std::isfinite (offsetMs) ? offsetMs : 0.0;
         push();
+
+        /*  By hand, process-wide: stands whatever chunk is pushed next. */
+        if (handle != nullptr && api != nullptr && tableHas (api, &OqaCoreApi::deviceSetTiming))
+            api->deviceSetTiming (ref.name.c_str(), ref.identityValue.value_or (std::string()).c_str(), honoursTimetags ? 1 : 0, ref.offsetMs);
     }
 
     void Instance::setDeviceTreeHash (int deviceIndex, const std::string& hash)

@@ -207,6 +207,12 @@ namespace oqa::core
         bool setDeviceAddress (const std::string& name, const std::string& identityValue,
                                const std::string& host, int port);
 
+        /*  The device's timing, set by hand (6a-3): stands whatever chunk is
+            pushed next, and every instance's saveState() carries it. False for
+            a device the registry does not have. */
+        bool setDeviceTiming (const std::string& name, const std::string& identityValue,
+                              bool honoursTimetags, double offsetMs);
+
         //==============================================================================
         //  The Finder (5b): one per process, in the resolver.
 

@@ -47,6 +47,8 @@ namespace oqa::oscquery
             object->setProperty ("host", juce::String (entry.host));
             object->setProperty ("port", entry.port);
             object->setProperty ("last_seen_ms", entry.lastSeenMs);
+            object->setProperty ("honours_timetags", entry.honoursTimetags);
+            object->setProperty ("offset_ms", entry.offsetMs);
 
             if (entry.identityPath.has_value())
                 object->setProperty ("identity_path", juce::String (*entry.identityPath));
@@ -67,6 +69,8 @@ namespace oqa::oscquery
             entry.host = v.getProperty ("host", {}).toString().toStdString();
             entry.port = static_cast<int> (v.getProperty ("port", 0));
             entry.lastSeenMs = static_cast<juce::int64> (v.getProperty ("last_seen_ms", 0));
+            entry.honoursTimetags = static_cast<bool> (v.getProperty ("honours_timetags", false));
+            entry.offsetMs = static_cast<double> (v.getProperty ("offset_ms", 0.0));
 
             if (v.hasProperty ("identity_path"))
                 entry.identityPath = v["identity_path"].toString().toStdString();
