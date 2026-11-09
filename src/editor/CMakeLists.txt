@@ -16,6 +16,8 @@
 # THE EDITOR (devplan Phase 3e, first cut): a client of the core, nothing more. An
 # INTERFACE target whose sources compile inside whichever plugin links it, with that
 # plugin's own JUCE GUI modules; the core and the client library never see a GUI module.
+# juce_gui_basics is all it needs (Phase 5b-0): EditorRoot is a plain Component that the JUCE
+# shim wraps in an AudioProcessorEditor and the CLAP shim parents to the host's window.
 
 add_library(oqa_editor INTERFACE)
 add_library(oqa::editor ALIAS oqa_editor)

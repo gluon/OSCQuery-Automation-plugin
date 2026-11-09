@@ -18,7 +18,7 @@
 #include "PluginProcessor.h"
 
 #include <core/rt/RtCheck.h>
-#include <editor/EditorRoot.h>
+#include "EditorWindow.h"
 
 // The five plugin IDs are five slot counts (PRD, Binding model). Phase 3 builds one.
 static_assert (OQA_SLOT_COUNT == 8 || OQA_SLOT_COUNT == 16 || OQA_SLOT_COUNT == 32
@@ -124,7 +124,7 @@ namespace oqa::shim
             loaded.shared ? "Shared core library: " + juce::String (loaded.path) : juce::String (loaded.note)
         };
 
-        return new editor::EditorRoot (*this, std::move (host));
+        return new EditorWindow (*this, std::move (host));
     }
 
     bool PluginProcessor::acceptsMidi() const { return false; }

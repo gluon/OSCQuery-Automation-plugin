@@ -43,9 +43,14 @@
     modal of our own: the system's).
 
     THE EDITOR IS A CLIENT OF THE CORE: every change goes through
-    core::Instance, and the processor is told so it renames its parameters.
+    core::Instance, and the shim is told so it renames its parameters.
     Nothing network runs on the message thread but the Finder's and the
     recents' reads; the registry does the rest.
+
+    A PLAIN COMPONENT, NOT AN AudioProcessorEditor (Phase 5b-0): the JUCE
+    shim wraps it in a thin AudioProcessorEditor (shims/juce/EditorWindow),
+    the CLAP shim puts it straight into the host's window. Whoever hosts it
+    applies the size hints below; the editor itself only lays out.
 */
 
 #include "DeviceList.h"
@@ -53,7 +58,7 @@
 #include "StatusBar.h"
 #include "TreePane.h"
 
-#include <juce_audio_processors/juce_audio_processors.h>
+#include <juce_gui_basics/juce_gui_basics.h>
 
 #include <functional>
 
@@ -61,7 +66,7 @@ namespace oqa::core { class Instance; }
 
 namespace oqa::editor
 {
-    /** What the editor needs from its processor, so it depends on no shim. */
+    /** What the editor needs from its shim, so it depends on none. */
     struct Host
     {
         core::Instance& instance;
@@ -70,12 +75,17 @@ namespace oqa::editor
         juce::String coreNote;                      ///< the loader's word: shared where, or alone why
     };
 
-    class EditorRoot final : public juce::AudioProcessorEditor,
+    class EditorRoot final : public juce::Component,
                              private juce::Timer
     {
     public:
-        EditorRoot (juce::AudioProcessor& processor, Host host);
+        explicit EditorRoot (Host host);
         ~EditorRoot() override;
+
+        /** The size a fresh editor opens at, and the limits a resizing host keeps it within. */
+        static constexpr int defaultWidth = 1100, defaultHeight = 620;
+        static constexpr int minimumWidth = 720,  minimumHeight = 420;
+        static constexpr int maximumWidth = 2400, maximumHeight = 1600;
 
         void paint (juce::Graphics& g) override;
         void resized() override;

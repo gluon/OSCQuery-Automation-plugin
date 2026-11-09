@@ -60,6 +60,8 @@ function(oqa_add_plugin_variant slots code)
         PluginProcessor.cpp
         SlotParameter.h
         SlotParameter.cpp
+        EditorWindow.h
+        EditorWindow.cpp
 
         # The core's and the client library's object files go INTO the plugin's shared-code
         # archive rather than beside it: GNU ld scans an archive once, in order, and the

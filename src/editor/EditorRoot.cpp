@@ -22,9 +22,8 @@
 
 namespace oqa::editor
 {
-    EditorRoot::EditorRoot (juce::AudioProcessor& processor, Host hostIn)
-        : juce::AudioProcessorEditor (processor),
-          host (std::move (hostIn)),
+    EditorRoot::EditorRoot (Host hostIn)
+        : host (std::move (hostIn)),
           devices (host.instance),
           slots (host.instance, host.slotValue)
     {
@@ -60,9 +59,7 @@ namespace oqa::editor
         layout.setItemLayout (1, 6, 6, 6);              // the divider
         layout.setItemLayout (2, 300, -0.8, -0.62);     // the slots
 
-        setResizable (true, true);
-        setResizeLimits (720, 420, 2400, 1600);
-        setSize (1100, 620);
+        setSize (defaultWidth, defaultHeight);
 
         timerCallback();
         startTimerHz (8);
