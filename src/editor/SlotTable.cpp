@@ -540,16 +540,16 @@ namespace oqa::editor
         if (! slot.receives() || ! slot.active())
             return false;
 
-        const auto device = deviceStatus (slot.deviceIndex);
-        return device.getProperty ("listen", "").toString() == "unsupported"
-            && static_cast<juce::int64> (device.getProperty ("udp_received", 0)) == 0;
+        const auto d = deviceStatus (slot.deviceIndex);
+        return d.getProperty ("listen", "").toString() == "unsupported"
+            && static_cast<juce::int64> (d.getProperty ("udp_received", 0)) == 0;
     }
 
     presentation::Standing SlotTable::standingOf (int row) const
     {
         const auto& slot = instance.chunk().slots[row];
         const auto s = slotStatus (row);
-        const auto device = deviceStatus (slot.deviceIndex);
+        const auto d = deviceStatus (slot.deviceIndex);
 
         presentation::Standing out;
         out.bound = slot.bound();
@@ -559,10 +559,10 @@ namespace oqa::editor
         out.renamedTo = s.getProperty ("renamed_to", "").toString().toStdString();
         out.deviceReachable = ! slot.bound() || deviceReachable (slot.deviceIndex);
         out.waitingForPort = waitingForPort (slot);
-        out.deviceLastSeenMs = static_cast<juce::int64> (device.getProperty ("last_seen_ms", -1));
-        out.loopGuarded = static_cast<juce::int64> (device.getProperty ("loop_guarded", 0));
-        out.rateLimited = static_cast<juce::int64> (device.getProperty ("rate_limited", 0));
-        out.datagramsDropped = static_cast<juce::int64> (device.getProperty ("datagrams_dropped", 0));
+        out.deviceLastSeenMs = static_cast<juce::int64> (d.getProperty ("last_seen_ms", -1));
+        out.loopGuarded = static_cast<juce::int64> (d.getProperty ("loop_guarded", 0));
+        out.rateLimited = static_cast<juce::int64> (d.getProperty ("rate_limited", 0));
+        out.datagramsDropped = static_cast<juce::int64> (d.getProperty ("datagrams_dropped", 0));
         return out;
     }
 

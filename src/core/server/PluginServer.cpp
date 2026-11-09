@@ -202,7 +202,7 @@ namespace oqa::core::server
         return true;
     }
 
-    void PluginServer::stop()
+    void PluginServer::stop (bool unannounce)
     {
         if (! running.exchange (false))
             return;
@@ -211,7 +211,7 @@ namespace oqa::core::server
         notify();
         stopThread (3000);
 
-        if (hooks.unannounce)
+        if (unannounce && hooks.unannounce)
             hooks.unannounce();
 
         server.stop();

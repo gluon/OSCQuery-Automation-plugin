@@ -2625,17 +2625,17 @@ namespace oqa::core
             ending, or a test that wants no thread left when main returns.
             Taken out from under the lock before they are destroyed: a device
             being stopped may be mid-delivery, waiting for that very lock. */
-        /*  The resolver (and with it the Finder) before the server: the server's
-            stop unannounces, and unannouncing restarts a running Finder, which
-            at a process's end is a thread made during static destruction (the
-            Windows runner's fail-fast under clap-validator, Phase 6b-3). With the
-            Finder already stopped there is nothing to restart. */
+        /*  The server stops answering first, without unannouncing: at a
+            process's end every request it would still answer runs amid static
+            destruction (the NUC's SIGSEGV under clap-validator, 6f), and
+            unannouncing would restart a running Finder, a thread made during
+            static destruction (the Windows runner's fail-fast, 6b-3). The
+            resolver, and with it the Finder and the DNS-SD record, go next. */
+        if (impl->server != nullptr)
+            impl->server->stop (false);
+
         if (impl->resolver != nullptr)
             impl->resolver->stopNow();
-
-
-        if (impl->server != nullptr)
-            impl->server->stop();
 
         impl->receiver.stop();
         impl->receiverPort = -1;

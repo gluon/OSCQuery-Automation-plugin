@@ -171,10 +171,10 @@ namespace oqa::editor
 
                     if (column == address && view.actions.pointDevice != nullptr)
                     {
-                        const auto text = label->getText().trim();
-                        const auto colon = text.lastIndexOfChar (':');
-                        const auto host = colon > 0 ? text.substring (0, colon).trim() : text;
-                        const auto port = colon > 0 ? text.substring (colon + 1).getIntValue() : device.port;
+                        const auto typed = label->getText().trim();
+                        const auto colon = typed.lastIndexOfChar (':');
+                        const auto host = colon > 0 ? typed.substring (0, colon).trim() : typed;
+                        const auto port = colon > 0 ? typed.substring (colon + 1).getIntValue() : device.port;
 
                         if (host.isNotEmpty() && port > 0 && port < 65536)
                         {

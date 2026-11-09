@@ -967,6 +967,88 @@ the records, the handoff.
   RANGE: enter min and max", echo loop "<n> echoes dropped by the loop guard", dropped sends "<n> held
   by the rate limiter, <n> datagrams dropped").
 
+**Record, 2026-11-09 (built; the DAW rows of the done-when open, Phases 3 to 5b's with them).**
+Built in nine commits on `main` in one session, 6a-1 to 6f, in the plan's order, plus one fix between
+6b-3 and 6d-1 (the Windows exit, below). Report:
+[`docs/bench/2026-11-09-phase6-monitor.md`](bench/2026-11-09-phase6-monitor.md).
+
+- *Done so far, measured on this machine (Debug, loopback) by the suites, and in CI on three
+  platforms:* the registry's settings persist in a per-user file beside the recents and read back
+  through a second registry; the process-wide status lists every instance with its bound slots and
+  the registry's word on each, rates each way over a one-second window, the server, the settings
+  file and the Finder; a device's timing set by hand, by index or by NAME, stands process-wide and
+  lands in every chunk on save; the library has an OSCQuery server of its own, judged by the
+  library's own client on C1, C4, C5, C6, C7 and L1 to L4; the registry serves the plugin's slot
+  table at the PRD's namespace, announced over DNS-SD as "OSCQuery Automation @ <machine> (<host
+  app>)" with `/server/process_id` as its identity leaf, and a write to it binds, ranges, scales,
+  directs, names or unbinds a slot through a command queue the shim drains on its main thread, the
+  host told: **the done-when's second clause holds headless in CI**, the CLAP harness seeing `rescan
+  (INFO)` and the new name after a write with no gui; `tools/oqa-bind.py` is the worked example. The
+  editor shows the registry's rates, the websocket's word, the last error with its age, greys an
+  unreachable device, edits the display name in place, shows the device's RANGE greyed when
+  overridden and goes back to it, clears the stale slots, copies the tree as JSON, takes a device's
+  timing by hand, says why a bind or a Test was refused, and gives every row a tooltip in the PRD's
+  failure table's words, from pure functions tested headless. The Monitor is a sixth plugin, `QMon`
+  for VST3 and AU and `io.github.pob31.oqa.QMon` for CLAP, zero slots, whose editor is the registry's
+  view: devices with their timing and address editable in place, every bound slot of every instance,
+  the server line, the settings form, *Clear recents*, and one pattern bound across every instance at
+  once; any editor opens the same view from *Monitor…*. A leaf drags from the tree onto a slot row; a
+  path typed into the Path cell binds, `$instance` substituted by the instance's number and the
+  pattern kept as `path_pattern`, so a change of number rebinds and a click-bind drops the pattern.
+  **The suites: unit 11, oscquery 106, core 134, clap 15 cases**, under C and fr_FR. **pluginval
+  1.0.4 at strictness 5 passes both Debug VST3s; clap-validator 0.4.1 on the Release module with six
+  plugins: 229 run, 155 passed, 0 failed, 74 skipped.**
+- *Implementer's decisions while building, the author's to overrule:* the Monitor offers **no params
+  extension** rather than one counting zero (clap-validator 0.4.1 divides by the count in
+  `param-conversions`), is an `analyzer` and `utility` to CLAP hosts, and keeps the stereo
+  pass-through buses so a host inserts it on a track; the Monitor's actions go by NAME and identity
+  (`setDeviceTimingByName`, `pointDeviceByName`), its chunk having no devices; applying a pattern
+  across instances is **a command queued for an instance by id** (additive ABI
+  `instanceEnqueueCommandJson`, `Instance::commandInstance`), the same commands the server queues,
+  each instance substituting its own number, so the Monitor still owns nothing; the server's own bind
+  command takes a pattern the same way; a change of number whose new path the device does not serve
+  **keeps the slot's binding and warns** which path was not served; *Clear recents* removes each entry
+  (`Recents` has no clear); the shade and tooltip functions live in a header with no JUCE
+  (`src/editor/SlotPresentation.h`) and the Monitor's rows in a juce_core-only model
+  (`MonitorModel`), both compiled into the core's tests; the editor's tree is re-read only when the
+  status's live hash moved, not every tick; the status bar's rates are the registry's, the editor no
+  longer diffing counters itself.
+- *Found on the way:* **at a process's end on Windows, `ExitProcess` kills every other thread before
+  the DLLs' static destructors run**, so a registry destructor that joined its threads failed fast
+  (0xC0000409) in every clap-validator subprocess once the server ran by default; the shared library's
+  `DllMain` (and the CLAP module's) notes `DLL_PROCESS_DETACH` with `lpReserved` set, and the
+  destructor then leaves everything to the OS; the resolver (the Finder) stops before the server, whose
+  unannounce used to restart it during static destruction. Thirty-seven clap-validator subprocesses of
+  the older build are still deadlocked in exit on this machine and hold the Release DLL open, so the
+  Release CLAP target fails at its copy step until a logoff; the module itself builds, and
+  clap-validator ran on a copy of it beside a fresh DLL. On the macOS runner, a test that read the
+  status of 32 instances every 10 ms block slowed the blocks below the rate it asked for; it reads
+  every tenth block now and asks for live rates above zero. A CI run (42673452864) twice created only
+  the `pins` and Linux jobs with no failure listed, a GitHub-side glitch; the next push ran four. A
+  `const std::string&` parameter that was the slot's own `pathPattern` was cleared by `bind()` before
+  it was read back: `bindPattern` copies it first. JUCE's `TreeView` starts a drag by itself once an
+  ancestor is a `DragAndDropContainer`, the item only naming its description. A doctest raw string
+  holding `(REAPER)"` ends the literal: a delimiter. **On the NUC, one clap-validator subprocess in
+  229 died with SIGSEGV in the server's HTTP reply** (`coredumpctl` read the core: the websocket
+  thread answering a sibling subprocess's Finder probe while the main thread was in
+  `Registry::shutdown()` at exit): SimpleWeb keeps its status-code table in a function-local static
+  made on the first reply, so it was destroyed before the registry singleton made earlier, and a
+  request answered in that window read a dead map. The library now makes the table when it loads, so
+  it outlives the registry; and `shutdown()` stops the server's serving first, without unannouncing
+  (the unannounce would restart the Finder), then the resolver. The farm's clap-validator runs after
+  the fix are in the bench report.
+- *The author's open items from planning:* the layout before the drag-bind and bulk operations are
+  polished, and the words for the failure-state tooltips, which stand as the implementer's defaults in
+  `SlotPresentation.h`.
+- *Still to fill, the author at the DAW:* the done-when's rows in REAPER and Bitwig over VST3 and CLAP
+  on this machine (every PRD UX item, the script binding a slot with the editor closed and the lane
+  renaming, the Monitor with 32 instances against WFS-DIY and go.dot, two DAWs announcing distinct
+  NAMEs, the firewall prompt once), with the Phase 3, 4, 5 and 5b rows in the same sitting; the farm's
+  results are in the bench report. Phase 7 starts from here: the other four slot-count variants are one
+  line each in `src/shims/juce/CMakeLists.txt` (the function takes the count, the code, a tag and the
+  product name now) and already listed by the CLAP factory; the Monitor VST3 joins the installer and
+  pluginval runs on it in CI already.
+
 ---
 
 ## Phase 7 — AU, Linux, variants, installers · M

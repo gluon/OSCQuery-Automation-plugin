@@ -96,7 +96,8 @@ namespace oqa::core::server
         /*  Bind, build the first tree, announce; false with the reason kept
             for status() (a pinned port in use), never another port. */
         bool start (const RegistrySettings& settings, std::string& error);
-        void stop();
+        /** Stop serving; `unannounce` false leaves the DNS-SD record to whoever stops the Finder (the registry's shutdown). */
+        void stop (bool unannounce = true);
 
         bool isRunning() const;
 

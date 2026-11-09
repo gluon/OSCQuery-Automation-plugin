@@ -32,6 +32,15 @@ namespace oqa::oscquery::server
 {
     namespace
     {
+        /*  SimpleWeb keeps its status-code table in a function-local static,
+            made on the first reply. Made here instead, when this library
+            loads, so it is destroyed after the registry singleton (made later,
+            on first use) and not before it: a request answered while the
+            process is ending, after the table had gone and before the server
+            stopped, read a destroyed map (SIGSEGV in reply() on the NUC under
+            clap-validator, 2026-11-09, a sibling process's Finder probing). */
+        const bool statusCodesWarmed = ! SimpleWeb::status_code (SimpleWeb::StatusCode::success_ok).empty();
+
         //  Every attribute the proposal defines. Anything else is a 400.
         const juce::StringArray proposalAttributes { "FULL_PATH", "CONTENTS", "TYPE", "VALUE",
                                                      "RANGE", "ACCESS", "DESCRIPTION", "TAGS",
