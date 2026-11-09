@@ -20,9 +20,7 @@
 #include <core/rt/RtCheck.h>
 
 #include <algorithm>
-#include <atomic>
 #include <cstring>
-#include <string>
 
 namespace oqa::clapshim
 {
@@ -35,13 +33,26 @@ namespace oqa::clapshim
         }
     }
 
+    ClapPlugin& ClapPlugin::self (const clap_plugin_t* plugin) noexcept
+    {
+        return static_cast<ClapPlugin&> (PluginBase::from (plugin));
+    }
+
     ClapPlugin::ClapPlugin (const clap_plugin_descriptor_t* descriptor, const clap_host_t* host, int slotCount)
         : PluginBase (descriptor, host),
           loaded (core::RegistryLoader::load()),
           count (slotCount),
           core (loaded.api, slotCount, instanceLabel (descriptor)),
-          values (static_cast<std::size_t> (slotCount), 0.0f)
+          values (new std::atomic<float>[static_cast<std::size_t> (slotCount)]),
+          scratch (static_cast<std::size_t> (slotCount), 0.0f),
+          standing (static_cast<std::size_t> (slotCount)),
+          statusExtension {
+              [] (const clap_plugin_t* p) -> const char* { auto& me = self (p); me.statusText = me.core.statusJson(); return me.statusText.c_str(); },
+              [] (const clap_plugin_t* p) -> const char* { auto& me = self (p); me.settingsText = me.core.settingsJson(); return me.settingsText.c_str(); },
+          }
     {
+        for (int i = 0; i < slotCount; ++i)
+            values[static_cast<std::size_t> (i)].store (0.0f, std::memory_order_relaxed);
     }
 
     ClapPlugin::~ClapPlugin()
@@ -56,6 +67,8 @@ namespace oqa::clapshim
     bool ClapPlugin::init() noexcept
     {
         core.connect();
+        recordStanding();
+        shownRevision = core.revision();
 
         if (_host.canUseTimerSupport())
             if (! _host.timerSupportRegister (timerPeriodMs, &timerId))
@@ -75,9 +88,49 @@ namespace oqa::clapshim
         core.disconnect();
     }
 
+    const void* ClapPlugin::extension (const char* id) noexcept
+    {
+        if (id != nullptr && std::strcmp (id, OQA_CLAP_EXT_STATUS) == 0)
+            return &statusExtension;
+
+        return nullptr;
+    }
+
+    //==============================================================================
+    void ClapPlugin::applyEvents (const clap_input_events_t* in) noexcept
+    {
+        if (in == nullptr)
+            return;
+
+        const auto n = in->size (in);
+
+        for (std::uint32_t i = 0; i < n; ++i)
+        {
+            const auto* header = in->get (in, i);
+
+            if (header == nullptr || header->space_id != CLAP_CORE_EVENT_SPACE_ID || header->type != CLAP_EVENT_PARAM_VALUE)
+                continue;
+
+            const auto* event = reinterpret_cast<const clap_event_param_value_t*> (header);
+
+            if (event->param_id < static_cast<clap_id> (count))
+                values[event->param_id].store (static_cast<float> (std::clamp (event->value, 0.0, 1.0)), std::memory_order_relaxed);
+        }
+    }
+
+    void ClapPlugin::postValues() noexcept
+    {
+        for (int i = 0; i < count; ++i)
+            scratch[static_cast<std::size_t> (i)] = values[static_cast<std::size_t> (i)].load (std::memory_order_relaxed);
+
+        core.processBlock (scratch.data(), count);
+    }
+
     clap_process_status ClapPlugin::process (const clap_process_t* process) noexcept
     {
         const core::rt::ScopedRealtimeCheck region;
+
+        applyEvents (process->in_events);
 
         /*  Audio: nothing. Where the host gave output buffers of its own,
             the input is copied over; in place, there is nothing to do. */
@@ -97,7 +150,7 @@ namespace oqa::clapshim
             }
         }
 
-        core.processBlock (values.data(), count);
+        postValues();
         return CLAP_PROCESS_CONTINUE;
     }
 
@@ -126,7 +179,10 @@ namespace oqa::clapshim
     {
         /*  The chunk, the parameters' values in it (Phase 5b: a CLAP keeps
             its own). Written whole, in as many calls as the stream takes. */
-        core.setValues (values.data(), count);
+        for (int i = 0; i < count; ++i)
+            scratch[static_cast<std::size_t> (i)] = values[static_cast<std::size_t> (i)].load (std::memory_order_relaxed);
+
+        core.setValues (scratch.data(), count);
         const auto json = core.saveState();
 
         std::size_t written = 0;
@@ -169,16 +225,28 @@ namespace oqa::clapshim
 
         const auto& saved = core.chunk().values;
 
-        for (std::size_t i = 0; i < values.size(); ++i)
-            values[i] = i < saved.size() ? saved[i] : 0.0f;
+        for (std::size_t i = 0; i < static_cast<std::size_t> (count); ++i)
+            values[i].store (i < saved.size() ? saved[i] : 0.0f, std::memory_order_relaxed);
 
+        /*  Names, modules and hidden flags follow the bindings; the values
+            changed too, so the host reads them again. */
+        bindingsChanged (CLAP_PARAM_RESCAN_VALUES);
         return true;
     }
 
     //==============================================================================
     void ClapPlugin::onTimer (clap_id) noexcept
     {
-        /*  Phase 5b-2: the revision poll and the settings; 5b-3: the nudge
-            that closes an idle gesture while the host is not processing. */
+        if (++ticks % slowEveryTicks != 0)
+            return;
+
+        /*  A binding made by anything but a state load (the editor, Phase
+            5b-4; a future headless path) renames too. The clear rule reads
+            the standing recorded at the previous look, so the record is
+            refreshed after. */
+        if (core.revision() != shownRevision)
+            bindingsChanged();
+
+        recordStanding();
     }
 }

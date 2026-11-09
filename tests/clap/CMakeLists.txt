@@ -21,9 +21,10 @@ add_executable(oqa_clap_tests
     ../TestMain.cpp
     ../support/RtAllocCounter.cpp
     TestHost.h
-    ClapTests.cpp)
+    ClapTests.cpp
+    ClapParamsTests.cpp)
 
-target_include_directories(oqa_clap_tests PRIVATE "${CMAKE_SOURCE_DIR}/tests")
+target_include_directories(oqa_clap_tests PRIVATE "${CMAKE_SOURCE_DIR}/tests" "${CMAKE_SOURCE_DIR}/src")
 target_include_directories(oqa_clap_tests SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/ThirdParty/doctest")
 
 # The module and the shared core library this build makes. The harness points the module's

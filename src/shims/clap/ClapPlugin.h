@@ -20,15 +20,38 @@
 /*
     THE CLAP SHIM'S PLUGIN (devplan Phase 5b): one clap_plugin over one
     core::Instance, thin on purpose, as the JUCE shim's processor is. It
-    does the same four things with the core:
+    does the same things with the core:
 
       init, activate      connect() to the registry (in init too, so an
                           editor opened on a never-activated plugin has a
                           registry; again in activate, a host may restart)
       deactivate, destroy disconnect()
-      process             audio passes through untouched; the slots' values
-                          go to the core, which posts what moved and ends the
-                          block (Phase 5b-2: the parameter events first)
+      process, flush      the parameter events are applied (the last value
+                          of each slot in the block; decided 2026-11-09, the
+                          sample-accurate send waits for a device that
+                          honours timetags), audio passes through untouched,
+                          the slots' values go to the core, which posts what
+                          moved and ends the block
+      params              one per slot, id = slot index, 0-1, AUTOMATABLE;
+                          HIDDEN while unbound (the PRD's "hidden where the
+                          format allows"); name = display name; module =
+                          device NAME plus the path's container, so the host
+                          groups lanes by device and node; the text in device
+                          units through the slot's own scaling. Never STEPPED:
+                          flipping that flag would need RESCAN_ALL, which a
+                          host only takes while the plugin is inactive, and a
+                          toggle binds while the transport runs.
+      rename              whenever the core's revision moves (a bind, a
+                          rename, a state load), rescan (RESCAN_INFO): CLAP's
+                          one rescan covers name, module and hidden, at once,
+                          while active (clap/ext/params.h)
+      clear()             decided 2026-11-09: only when a slot whose standing
+                          was `missing` or `retyped` is rebound to a different
+                          device or path (the curve was drawn for a target
+                          that is gone); never on a rename rebind, never on
+                          unbind, never on rebinding a live slot. The shim
+                          keeps each slot's last standing from the status for
+                          that.
       state               the core's JSON chunk over clap_istream and
                           clap_ostream, the parameters' values in it
 
@@ -40,12 +63,17 @@
     see it), in Release it is ignored.
 */
 
+#include "StatusExtension.h"
+
 #include <core/Instance.h>
 #include <core/registry/RegistryLoader.h>
 
 #include <clap/helpers/plugin.hh>
 
+#include <atomic>
 #include <cstdint>
+#include <memory>
+#include <string>
 #include <vector>
 
 namespace oqa::clapshim
@@ -74,31 +102,78 @@ namespace oqa::clapshim
         bool activate (double sampleRate, std::uint32_t minFrames, std::uint32_t maxFrames) noexcept override;
         void deactivate() noexcept override;
         clap_process_status process (const clap_process_t* process) noexcept override;
+        const void* extension (const char* id) noexcept override;
 
         //  clap_plugin_audio_ports: one stereo port each way, in place
         bool implementsAudioPorts() const noexcept override { return true; }
         std::uint32_t audioPortsCount (bool isInput) const noexcept override;
         bool audioPortsInfo (std::uint32_t index, bool isInput, clap_audio_port_info_t* info) const noexcept override;
 
+        //  clap_plugin_params: one per slot (ClapParams.cpp)
+        bool implementsParams() const noexcept override { return true; }
+        std::uint32_t paramsCount() const noexcept override;
+        bool paramsInfo (std::uint32_t index, clap_param_info_t* info) const noexcept override;
+        bool paramsValue (clap_id id, double* value) noexcept override;
+        bool paramsValueToText (clap_id id, double value, char* display, std::uint32_t size) noexcept override;
+        bool paramsTextToValue (clap_id id, const char* display, double* value) noexcept override;
+        void paramsFlush (const clap_input_events_t* in, const clap_output_events_t* out) noexcept override;
+
         //  clap_plugin_state: the chunk
         bool implementsState() const noexcept override { return true; }
         bool stateSave (const clap_ostream_t* stream) noexcept override;
         bool stateLoad (const clap_istream_t* stream) noexcept override;
 
-        //  clap_plugin_timer_support: the 50 ms tick (Phase 5b-2 and 5b-3 fill it)
+        //  clap_plugin_timer_support: the 50 ms tick
         bool implementsTimerSupport() const noexcept override { return true; }
         void onTimer (clap_id timerId) noexcept override;
 
     private:
         static constexpr std::uint32_t timerPeriodMs = 50;
+        static constexpr int slowEveryTicks = 5;     ///< the revision poll and the status, every 250 ms
+
+        /** This plugin from its clap_plugin, for the extension's trampolines. */
+        static ClapPlugin& self (const clap_plugin_t* plugin) noexcept;
+
+        /** Apply the parameter events of a list: each slot's last value. Audio thread, or main when inactive. */
+        void applyEvents (const clap_input_events_t* in) noexcept;
+
+        /** The values to the core: what moved is posted, the block ended. */
+        void postValues() noexcept;
+
+        /*  The bindings changed (a bind, a rename, a state load): the clear
+            rule against the last standing recorded, then the host told
+            (RESCAN_INFO, plus `moreFlags`). Main thread. */
+        void bindingsChanged (clap_param_rescan_flags moreFlags = 0) noexcept;
+
+        /** Each slot's binding and standing as of now, for the next bindingsChanged. Main thread. */
+        void recordStanding() noexcept;
 
         const core::LoadedCore& loaded;
         const int count;
         core::Instance core;
 
-        /** The host's value of every slot, 0-1: written by the events, read by process and the state. */
-        std::vector<float> values;
+        /*  The host's value of every slot, 0-1: written by the events on the
+            audio thread and by a state load on the main one, read by both. */
+        std::unique_ptr<std::atomic<float>[]> values;
+        std::vector<float> scratch;
+
+        /** What each slot was bound to, and how the registry judged it, at the last look. */
+        struct Standing
+        {
+            int deviceIndex = -1;
+            std::string path;
+            std::size_t argIndex = 0;
+            std::string state;      ///< the status's word: ok, missing, retyped, renamed...; empty when unbound or unchecked
+        };
+
+        std::vector<Standing> standing;
+        std::uint64_t shownRevision = 0;
+        int ticks = 0;
 
         clap_id timerId = CLAP_INVALID_ID;
+
+        //  The status extension's strings, kept until the next call.
+        std::string statusText, settingsText;
+        const oqa_clap_status_t statusExtension;
     };
 }

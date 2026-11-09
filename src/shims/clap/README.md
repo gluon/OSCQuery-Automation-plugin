@@ -11,10 +11,13 @@ One module, `OSCQuery Automation.clap`, whose factory lists the five slot-count 
 `destroy`, audio through untouched, the state chunk over `clap_istream`/`clap_ostream` with the
 parameters' values in it, a 50 ms host timer.
 
-Built so far: **5b-1** (the module, the factory, lifecycle, audio, state). To come: the params
-extension with `CLAP_PARAM_IS_HIDDEN`, `rescan`, `clear()` and `module` (5b-2), record as
-out-events (5b-3), the JUCE editor in the host's window (5b-4), the loader reusing a core already
-in the process (5b-5).
+Built so far: **5b-1** (the module, the factory, lifecycle, audio, state); **5b-2** the params
+extension (`ClapParams.cpp`: one 0–1 parameter per slot, `CLAP_PARAM_IS_HIDDEN` while unbound,
+`module` from the device NAME and the path's container, text in device units, `rescan (INFO)` when
+the bindings change, `clear()` by the rule of 2026-11-09), and `StatusExtension.h`, a vendor
+extension answering the instance's status and the settings as JSON for the test host and for
+diagnosis without the editor. To come: record as out-events (5b-3), the JUCE editor in the host's
+window (5b-4), the loader reusing a core already in the process (5b-5).
 
 `tests/clap/` is a host of our own that loads the built module and drives it through the C API;
 clap-validator runs on it in CI.
