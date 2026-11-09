@@ -74,6 +74,29 @@ namespace
 }
 
 //==============================================================================
+TEST_CASE ("registry: after shutdown() an instance registered anew is served again, resolver included")
+{
+    /*  A CLAP host deinits the binary after a scan and inits it again to use
+        the plugins (Phase 5b): the registry it shut down then must confirm a
+        device again, which is the resolver's work, so its thread restarts
+        with the first instance registered. */
+    Registry::shared().shutdown();
+
+    Rig rig;
+    const auto& gain = rig.leafWhere ([] (const Node& n) { return isRangedFloat (n) && n.argumentCount() == 1; });
+
+    Instance a (api(), 8, "after-shutdown");
+    std::string why;
+    REQUIRE (a.bind (0, gain, 0, a.addDevice (rig.device ("after-shutdown")), why));
+    a.connect();
+    rig.waitReady (a);
+
+    float values[8] = {};
+    values[0] = 0.5f;
+    a.processBlock (values, 8);
+    CHECK (waitUntil ([&] { return messagesIn (bundlesReceived (rig.mock)) >= 1; }));
+}
+
 TEST_CASE ("registry: two instances on one device make one bundle per block, with both messages")
 {
     Rig rig;

@@ -31,6 +31,7 @@ namespace oqa::core
             constexpr const char* version         = "version";
             constexpr const char* devices         = "devices";
             constexpr const char* slots           = "slots";
+            constexpr const char* values          = "values";
 
             constexpr const char* name            = "name";
             constexpr const char* lastHost        = "last_host";
@@ -67,7 +68,7 @@ namespace oqa::core
             key::scaling, key::direction, key::displayName, key::rangeOverridden, key::unit, key::critical
         };
 
-        const std::set<std::string> topKeys { key::version, key::devices, key::slots };
+        const std::set<std::string> topKeys { key::version, key::devices, key::slots, key::values };
 
         /*  juce::var::isObject() is true for an array too, and the DynamicObject
             behind an array is null (learnt in Phase 2). */
@@ -405,6 +406,26 @@ namespace oqa::core
             }
         }
 
+        if (const auto* values = object->getProperty (key::values).getArray())
+        {
+            /*  One per slot, in order. A longer list is a bigger variant's:
+                what fits is kept, the rest is this plugin's to drop, said
+                once. A shorter one leaves the slots beyond it unsaid. */
+            const auto n = std::min (values->size(), slotCount);
+
+            for (int i = 0; i < n; ++i)
+            {
+                const auto& v = (*values)[i];
+                chunk.values.push_back (v.isDouble() || v.isInt() || v.isInt64()
+                                            ? juce::jlimit (0.0f, 1.0f, static_cast<float> (static_cast<double> (v)))
+                                            : 0.0f);
+            }
+
+            if (values->size() > slotCount)
+                chunk.warnings.push_back ("values: " + std::to_string (values->size()) + " for a table of "
+                                          + std::to_string (slotCount) + " slots; the rest dropped");
+        }
+
         keepExtras (*object, topKeys, chunk.extras);
         return chunk;
     }
@@ -433,6 +454,16 @@ namespace oqa::core
         }
 
         object->setProperty (key::slots, slotArray);
+
+        if (! values.empty())
+        {
+            juce::Array<juce::var> valueArray;
+
+            for (const auto v : values)
+                valueArray.add (static_cast<double> (v));
+
+            object->setProperty (key::values, valueArray);
+        }
 
         writeExtras (*object, extras);
         return juce::var (object);

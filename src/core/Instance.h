@@ -97,6 +97,13 @@ namespace oqa::core
             save"), so the session reopens where the device was last. */
         std::string saveState();
 
+        /*  The host's current value of every slot, 0-1, for the next
+            saveState() (Phase 5b: the chunk carries `values`). The shim calls
+            it before saving; after loadState() the shim reads chunk().values
+            back into its parameters, where the list is as long as the table
+            or shorter. */
+        void setValues (const float* normalised, int valueCount);
+
         /*  A device for slots to point at: its index in the chunk, reusing an
             entry with the same name and identity value. A known device added
             again at another address is pointed there, process-wide (5b). */

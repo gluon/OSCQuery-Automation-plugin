@@ -235,6 +235,14 @@ namespace oqa::core
         return state.toJson();
     }
 
+    void Instance::setValues (const float* normalised, int valueCount)
+    {
+        state.values.assign (static_cast<std::size_t> (count), 0.0f);
+
+        for (int i = 0; i < count && i < valueCount && normalised != nullptr; ++i)
+            state.values[static_cast<std::size_t> (i)] = juce::jlimit (0.0f, 1.0f, normalised[i]);
+    }
+
     int Instance::addDevice (const DeviceRef& device)
     {
         for (std::size_t i = 0; i < state.devices.size(); ++i)

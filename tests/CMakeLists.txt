@@ -50,3 +50,6 @@ add_test(NAME unit.fr_FR COMMAND oqa_tests --oqa-locale=${OQA_LOCALE_FR})
 
 # The core's tests (devplan Phase 3): core.C and core.fr_FR.
 add_subdirectory(core)
+
+# The CLAP shim's tests (devplan Phase 5b): a host of our own loads the built .clap.
+add_subdirectory(clap)

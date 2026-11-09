@@ -14,7 +14,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 # The core first (devplan Phase 3), the editor's sources (an interface target), then the
-# JUCE shim that links both. src/shims/clap waits for Phase 5b.
+# two shims that link both: JUCE's (VST3 and AU) and our own CLAP (Phase 5b).
 add_subdirectory(core)
 add_subdirectory(editor)
 add_subdirectory(shims/juce)
+add_subdirectory(shims/clap)

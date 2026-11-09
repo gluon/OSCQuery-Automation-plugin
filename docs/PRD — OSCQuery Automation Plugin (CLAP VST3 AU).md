@@ -113,6 +113,7 @@ The plugin never changes its parameter count at runtime. It changes names, group
 - AU never hides an unbound slot (decided 2026-11-08, after the Phase 1 format bench): AUv2 has no hidden flag, and the one means it has, leaving the slot out of the parameter list, deleted automation in REAPER and kept the slots out of GarageBand. Unbound AU slots are named `(unbound)`, as in VST3. CLAP's `is_hidden` is unaffected.
 - Build with JUCE. VST3 and AU first, through JUCE's own wrappers; CLAP at milestone 4b through a shim of our own written against the CLAP C API with `clap-helpers`. Neither `clap-juce-extensions` nor `clap-wrapper` is used (decided 2026-11-04: JUCE 9.0.5 has no native CLAP and nothing on `develop` points to one, so nothing waits on JUCE). The shim interface is written for CLAP's capabilities from the start; VST3 and AU answer *unsupported* where they must.
 - Slot-count variants are five plugin IDs (8/16/32/64/128), decided by consequence the same day: with JUCE each ID is its own binary and VST3 cannot hide slots. The process-wide registry therefore lives in a shared core library loaded by every binary, after WFS-DIY's Bridge.
+- The CLAP ids are `io.github.pob31.oqa.Q008` … `Q128`, the bundle ids the JUCE shim gives the same codes, all five listed by one `.clap` (decided 2026-11-09, milestone 4b). Like the VST3 and AU identities, they never change once a session has saved one.
 - AAX is deferred; its parameter list is frozen at instantiation and Avid's SDK agreement conflicts with an open-source distribution.
 
 ## Transport, send and record directions
@@ -149,6 +150,7 @@ All bindings live in the plugin's state chunk inside the DAW session. No externa
 - `version`
 - `devices[]`: `name`, `last_host`, `last_port`, `tree_hash` (hash of the bindable leaves at bind time), `identity_path` and `identity_value` (optional), `honours_timetags`, `offset_ms`
 - `slots[]`: `host_param_id`, `device_index`, `path`, `arg_index`, `type`, `range`, `scaling`, `direction`, `display_name`, `range_overridden`
+- `values[]`: every slot's host value, 0–1, in slot order (added 2026-11-09, milestone 4b: a CLAP restores its own parameter values from its state, and clap-validator checks that it does; every format writes them, so the chunk opens anywhere with its values)
 
 **Reopening a session**
 

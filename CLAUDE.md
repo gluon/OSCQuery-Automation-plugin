@@ -76,7 +76,9 @@ Each plugin instance owns a fixed pool of **N generic slots** (N = 32 by default
   WFS-DIY), plugin codes `Q008` `Q016` `Q032` `Q064` `Q128` and `QMon` for the Monitor,
   `JUCE_VST3_CAN_REPLACE_VST2=0`. The VST3 and AU IDs derive from these; changing one orphans
   every saved session. Shims are `src/shims/juce/` (VST3 and AU) and `src/shims/clap/`
-  (decided 2026-11-04).
+  (decided 2026-11-04). **The CLAP ids are `io.github.pob31.oqa.Q008` … `Q128`**, the bundle
+  ids the JUCE shim gives the same codes, one `.clap` listing all five; its macOS bundle id is
+  `io.github.pob31.oqa.clap` (decided 2026-11-09).
 - **The Core profile adds no field to OSCQuery.** No UUID, no `TIMETAGS`, no `REPLY_PORT`.
   Anything the plugin needs beyond the proposal is a plugin-side setting or lives in the device's
   own tree. OSCQuery is itself a proposal that needs support, not a rewrite.

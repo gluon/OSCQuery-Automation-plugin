@@ -55,6 +55,17 @@ set_target_properties(juce_simpleweb PROPERTIES INTERFACE_LINK_LIBRARIES "")
 target_include_directories(juce_simpleweb INTERFACE "${CMAKE_SOURCE_DIR}/cmake/JuceHeaderStub")
 
 # ---------------------------------------------------------------------------
+# 2b. CLAP — the C API headers and clap-helpers, for src/shims/clap (devplan Phase 5b)
+# ---------------------------------------------------------------------------
+# Both are header-only INTERFACE targets (`clap`, `clap-helpers`). EXCLUDE_FROM_ALL keeps
+# clap's install() rules out of this build; clap-helpers wants the `clap` target first and
+# fatal-errors otherwise. Neither builds its tests.
+set(CLAP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(CLAP_HELPERS_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+add_subdirectory("${CMAKE_SOURCE_DIR}/ThirdParty/clap" clap EXCLUDE_FROM_ALL)
+add_subdirectory("${CMAKE_SOURCE_DIR}/ThirdParty/clap-helpers" clap-helpers EXCLUDE_FROM_ALL)
+
+# ---------------------------------------------------------------------------
 # 3. oqa::juce_config — the switches, stated once
 # ---------------------------------------------------------------------------
 add_library(oqa_juce_config INTERFACE)

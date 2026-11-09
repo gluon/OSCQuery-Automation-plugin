@@ -6,7 +6,8 @@
 #
 #   pins     no compiler: CLAUDE.md against the PRD, submodule pins against
 #            THIRD_PARTY_NOTICES.md, GPL headers. The cheapest job; the others wait for it.
-#   linux    build, test under C and fr_FR, Release plugin, pluginval, artefact.
+#   linux    build, test under C and fr_FR, Release plugin, pluginval, the CLAP and
+#            clap-validator (Phase 5b), artefact.
 #   macos    the same, VST3 and AU built, VST3 validated (auval is Phase 1's).
 #   windows  the same, on the VS 2026 image.
 #
@@ -32,6 +33,11 @@ env:
   PLUGINVAL_URL: https://github.com/Tracktion/pluginval/releases/download/v1.0.4
   PLUGIN_DIR: src/shims/juce/oqa_plugin_32_artefacts/Release
   PLUGIN_NAME: OSCQuery Automation 32
+  # clap-validator 0.4.1 (THIRD_PARTY_NOTICES.md); its release assets carry the build string.
+  CLAP_VALIDATOR_URL: https://github.com/free-audio/clap-validator/releases/download/0.4.1
+  CLAP_VALIDATOR_BUILD: clap-validator-0.4.1-127-g152b982
+  CLAP_DIR: src/shims/clap/oqa_clap_artefacts/Release
+  CLAP_NAME: OSCQuery Automation.clap
 
 jobs:
   pins:
@@ -116,8 +122,8 @@ jobs:
       - name: Test (Debug, C and fr_FR)
         run: ctest --preset ci-linux
 
-      - name: Build the plugin (Release)
-        run: cmake --build --preset ci-linux-release --target oqa_plugin_32_All
+      - name: Build the plugin and the CLAP (Release)
+        run: cmake --build --preset ci-linux-release --target oqa_plugin_32_All oqa_clap
 
       - name: pluginval, strictness 5
         run: |
@@ -127,10 +133,20 @@ jobs:
           xvfb-run -a ./pluginval/pluginval --strictness-level 5 --validate-in-process \
             --timeout-ms 300000 --validate "build/ci-linux/$PLUGIN_DIR/VST3/$PLUGIN_NAME.vst3"
 
+      - name: clap-validator
+        run: |
+          curl -sSL -o clap-validator.zip "$CLAP_VALIDATOR_URL/$CLAP_VALIDATOR_BUILD-ubuntu-22.04.zip"
+          unzip -q clap-validator.zip -d clap-validator
+          CV=$(find clap-validator -type f -name 'clap-validator*' | head -1)
+          chmod +x "$CV"
+          "$CV" validate "build/ci-linux/$CLAP_DIR/$CLAP_NAME"
+
       - uses: actions/upload-artifact@v5
         with:
           name: oqa-plugin-linux-unsigned
-          path: build/ci-linux/${{ env.PLUGIN_DIR }}/VST3/
+          path: |
+            build/ci-linux/${{ env.PLUGIN_DIR }}/VST3/
+            build/ci-linux/${{ env.CLAP_DIR }}/
           if-no-files-found: error
 
   macos:
@@ -171,8 +187,8 @@ jobs:
       - name: Test (Debug, C and fr_FR)
         run: ctest --preset ci-macos
 
-      - name: Build the plugin (Release)
-        run: cmake --build --preset ci-macos-release --target oqa_plugin_32_All
+      - name: Build the plugin and the CLAP (Release)
+        run: cmake --build --preset ci-macos-release --target oqa_plugin_32_All oqa_clap
 
       - name: pluginval, strictness 5 (VST3)
         run: |
@@ -181,12 +197,21 @@ jobs:
           ./pluginval/pluginval.app/Contents/MacOS/pluginval --strictness-level 5 --validate-in-process \
             --timeout-ms 300000 --validate "build/ci-macos/$PLUGIN_DIR/VST3/$PLUGIN_NAME.vst3"
 
+      - name: clap-validator
+        run: |
+          curl -sSL -o clap-validator.zip "$CLAP_VALIDATOR_URL/$CLAP_VALIDATOR_BUILD-macos-universal.zip"
+          unzip -q clap-validator.zip -d clap-validator
+          CV=$(find clap-validator -type f -name 'clap-validator*' | head -1)
+          chmod +x "$CV"
+          "$CV" validate "build/ci-macos/$CLAP_DIR/$CLAP_NAME"
+
       - uses: actions/upload-artifact@v5
         with:
           name: oqa-plugin-macos-unsigned
           path: |
             build/ci-macos/${{ env.PLUGIN_DIR }}/VST3/
             build/ci-macos/${{ env.PLUGIN_DIR }}/AU/
+            build/ci-macos/${{ env.CLAP_DIR }}/
           if-no-files-found: error
 
   windows:
@@ -208,8 +233,8 @@ jobs:
       - name: Test (Debug, C and fr-FR)
         run: ctest --preset ci-windows
 
-      - name: Build the plugin (Release)
-        run: cmake --build --preset ci-windows-release --target oqa_plugin_32_All --parallel
+      - name: Build the plugin and the CLAP (Release)
+        run: cmake --build --preset ci-windows-release --target oqa_plugin_32_All oqa_clap --parallel
 
       - name: pluginval, strictness 5
         shell: bash
@@ -219,8 +244,18 @@ jobs:
           ./pluginval/pluginval.exe --strictness-level 5 --validate-in-process \
             --timeout-ms 300000 --validate "build/ci-windows/$PLUGIN_DIR/VST3/$PLUGIN_NAME.vst3"
 
+      - name: clap-validator
+        shell: bash
+        run: |
+          curl -sSL -o clap-validator.zip "$CLAP_VALIDATOR_URL/$CLAP_VALIDATOR_BUILD-windows.zip"
+          unzip -q clap-validator.zip -d clap-validator
+          CV=$(find clap-validator -type f -name 'clap-validator*.exe' | head -1)
+          "$CV" validate "build/ci-windows/$CLAP_DIR/$CLAP_NAME"
+
       - uses: actions/upload-artifact@v5
         with:
           name: oqa-plugin-windows-unsigned
-          path: build/ci-windows/${{ env.PLUGIN_DIR }}/VST3/
+          path: |
+            build/ci-windows/${{ env.PLUGIN_DIR }}/VST3/
+            build/ci-windows/${{ env.CLAP_DIR }}/
           if-no-files-found: error

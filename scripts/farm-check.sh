@@ -16,7 +16,8 @@
 #
 # The CI job's checks on a farm machine (macOS or Linux), for when a runner is slow or a
 # branch is not pushed yet: configure `dev`, build Debug, ctest under C and fr_FR, build
-# the Release plugin, pluginval 1.0.4 at strictness 5. Logs go next to the checkout.
+# the Release plugin and the CLAP, pluginval 1.0.4 at strictness 5, clap-validator 0.4.1.
+# Logs go next to the checkout.
 #
 #   Usage: scripts/farm-check.sh <checkout>
 #
@@ -41,8 +42,8 @@ step "ctest"
 ctest --preset dev-debug || exit 1
 ./build/dev/tests/Debug/oqa_tests --oqa-locale=fr_FR.UTF-8 2>&1 | tail -3
 
-step "build Release plugin"
-cmake --build --preset dev-release --target oqa_plugin_32_All > ../farm-oqa-release.log 2>&1 || { grep -E "error|Error" ../farm-oqa-release.log | head -30; exit 1; }
+step "build Release plugin and CLAP"
+cmake --build --preset dev-release --target oqa_plugin_32_All oqa_clap > ../farm-oqa-release.log 2>&1 || { grep -E "error|Error" ../farm-oqa-release.log | head -30; exit 1; }
 ART=build/dev/src/shims/juce/oqa_plugin_32_artefacts/Release
 ls "$ART"
 VST="$ART/VST3/OSCQuery Automation 32.vst3"
@@ -67,4 +68,18 @@ ${PVRUN:-} $PV --strictness-level 5 --validate-in-process --timeout-ms 300000 $E
 RC=$?
 grep -E "FAILED|SUCCESS|!!!" ../farm-oqa-pluginval.log | tail -10
 echo "pluginval exit=$RC"
+[ $RC -eq 0 ] || exit $RC
+
+step "clap-validator 0.4.1"
+CLAP="build/dev/src/shims/clap/oqa_clap_artefacts/Release/OSCQuery Automation.clap"
+CVB=clap-validator-0.4.1-127-g152b982
+rm -rf ../clap-validator && mkdir ../clap-validator
+if [ "$OS" = Darwin ]; then CVZ="$CVB-macos-universal.zip"; else CVZ="$CVB-ubuntu-22.04.zip"; fi
+curl -sSL -o ../clap-validator/cv.zip "https://github.com/free-audio/clap-validator/releases/download/0.4.1/$CVZ"
+unzip -q ../clap-validator/cv.zip -d ../clap-validator
+CV=$(find ../clap-validator -type f -name 'clap-validator*' | head -1); chmod +x "$CV"
+"$CV" validate "$CLAP" > ../farm-oqa-clap-validator.log 2>&1
+RC=$?
+tail -5 ../farm-oqa-clap-validator.log
+echo "clap-validator exit=$RC"
 exit $RC

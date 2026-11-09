@@ -273,6 +273,34 @@ TEST_CASE ("v1-receive: three slots, one each way, read back as saved")
     CHECK (again->slots[1].direction == Direction::both);
 }
 
+TEST_CASE ("v1-values: every slot's host value reads back, a longer list is cut to the table with a warning, a chunk without one has none")
+{
+    const auto chunk = load ("v1-values.json", 8);
+    REQUIRE (chunk.values.size() == 8);
+    CHECK (chunk.values[1] == doctest::Approx (0.75f));
+    CHECK (chunk.values[3] == doctest::Approx (1.0f));
+    CHECK (chunk.values[7] == doctest::Approx (0.125f));
+    CHECK (chunk.warnings.empty());
+
+    /*  The same file read for a smaller variant: what fits is kept. */
+    const auto smaller = load ("v1-values.json", 4);
+    REQUIRE (smaller.values.size() == 4);
+    CHECK (smaller.values[3] == doctest::Approx (1.0f));
+    CHECK (mentions (smaller.warnings, "values: 8 for a table of 4"));
+
+    /*  Written back: the list as read, in order; and a chunk never given
+        values writes none, so every chunk saved before this field is
+        byte-identical on a round trip (the earlier cases). */
+    const auto var = juce::JSON::parse (chunk.toJson());
+    const auto* written = var.getProperty ("values", {}).getArray();
+    REQUIRE (written != nullptr);
+    REQUIRE (written->size() == 8);
+    CHECK (static_cast<double> ((*written)[1]) == doctest::Approx (0.75));
+
+    CHECK (load ("v1-receive.json", 8).values.empty());
+    CHECK (! juce::JSON::parse (load ("v1-receive.json", 8).toJson()).hasProperty ("values"));
+}
+
 TEST_CASE ("a fresh chunk made from bound slots writes what the PRD lists")
 {
     std::string error;

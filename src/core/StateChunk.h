@@ -32,6 +32,12 @@
                    (what the tree said, so the editor shows it before the
                    device is reached) and critical (the tree's CRITICAL, so
                    the reliable route is known before the tree is)
+      values[]     every slot's host value, normalised 0-1, in slot order
+                   (decided 2026-11-09, Phase 5b: a CLAP persists its own
+                   parameter values, and clap-validator checks that a saved
+                   state restores them; the JUCE shim writes them too, so a
+                   chunk opens in any format with its values). Optional on
+                   read: absent in every chunk saved before.
 
     ONLY BOUND SLOTS ARE WRITTEN. A slot absent from slots[] is unbound.
 
@@ -96,6 +102,9 @@ namespace oqa::core
 
         std::vector<DeviceRef> devices;
         SlotTable slots;
+
+        /** Every slot's host value, 0-1, in slot order; empty when the chunk carried none. */
+        std::vector<float> values;
 
         /** Top-level fields this version does not read. */
         juce::NamedValueSet extras;

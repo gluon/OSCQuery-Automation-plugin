@@ -140,6 +140,16 @@ namespace oqa::shim
     //==============================================================================
     void PluginProcessor::getStateInformation (juce::MemoryBlock& destination)
     {
+        /*  The parameters' values go into the chunk too (Phase 5b), so the
+            same bytes restore them in the CLAP, which has no host to keep
+            them for it. */
+        std::array<float, slotCount> current {};
+
+        for (std::size_t i = 0; i < slots.size(); ++i)
+            current[i] = slots[i]->getValue();
+
+        core.setValues (current.data(), slotCount);
+
         const auto json = core.saveState();
         destination.replaceAll (json.data(), json.size());
     }
@@ -151,6 +161,12 @@ namespace oqa::shim
 
         std::string error;
         core.loadState (std::string_view (static_cast<const char*> (data), static_cast<std::size_t> (sizeInBytes)), error);
+
+        const auto& saved = core.chunk().values;
+
+        for (std::size_t i = 0; i < saved.size() && i < slots.size(); ++i)
+            slots[i]->setValueNotifyingHost (saved[i]);
+
         bindingsChanged();
     }
 

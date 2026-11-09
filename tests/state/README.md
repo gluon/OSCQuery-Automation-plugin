@@ -14,3 +14,4 @@ never a real product's namespace.
 | `v1-extras.json` | 1 | Fields this version does not know, at the top level, on a device and on a slot; a slot beyond 8 slots; a slot naming no device; an unknown scaling name |
 | `v1-empty.json` | 1 | A session with nothing bound |
 | `v1-receive.json` | 1 | One device; a read-only float set to receive, a ranged float set to both, a ranged float set to send (Phase 4: driven through the registry in `tests/core/ReceiveTests.cpp`) |
+| `v1-values.json` | 1 | One device, one bound slot, and `values`: every slot's host value, eight of them for an 8-slot table (Phase 5b: what a CLAP restores from its own state) |

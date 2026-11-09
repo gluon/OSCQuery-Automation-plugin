@@ -1928,6 +1928,16 @@ namespace oqa::core
 
             void poke() { wake.signal(); }
 
+            /*  After shutdown() the thread is gone; a host that re-inits the
+                plugin binary (CLAP hosts deinit after a scan and init again
+                to use the plugins) gets a resolver again on the first
+                instance registered. A no-op while the thread runs. */
+            void restart()
+            {
+                if (! isThreadRunning())
+                    startThread (Priority::normal);
+            }
+
             /** Start the Finder with the options at hand; a no-op once it runs. Any thread but under no registry lock. */
             void ensureFinder()
             {
@@ -2296,6 +2306,9 @@ namespace oqa::core
     Registry::InstanceRecord* Registry::registerInstance (const std::string& label, int slotCount)
     {
         const std::lock_guard<std::mutex> guard (impl->lock);
+
+        if (impl->resolver != nullptr)
+            impl->resolver->restart();
 
         auto record = std::make_unique<InstanceRecord>();
         record->id = impl->nextInstanceId++;

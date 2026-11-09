@@ -115,8 +115,8 @@ binary. Full text: `ThirdParty/doctest/LICENSE.txt`.
 - **Licence**: MIT
 - **Copyright**: Alexandre Bique
 
-The CLAP C API headers, for the project's own CLAP shim (devplan Phase 5b). Pinned now, not yet
-built. Full text: `ThirdParty/clap/LICENSE`.
+The CLAP C API headers, compiled into the project's own CLAP shim (`src/shims/clap`, devplan
+Phase 5b). Full text: `ThirdParty/clap/LICENSE`.
 
 ---
 
@@ -129,8 +129,8 @@ built. Full text: `ThirdParty/clap/LICENSE`.
 - **Licence**: MIT
 - **Copyright**: Alexandre Bique
 
-C++ helpers over the CLAP API, for the same shim. Pinned now, not yet built. Full text:
-`ThirdParty/clap-helpers/LICENSE`.
+C++ helpers over the CLAP API (the `Plugin` and `HostProxy` templates), compiled into the same
+shim. Full text: `ThirdParty/clap-helpers/LICENSE`.
 
 ---
 
@@ -139,3 +139,6 @@ C++ helpers over the CLAP API, for the same shim. Pinned now, not yet built. Ful
 - **pluginval** 1.0.4 (https://github.com/Tracktion/pluginval, GPLv3, Tracktion Corporation):
   downloaded from its release page by `.github/workflows/ci.yml` to validate the built plugins. It
   never reaches the repository or a binary.
+- **clap-validator** 0.4.1 (https://github.com/free-audio/clap-validator, MIT, Robbert van der
+  Helm): downloaded from its release page by `.github/workflows/ci.yml` and `scripts/farm-check.sh`
+  to validate the built CLAP (devplan Phase 5b). It never reaches the repository or a binary.
