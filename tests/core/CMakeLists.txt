@@ -31,6 +31,7 @@ add_executable(oqa_core_tests
     RegistryTests.cpp
     ReceiveTests.cpp
     UdpReceiveTests.cpp
+    GestureTests.cpp
     LoaderTests.cpp)
 
 target_include_directories(oqa_core_tests PRIVATE "${CMAKE_SOURCE_DIR}/tests")

@@ -53,15 +53,24 @@ namespace oqa::shim
         }
 
         bindingsChanged();
+        refreshSettings();
 
-        /*  A slow look at the core's revision, so a binding made by anything
-            but this editor (a reload, a future headless path) renames too. */
-        startTimer (250);
+        /*  Record: the registry wakes us once per message a device streams;
+            the values are pushed to the host on the message thread. */
+        core.setReceiveWake ([this] { triggerAsyncUpdate(); });
+
+        /*  Every 50 ms: gestures idle past the timeout are closed. Every fifth
+            tick, a slow look at the core's revision, so a binding made by
+            anything but this editor (a reload, a future headless path)
+            renames too, and at the settings, for the timeout. */
+        startTimer (50);
     }
 
     PluginProcessor::~PluginProcessor()
     {
         stopTimer();
+        cancelPendingUpdate();
+        closeGestures();
         core.disconnect();
     }
 
@@ -87,6 +96,7 @@ namespace oqa::shim
 
     void PluginProcessor::releaseResources()
     {
+        closeGestures();
         core.disconnect();
     }
 
@@ -158,8 +168,51 @@ namespace oqa::shim
 
     void PluginProcessor::timerCallback()
     {
+        /*  A gesture a device opened closes when the device goes quiet. */
+        gestures.expire (juce::Time::getMillisecondCounterHiRes(), gestureTimeoutMs,
+                         [this] (int slot) { slots[static_cast<std::size_t> (slot)]->endChangeGesture(); });
+
+        if (++ticksSinceSlowWork < 5)
+            return;
+
+        ticksSinceSlowWork = 0;
+
         if (core.revision() != shownRevision)
             bindingsChanged();
+
+        refreshSettings();
+    }
+
+    //==============================================================================
+    void PluginProcessor::handleAsyncUpdate()
+    {
+        /*  The message thread. Each value the registry holds for one of our
+            receiving slots: the gesture first, when this is its first value,
+            then the value, as a hand on the fader would. */
+        const auto now = juce::Time::getMillisecondCounterHiRes();
+
+        core.pollReceived ([this, now] (int slot, float normalised)
+        {
+            auto* parameter = slots[static_cast<std::size_t> (slot)];
+
+            if (gestures.received (slot, now))
+                parameter->beginChangeGesture();
+
+            parameter->setValueNotifyingHost (normalised);
+        });
+    }
+
+    void PluginProcessor::closeGestures()
+    {
+        gestures.closeAll ([this] (int slot) { slots[static_cast<std::size_t> (slot)]->endChangeGesture(); });
+    }
+
+    void PluginProcessor::refreshSettings()
+    {
+        const auto settings = juce::JSON::parse (juce::String (core.settingsJson()));
+
+        if (settings.hasProperty ("gesture_timeout_ms"))
+            gestureTimeoutMs = juce::jlimit (10.0, 60000.0, static_cast<double> (settings["gesture_timeout_ms"]));
     }
 }
 

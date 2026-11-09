@@ -148,6 +148,12 @@ namespace oqa::core
         /** The registry's view of this instance's devices, and its warnings, as JSON. */
         std::string statusJson() const;
 
+        /** The registry's process-wide settings as JSON (direct_send, receive_port, gesture_timeout_ms...). */
+        std::string settingsJson() const;
+
+        /** Fields present in `json` replace the registry's; false with the reason when it is not JSON. */
+        bool setSettingsJson (std::string_view json, std::string& error);
+
         /** What the registry could not honour in the last push, in words. */
         const std::vector<std::string>& warnings() const noexcept { return lastWarnings; }
 

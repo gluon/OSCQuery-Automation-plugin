@@ -385,4 +385,29 @@ namespace oqa::core
 
         return takeError (api->instanceStatusJson (handle));
     }
+
+    std::string Instance::settingsJson() const
+    {
+        if (api == nullptr)
+            return "{}";
+
+        return takeError (api->settingsJson());
+    }
+
+    bool Instance::setSettingsJson (std::string_view json, std::string& error)
+    {
+        if (api == nullptr)
+        {
+            error = "no registry";
+            return false;
+        }
+
+        char* text = nullptr;
+
+        if (api->settingsSetJson (std::string (json).c_str(), &text) == 0)
+            return true;
+
+        error = takeError (text);
+        return false;
+    }
 }

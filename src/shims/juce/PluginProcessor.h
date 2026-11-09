@@ -20,7 +20,7 @@
 /*
     THE JUCE SHIM'S PROCESSOR: VST3 everywhere, AU on macOS, thin on purpose
     (devplan: "the editor is a client of the core; the three format shims are
-    thin"). It owns one core::Instance and does three things with it:
+    thin"). It owns one core::Instance and does four things with it:
 
       prepareToPlay      connect() to the registry, every time (Logic restarts
                          its hosting process; WFS-DIY learnt it the hard way)
@@ -28,6 +28,20 @@
       and the destructor not call releaseResources (JUCE's LV2 wrapper never does)
       processBlock       audio passes through untouched; the slots' values go
                          to the core, which posts what moved and ends the block
+      record (Phase 4)   the registry wakes this processor once per message a
+                         device streams for a receiving slot; on the message
+                         thread the values are polled and pushed to the host
+                         as parameter changes inside a gesture: opened by the
+                         first value, closed by the timer after the idle
+                         timeout (gesture_timeout_ms, default 200). Whether a
+                         lane records is the host's mode (Write, Touch, Latch
+                         or Read), as the PRD decides; the plugin only tells it
+                         when a hand is on the fader.
+
+    WHY THE MESSAGE THREAD for the push: JUCE's VST3 wrapper forwards
+    setValueNotifyingHost to the host's performEdit on the calling thread, and
+    VST3 wants its component handler called from the UI thread. An
+    AsyncUpdater, triggered from the registry's wake, is the marshal.
 
     The state chunk is the core's JSON, as bytes. Names follow the bindings:
     whenever the core's revision moves, every SlotParameter is told its slot
@@ -42,6 +56,7 @@
 #include "SlotParameter.h"
 
 #include <core/Instance.h>
+#include <core/receive/Gesture.h>
 #include <core/registry/RegistryLoader.h>
 
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -53,7 +68,8 @@
 namespace oqa::shim
 {
     class PluginProcessor final : public juce::AudioProcessor,
-                                  private juce::Timer
+                                  private juce::Timer,
+                                  private juce::AsyncUpdater
     {
     public:
         PluginProcessor();
@@ -97,14 +113,25 @@ namespace oqa::shim
         /** Tell the parameters and the host that the bindings changed. Message thread. */
         void bindingsChanged();
 
+        /** How many slots have a host gesture open right now, for the editor and the tests. */
+        int openGestures() const noexcept { return gestures.openCount(); }
+
     private:
         void timerCallback() override;
+        void handleAsyncUpdate() override;
+        void closeGestures();
+        void refreshSettings();
 
         const core::LoadedCore& loaded;
         core::Instance core;
         std::vector<SlotParameter*> slots;
         std::array<float, slotCount> values {};
         std::uint64_t shownRevision = 0;
+
+        //  Record, on the message thread.
+        core::GestureTracker gestures { slotCount };
+        double gestureTimeoutMs = 200.0;
+        int ticksSinceSlowWork = 0;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PluginProcessor)
     };

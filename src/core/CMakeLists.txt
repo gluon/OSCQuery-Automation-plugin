@@ -51,7 +51,11 @@ add_library(oqa_core STATIC
 
     # 3c: finding the shared core library beside the plugin, or doing without.
     registry/RegistryLoader.h
-    registry/RegistryLoader.cpp)
+    registry/RegistryLoader.cpp
+
+    # 4c: the gesture a received value opens in the host, as bookkeeping the shims share.
+    receive/Gesture.h
+    receive/Gesture.cpp)
 add_library(oqa::core ALIAS oqa_core)
 
 set_target_properties(oqa_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
