@@ -470,6 +470,42 @@ when declared, else a UDP port shown in the editor and configured on the device 
 
 **Companion in WFS-DIY:** none required; LISTEN exists.
 
+**Planned, 2026-11-09.** Broken into five subphases, each one commit on `main` with its tests, as
+Phase 3 was: **4a** the receive path in the registry (a Group for every bound slot, LISTEN on every
+group path, incoming values scaled to 0–1 and handed to the instance through two additive entries
+of the C ABI, the undriven arguments of an `fff` kept current, the loop guard and its counter);
+**4b** the UDP receiver for devices without LISTEN (one port per process, a setting, routed by
+sender address then path, the port and this host's addresses in the status); **4c** the shim's
+gesture path (a pure `GestureTracker` under test, the push to the host on the message thread,
+the idle timeout); **4d** the editor (received rates, the guard counter, the receive port shown
+and editable, the "waiting to be told the port" state); **4e** the bench in REAPER on Windows and
+the Mac mini against WFS-DIY, Chataigne, ossia score and go.dot as sources, the records, the
+amendments.
+
+- *Decided by the author the same day:* the **gesture idle timeout defaults to 200 ms**, a
+  setting; the **UDP receive port defaults to 0 (ephemeral)**, a setting the editor shows and
+  edits, 9000 being what the bench types for WFS-DIY; the **Phase 3 REAPER rows are filled in the
+  same DAW sitting as 4e** and both records close then; **Bitwig over VST3 is an extra bench row**,
+  not a gate, the CLAP gate staying Phase 5b.
+- *Facts found while planning:* the library's `Device` callbacks fire on the Device's own worker
+  thread, not on the registry's per-device network thread, so the receive path runs there and
+  never on the audio thread; the registry today makes a Group for sending slots only; JUCE's VST3
+  wrapper forwards `performEdit` on whichever thread calls `setValueNotifyingHost`, and VST3 wants
+  the UI thread, so the push is marshalled to the message thread; WFS-DIY's OSC feedback goes to
+  the client's UDP 9000 (the author, 2026-11-08); `UdpEndpoint`'s handler is fixed at `start()`.
+- *Implementer's decisions, the author's to overrule:* LISTEN on every bound path, sending ones
+  included, because the stream is also what keeps an `fff`'s undriven arguments current (the
+  Phase 3 record's open item); the undriven arguments become atomics so the Device thread may
+  write what the network thread reads; a host value equal to the last one received for that slot
+  is not posted back (the `both` direction does not echo), the device-side loop guard staying as
+  the safety net and the PRD's counter; the UDP receiver routes by the sender's address against
+  each device's resolved OSC host, then by path, and delivers to every candidate still ambiguous,
+  counting it; the two ABI entries are additive (no version bump), and an older library beside
+  the plugin is refused by the loader's size check, the static core taking over and saying so;
+  lock order is the registry's lock then a device entry's groups lock, never the reverse; the
+  settings `receive_port`, `loop_guard_ms` and `gesture_timeout_ms` join the registry's
+  process-wide JSON, their persistence and full UI staying Phase 6's Monitor.
+
 ---
 
 ## Phase 5 — Re-identification, stale slots, export · M
