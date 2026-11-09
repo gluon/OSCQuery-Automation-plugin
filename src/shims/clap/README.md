@@ -6,7 +6,8 @@ is used (decided 2026-11-04). It calls the same core as the JUCE shim; no core c
 
 One module, `OSCQuery Automation.clap`, whose factory lists the five slot-count variants
 (`Descriptors.h`) under the ids `io.github.pob31.oqa.Q008` … `Q128`, fixed for good on
-2026-11-09. `Entry.cpp` is `clap_entry` and the factory; `ClapPlugin` is one plugin over one
+2026-11-09, and since Phase 6c the Monitor, `io.github.pob31.oqa.QMon`, zero parameters, whose
+gui is the registry's view (`editor::MonitorRoot`). `Entry.cpp` is `clap_entry` and the factory; `ClapPlugin` is one plugin over one
 `core::Instance`: `connect()` in `init` and `activate`, `disconnect()` in `deactivate` and
 `destroy`, audio through untouched, the state chunk over `clap_istream`/`clap_ostream` with the
 parameters' values in it, a 50 ms host timer.

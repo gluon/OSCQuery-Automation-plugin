@@ -43,10 +43,11 @@ ctest --preset dev-debug || exit 1
 ./build/dev/tests/Debug/oqa_tests --oqa-locale=fr_FR.UTF-8 2>&1 | tail -3
 
 step "build Release plugin and CLAP"
-cmake --build --preset dev-release --target oqa_plugin_32_All oqa_clap > ../farm-oqa-release.log 2>&1 || { grep -E "error|Error" ../farm-oqa-release.log | head -30; exit 1; }
+cmake --build --preset dev-release --target oqa_plugin_32_All oqa_plugin_monitor_All oqa_clap > ../farm-oqa-release.log 2>&1 || { grep -E "error|Error" ../farm-oqa-release.log | head -30; exit 1; }
 ART=build/dev/src/shims/juce/oqa_plugin_32_artefacts/Release
 ls "$ART"
 VST="$ART/VST3/OSCQuery Automation 32.vst3"
+MONITOR="build/dev/src/shims/juce/oqa_plugin_monitor_artefacts/Release/VST3/OSCQuery Automation Monitor.vst3"
 
 step "pluginval 1.0.4, strictness 5"
 rm -rf ../pluginval && mkdir ../pluginval
@@ -68,6 +69,13 @@ ${PVRUN:-} $PV --strictness-level 5 --validate-in-process --timeout-ms 300000 $E
 RC=$?
 grep -E "FAILED|SUCCESS|!!!" ../farm-oqa-pluginval.log | tail -10
 echo "pluginval exit=$RC"
+[ $RC -eq 0 ] || exit $RC
+
+step "pluginval on the Monitor (Phase 6c)"
+${PVRUN:-} $PV --strictness-level 5 --validate-in-process --timeout-ms 300000 $EXTRA --validate "$MONITOR" > ../farm-oqa-pluginval-monitor.log 2>&1
+RC=$?
+grep -E "FAILED|SUCCESS|!!!" ../farm-oqa-pluginval-monitor.log | tail -10
+echo "pluginval (Monitor) exit=$RC"
 [ $RC -eq 0 ] || exit $RC
 
 step "clap-validator 0.4.1"

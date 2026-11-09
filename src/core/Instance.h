@@ -119,6 +119,16 @@ namespace oqa::core
             the registry, every instance's on their next save. */
         void setDeviceTiming (int deviceIndex, bool honoursTimetags, double offsetMs);
 
+        /*  The same by NAME and identity value, for the Monitor (6c), whose
+            chunk has no devices: process-wide, every instance's chunk takes
+            it on save. False when the registry has no such device. */
+        bool setDeviceTimingByName (const std::string& name, const std::string& identityValue, bool honoursTimetags, double offsetMs);
+
+        /*  Point a device by NAME and identity value (the Monitor's "pointing
+            once": PRD, Re-identification); every instance referring to it
+            follows. False when the registry has no such device. */
+        bool pointDeviceByName (const std::string& name, const std::string& identityValue, const std::string& host, int port);
+
         //==============================================================================
         //  Re-identification (Phase 5b).
 

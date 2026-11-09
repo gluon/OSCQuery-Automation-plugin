@@ -70,8 +70,9 @@
                           and the host is not processing, so it closes.
       state               the core's JSON chunk over clap_istream and
                           clap_ostream, the parameters' values in it
-      gui (5b-4)          the one editor (editor::EditorRoot) in the host's
-                          window on win32, cocoa and x11, embedded only;
+      gui (5b-4)          the one editor (editor::EditorRoot; for the Monitor,
+                          zero slots, editor::MonitorRoot, Phase 6c) in the
+                          host's window on win32, cocoa and x11, embedded only;
                           JUCE initialised in init() on the host's main
                           thread; on Linux JUCE's descriptors watched through
                           the host's posix-fd support (LinuxEventPump), or
@@ -92,6 +93,7 @@
 #include <core/receive/Gesture.h>
 #include <core/registry/RegistryLoader.h>
 #include <editor/EditorRoot.h>
+#include <editor/MonitorRoot.h>
 
 #include <clap/helpers/plugin.hh>
 
@@ -137,8 +139,10 @@ namespace oqa::clapshim
         std::uint32_t audioPortsCount (bool isInput) const noexcept override;
         bool audioPortsInfo (std::uint32_t index, bool isInput, clap_audio_port_info_t* info) const noexcept override;
 
-        //  clap_plugin_params: one per slot (ClapParams.cpp)
-        bool implementsParams() const noexcept override { return true; }
+        //  clap_plugin_params: one per slot (ClapParams.cpp); the Monitor,
+        //  with none, offers no params extension at all (clap-validator 0.4.1
+        //  divides by the count in param-conversions)
+        bool implementsParams() const noexcept override { return count > 0; }
         std::uint32_t paramsCount() const noexcept override;
         bool paramsInfo (std::uint32_t index, clap_param_info_t* info) const noexcept override;
         bool paramsValue (clap_id id, double* value) noexcept override;
@@ -259,6 +263,9 @@ namespace oqa::clapshim
       #if defined (__linux__)
         std::unique_ptr<LinuxEventPump> pump;
       #endif
-        std::unique_ptr<editor::EditorRoot> editor;
+        std::unique_ptr<juce::Component> editor;
+
+        /** The root's own limits, in logical pixels, taken from its constants at guiCreate. */
+        struct { int minimumWidth = 0, minimumHeight = 0, maximumWidth = 0, maximumHeight = 0; } editorLimits;
     };
 }

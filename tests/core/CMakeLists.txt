@@ -42,7 +42,11 @@ add_executable(oqa_core_tests
     TimingTests.cpp
     ServerTests.cpp
     CommandTests.cpp
-    PresentationTests.cpp)
+    PresentationTests.cpp
+    MonitorModelTests.cpp
+    # The Monitor's rows, juce_core only (src/editor/README.md): compiled here, not through
+    # oqa::editor, whose other sources want a GUI module.
+    "${CMAKE_SOURCE_DIR}/src/editor/MonitorModel.cpp")
 
 target_include_directories(oqa_core_tests PRIVATE "${CMAKE_SOURCE_DIR}/tests")
 target_include_directories(oqa_core_tests SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/ThirdParty/doctest")

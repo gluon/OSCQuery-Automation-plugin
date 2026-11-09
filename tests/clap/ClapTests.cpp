@@ -16,7 +16,7 @@
 */
 
 /*
-    THE CLAP SHIM, 5b-1: the module loads, its factory lists the five
+    THE CLAP SHIM, 5b-1: the module loads, its factory lists the five (six with the Monitor, 6c)
     variants with the ids decided on 2026-11-09, each is created and taken
     through its lifecycle with audio passing through, and the state chunk
     goes in and out through CLAP's streams byte for byte, the parameters'
@@ -45,6 +45,7 @@ namespace
     {
         switch (slots)
         {
+            case 0:   return "io.github.pob31.oqa.QMon";
             case 8:   return "io.github.pob31.oqa.Q008";
             case 16:  return "io.github.pob31.oqa.Q016";
             case 32:  return "io.github.pob31.oqa.Q032";
@@ -55,7 +56,7 @@ namespace
 }
 
 //==============================================================================
-TEST_CASE ("clap entry: the module loads, is CLAP 1.x, and its factory lists the five variants with the agreed ids")
+TEST_CASE ("clap entry: the module loads, is CLAP 1.x, and its factory lists the five variants and the Monitor with the agreed ids")
 {
     const auto& module = LoadedModule::get();
     REQUIRE_MESSAGE (module.entry != nullptr, module.error);
@@ -63,7 +64,7 @@ TEST_CASE ("clap entry: the module loads, is CLAP 1.x, and its factory lists the
     MESSAGE ("module: " << module.path);
 
     CHECK (module.entry->clap_version.major == 1);
-    REQUIRE (module.factory->get_plugin_count (module.factory) == 5);
+    REQUIRE (module.factory->get_plugin_count (module.factory) == 6);
 
     const int slots[] = { 8, 16, 32, 64, 128 };
 
@@ -80,7 +81,18 @@ TEST_CASE ("clap entry: the module loads, is CLAP 1.x, and its factory lists the
         CHECK (std::string (d->features[0]) == CLAP_PLUGIN_FEATURE_AUDIO_EFFECT);
     }
 
-    CHECK (module.factory->get_plugin_descriptor (module.factory, 5) == nullptr);
+    /*  The Monitor (6c): sixth, zero parameters, an analyzer to the host. */
+    {
+        const auto* d = module.factory->get_plugin_descriptor (module.factory, 5);
+        REQUIRE (d != nullptr);
+        CHECK (std::string (d->id) == idOf (0));
+        CHECK (std::string (d->name) == "OSCQuery Automation Monitor");
+        CHECK (std::string (d->vendor) == "Pix et Bel");
+        REQUIRE (d->features != nullptr);
+        CHECK (std::string (d->features[0]) == CLAP_PLUGIN_FEATURE_ANALYZER);
+    }
+
+    CHECK (module.factory->get_plugin_descriptor (module.factory, 6) == nullptr);
     CHECK (module.entry->get_factory ("not.a.factory") == nullptr);
 
     RecordingHost host;

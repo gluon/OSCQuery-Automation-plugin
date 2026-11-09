@@ -11,4 +11,10 @@ to the host's window. It compiles with `juce_gui_basics` only, inside whichever 
 shade and the tooltip in the PRD's failure table's words), so `tests/core/PresentationTests.cpp`
 asserts them headless and `SlotTable` only paints (Phase 6d-1).
 
+The Monitor (Phase 6c, 6e) is `MonitorRoot` over `MonitorView`: the registry's devices with their
+timing and address editable in place, every bound slot of every instance, the server line and the
+per-user settings form. Its rows are `MonitorModel`, read from the process-wide status JSON with
+juce_core only, so `tests/core/MonitorModelTests.cpp` asserts them from a fixture. The Monitor
+plugin (`QMon`, zero slots) is this root as its editor; a slot plugin opens the same view (6d-2).
+
 First cut in devplan **Phase 3**, finished in **Phase 6**.

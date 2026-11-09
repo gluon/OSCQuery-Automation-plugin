@@ -20,10 +20,11 @@
 #include <core/rt/RtCheck.h>
 #include "EditorWindow.h"
 
-// The five plugin IDs are five slot counts (PRD, Binding model). Phase 3 builds one.
+// The five plugin IDs are five slot counts (PRD, Binding model); the Monitor is a sixth with
+// none (Phase 6c). Phase 3 builds one slot count.
 static_assert (OQA_SLOT_COUNT == 8 || OQA_SLOT_COUNT == 16 || OQA_SLOT_COUNT == 32
-                   || OQA_SLOT_COUNT == 64 || OQA_SLOT_COUNT == 128,
-               "OQA_SLOT_COUNT must be one of the five variants");
+                   || OQA_SLOT_COUNT == 64 || OQA_SLOT_COUNT == 128 || OQA_SLOT_COUNT == 0,
+               "OQA_SLOT_COUNT must be one of the five variants, or 0 for the Monitor");
 
 namespace oqa::shim
 {
@@ -125,14 +126,29 @@ namespace oqa::shim
 
     juce::AudioProcessorEditor* PluginProcessor::createEditor()
     {
-        editor::Host host {
-            core,
-            [this] { bindingsChanged(); },
-            [this] (int slot) { return slot >= 0 && slot < slotCount ? slots[static_cast<std::size_t> (slot)]->getValue() : 0.0f; },
-            loaded.shared ? "Shared core library: " + juce::String (loaded.path) : juce::String (loaded.note)
-        };
+        const auto coreNote = loaded.shared ? "Shared core library: " + juce::String (loaded.path) : juce::String (loaded.note);
 
-        return new EditorWindow (*this, std::move (host));
+        /*  The Monitor (zero slots) opens the registry's view; a slot plugin
+            its editor. */
+        if constexpr (slotCount == 0)
+        {
+            using Root = editor::MonitorRoot;
+            return new EditorWindow (*this, std::make_unique<Root> (editor::MonitorHost { core, coreNote }),
+                                     { Root::defaultWidth, Root::defaultHeight, Root::minimumWidth, Root::minimumHeight, Root::maximumWidth, Root::maximumHeight });
+        }
+        else
+        {
+            using Root = editor::EditorRoot;
+            editor::Host host {
+                core,
+                [this] { bindingsChanged(); },
+                [this] (int slot) { return slot >= 0 && slot < slotCount ? slots[static_cast<std::size_t> (slot)]->getValue() : 0.0f; },
+                coreNote
+            };
+
+            return new EditorWindow (*this, std::make_unique<Root> (std::move (host)),
+                                     { Root::defaultWidth, Root::defaultHeight, Root::minimumWidth, Root::minimumHeight, Root::maximumWidth, Root::maximumHeight });
+        }
     }
 
     bool PluginProcessor::acceptsMidi() const { return false; }

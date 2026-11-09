@@ -677,6 +677,22 @@ namespace oqa::core
             api->deviceSetTiming (ref.name.c_str(), ref.identityValue.value_or (std::string()).c_str(), honoursTimetags ? 1 : 0, ref.offsetMs);
     }
 
+    bool Instance::setDeviceTimingByName (const std::string& name, const std::string& identityValue, bool honoursTimetags, double offsetMs)
+    {
+        if (handle == nullptr || api == nullptr || name.empty() || ! tableHas (api, &OqaCoreApi::deviceSetTiming))
+            return false;
+
+        return api->deviceSetTiming (name.c_str(), identityValue.c_str(), honoursTimetags ? 1 : 0, std::isfinite (offsetMs) ? offsetMs : 0.0) == 0;
+    }
+
+    bool Instance::pointDeviceByName (const std::string& name, const std::string& identityValue, const std::string& host, int port)
+    {
+        if (handle == nullptr || api == nullptr || name.empty() || host.empty() || port <= 0 || port > 65535)
+            return false;
+
+        return api->deviceSetAddress (name.c_str(), identityValue.c_str(), host.c_str(), port) == 0;
+    }
+
     void Instance::setDeviceTreeHash (int deviceIndex, const std::string& hash)
     {
         if (deviceIndex < 0 || deviceIndex >= static_cast<int> (state.devices.size()))

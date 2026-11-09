@@ -18,8 +18,8 @@
 /*
     THE ENTRY POINT AND THE FACTORY (devplan Phase 5b): clap_entry, the one
     symbol the module exports, and a factory listing the five slot-count
-    variants (Descriptors.h). Every method is thread-safe and quick, as a
-    host scanning plugins wants.
+    variants and the Monitor (Descriptors.h). Every method is thread-safe
+    and quick, as a host scanning plugins wants.
 
     This is the one translation unit that instantiates clap-helpers' Plugin
     and HostProxy templates: the other files include the .hh declarations
@@ -58,9 +58,11 @@ namespace oqa::clapshim
     namespace
     {
         const char* const features[] = { CLAP_PLUGIN_FEATURE_AUDIO_EFFECT, CLAP_PLUGIN_FEATURE_UTILITY, nullptr };
+        const char* const monitorFeatures[] = { CLAP_PLUGIN_FEATURE_ANALYZER, CLAP_PLUGIN_FEATURE_UTILITY, nullptr };
 
         constexpr const char* url        = "https://github.com/pob31/OSCQuery-Automation-plugin";
         constexpr const char* description = "Automation lanes bound to OSCQuery parameters";
+        constexpr const char* monitorDescription = "The registry's view: devices, every slot across instances, rates, errors, settings";
 
         constexpr clap_plugin_descriptor_t makeDescriptor (const Variant& v) noexcept
         {
@@ -73,8 +75,8 @@ namespace oqa::clapshim
                 url,
                 url,
                 OQA_VERSION_STRING,
-                description,
-                features
+                v.slots > 0 ? description : monitorDescription,
+                v.slots > 0 ? features : monitorFeatures
             };
         }
 
@@ -84,6 +86,7 @@ namespace oqa::clapshim
             makeDescriptor (variants[2]),
             makeDescriptor (variants[3]),
             makeDescriptor (variants[4]),
+            makeDescriptor (variants[5]),
         };
 
         static_assert (sizeof (descriptors) / sizeof (descriptors[0]) == static_cast<std::size_t> (variantCount));

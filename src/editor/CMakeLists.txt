@@ -33,6 +33,12 @@ target_sources(oqa_editor INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/SlotTable.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/StatusBar.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/StatusBar.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/SlotPresentation.h")
+    "${CMAKE_CURRENT_SOURCE_DIR}/SlotPresentation.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/MonitorModel.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/MonitorModel.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/MonitorView.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/MonitorView.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/MonitorRoot.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/MonitorRoot.cpp")
 
 target_include_directories(oqa_editor INTERFACE "${CMAKE_SOURCE_DIR}/src")

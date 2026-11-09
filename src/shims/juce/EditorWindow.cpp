@@ -19,20 +19,19 @@
 
 namespace oqa::shim
 {
-    EditorWindow::EditorWindow (juce::AudioProcessor& processor, editor::Host host)
+    EditorWindow::EditorWindow (juce::AudioProcessor& processor, std::unique_ptr<juce::Component> rootIn, SizeHints hints)
         : juce::AudioProcessorEditor (processor),
-          root (std::move (host))
+          root (std::move (rootIn))
     {
-        addAndMakeVisible (root);
+        addAndMakeVisible (*root);
 
-        using Root = editor::EditorRoot;
         setResizable (true, true);
-        setResizeLimits (Root::minimumWidth, Root::minimumHeight, Root::maximumWidth, Root::maximumHeight);
-        setSize (Root::defaultWidth, Root::defaultHeight);
+        setResizeLimits (hints.minimumWidth, hints.minimumHeight, hints.maximumWidth, hints.maximumHeight);
+        setSize (hints.defaultWidth, hints.defaultHeight);
     }
 
     void EditorWindow::resized()
     {
-        root.setBounds (getLocalBounds());
+        root->setBounds (getLocalBounds());
     }
 }

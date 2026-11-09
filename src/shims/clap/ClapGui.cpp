@@ -17,8 +17,8 @@
 
 /*
     THE GUI EXTENSION (Phase 5b-4): the one editor (editor::EditorRoot, a
-    plain juce::Component since 5b-0) in the host's window, embedded, on
-    win32, cocoa and x11. Sizes cross the API as CLAP defines them per
+    plain juce::Component since 5b-0; editor::MonitorRoot for the Monitor,
+    6c) in the host's window, embedded, on win32, cocoa and x11. Sizes cross the API as CLAP defines them per
     window api: physical pixels on win32 and x11, logical on cocoa
     (clap/ext/gui.h); JUCE's peer knows the scale once there is a parent,
     before that the two agree. set_scale is declined: JUCE scales from the
@@ -46,7 +46,6 @@ namespace oqa::clapshim
           #endif
         }
 
-        using Root = editor::EditorRoot;
     }
 
     double ClapPlugin::guiScale() const noexcept
@@ -84,14 +83,28 @@ namespace oqa::clapshim
         if (! guiIsApiSupported (api, isFloating) || juceInit == nullptr)
             return false;
 
-        editor::Host host {
-            core,
-            [this] { bindingsChanged(); },
-            [this] (int slot) { return slot >= 0 && slot < count ? values[static_cast<std::size_t> (slot)].load (std::memory_order_relaxed) : 0.0f; },
-            loaded.shared ? "Shared core library: " + juce::String (loaded.path) : juce::String (loaded.note)
-        };
+        const auto coreNote = loaded.shared ? "Shared core library: " + juce::String (loaded.path) : juce::String (loaded.note);
 
-        editor = std::make_unique<Root> (std::move (host));
+        if (count == 0)
+        {
+            using Root = editor::MonitorRoot;
+            editor = std::make_unique<Root> (editor::MonitorHost { core, coreNote });
+            editorLimits = { Root::minimumWidth, Root::minimumHeight, Root::maximumWidth, Root::maximumHeight };
+        }
+        else
+        {
+            using Root = editor::EditorRoot;
+            editor::Host host {
+                core,
+                [this] { bindingsChanged(); },
+                [this] (int slot) { return slot >= 0 && slot < count ? values[static_cast<std::size_t> (slot)].load (std::memory_order_relaxed) : 0.0f; },
+                coreNote
+            };
+
+            editor = std::make_unique<Root> (std::move (host));
+            editorLimits = { Root::minimumWidth, Root::minimumHeight, Root::maximumWidth, Root::maximumHeight };
+        }
+
         editor->setOpaque (true);
         return true;
     }
@@ -143,8 +156,8 @@ namespace oqa::clapshim
 
         /*  To logical pixels, within the editor's limits, back. */
         const auto s = guiScale();
-        const auto w = std::clamp (static_cast<int> (std::lround (*width / s)),  Root::minimumWidth,  Root::maximumWidth);
-        const auto h = std::clamp (static_cast<int> (std::lround (*height / s)), Root::minimumHeight, Root::maximumHeight);
+        const auto w = std::clamp (static_cast<int> (std::lround (*width / s)),  editorLimits.minimumWidth,  editorLimits.maximumWidth);
+        const auto h = std::clamp (static_cast<int> (std::lround (*height / s)), editorLimits.minimumHeight, editorLimits.maximumHeight);
         *width  = static_cast<std::uint32_t> (std::lround (w * s));
         *height = static_cast<std::uint32_t> (std::lround (h * s));
         return true;

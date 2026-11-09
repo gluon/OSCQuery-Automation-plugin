@@ -18,8 +18,10 @@
 #pragma once
 
 /*
-    THE FIVE VARIANTS THE FACTORY LISTS (PRD, Binding model: "8, 16, 32, 64
-    and 128 variants as separate plugin IDs so the host sees a fixed count").
+    THE SIX PLUGINS THE FACTORY LISTS: the five slot counts (PRD, Binding
+    model: "8, 16, 32, 64 and 128 variants as separate plugin IDs so the host
+    sees a fixed count") and the Monitor, zero parameters, the registry's
+    view (Phase 6c; decided 2026-11-09).
 
     PLUGIN IDENTITY, FIXED FOR GOOD (decided 2026-11-09): the CLAP id of a
     variant is the bundle id the JUCE shim gives the same code,
@@ -45,11 +47,12 @@ namespace oqa::clapshim
         { "Q032",  32, "io.github.pob31.oqa.Q032", "OSCQuery Automation 32"  },
         { "Q064",  64, "io.github.pob31.oqa.Q064", "OSCQuery Automation 64"  },
         { "Q128", 128, "io.github.pob31.oqa.Q128", "OSCQuery Automation 128" },
+        { "QMon",   0, "io.github.pob31.oqa.QMon", "OSCQuery Automation Monitor" },
     };
 
     inline constexpr int variantCount = static_cast<int> (sizeof (variants) / sizeof (variants[0]));
 
-    /** The descriptor of variant `index`, or nullptr beyond the five. Valid until the entry's deinit. */
+    /** The descriptor of variant `index`, or nullptr beyond the six. Valid until the entry's deinit. */
     const clap_plugin_descriptor_t* descriptor (int index) noexcept;
 
     /** The variant with this CLAP id, or nullptr. */

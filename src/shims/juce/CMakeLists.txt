@@ -22,7 +22,8 @@
 #
 #   Company "Pix et Bel", manufacturer code PxBl, as WFS-DIY.
 #   Plugin codes Q008 Q016 Q032 Q064 Q128 for the slot-count variants, QMon for the
-#   Monitor. Phase 0 builds Q032 only; Phase 7 adds the other four, one line each.
+#   Monitor (zero slots, Phase 6c). Phase 0 builds Q032 only; Phase 7 adds the other four,
+#   one line each.
 
 set(OQA_PLUGIN_COMPANY       "Pix et Bel")
 set(OQA_PLUGIN_MANUFACTURER  "PxBl")
@@ -33,17 +34,18 @@ if(APPLE)
     list(APPEND OQA_PLUGIN_FORMATS AU)
 endif()
 
-# One slot-count variant: target oqa_plugin_<slots>, product "OSCQuery Automation <slots>".
-function(oqa_add_plugin_variant slots code)
-    set(target oqa_plugin_${slots})
+# One variant: target oqa_plugin_<tag>, the product named as given; `slots` is 8..128, or 0 for
+# the Monitor.
+function(oqa_add_plugin_variant slots code tag product description)
+    set(target oqa_plugin_${tag})
 
     juce_add_plugin(${target}
         COMPANY_NAME                "${OQA_PLUGIN_COMPANY}"
         PLUGIN_MANUFACTURER_CODE    "${OQA_PLUGIN_MANUFACTURER}"
         PLUGIN_CODE                 "${code}"
         BUNDLE_ID                   "${OQA_PLUGIN_BUNDLE_PREFIX}.${code}"
-        PRODUCT_NAME                "OSCQuery Automation ${slots}"
-        DESCRIPTION                 "Automation lanes bound to OSCQuery parameters"
+        PRODUCT_NAME                "${product}"
+        DESCRIPTION                 "${description}"
         VERSION                     "${PROJECT_VERSION}"
         FORMATS                     ${OQA_PLUGIN_FORMATS}
         IS_SYNTH                    FALSE
@@ -109,4 +111,5 @@ function(oqa_add_plugin_variant slots code)
     endforeach()
 endfunction()
 
-oqa_add_plugin_variant(32 Q032)
+oqa_add_plugin_variant(32 Q032 32 "OSCQuery Automation 32" "Automation lanes bound to OSCQuery parameters")
+oqa_add_plugin_variant(0 QMon monitor "OSCQuery Automation Monitor" "The registry's view: devices, every slot across instances, rates, errors, settings")
