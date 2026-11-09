@@ -314,7 +314,11 @@ the records). Report of the bench: [`docs/bench/2026-11-08-phase2-library.md`](b
   value, resolved to one host:port), one network thread per device at
   realtime priority, a lock-free queue from each instance's audio thread. Instances register in
   `prepareToPlay` (or the CLAP `activate`) and again whenever the host restarts the process
-  (Logic's `AUHostingService` does this; WFS-DIY learnt it the hard way). The registry lives in
+  (Logic's `AUHostingService` does this; WFS-DIY learnt it the hard way). (Amended 2026-11-09 while
+  planning Phase 6: an instance registers at construction and stays registered for the plugin's life,
+  marked inactive while the host has stopped its audio, so the plugin's own server and the Monitor
+  keep stable paths and rows; `connect()` in `prepareToPlay`/`activate` is still called and still safe
+  to repeat.) The registry lives in
   a **shared core library** loaded by every plugin binary, after WFS-DIY's Bridge: versioned ABI,
   exact-match version check, installed next to the plugins. Every variant, and later the CLAP
   shim, links the same library, so one process has one registry whatever mix of binaries it
@@ -885,6 +889,83 @@ instances against two devices with live counters.
 
 **Needs from the author:** a look at the layout before the drag-bind and bulk operations are
 polished; the words for the failure-state tooltips.
+
+**Planned, 2026-11-09.** Broken into nine subphases, each one commit on `main` with its tests, as
+Phase 5b was: **6a-1** the registry's settings persisted per user (a file beside the recents, loaded
+at registry start, saved on change; new keys for the server); **6a-2** the Monitor's data (the
+process-wide status lists every instance with its bound slots and standing, per-device rates over a
+one-second window computed once in the registry, the device's own RANGE beside a slot's; instances
+registered for the plugin's life with an inactive flag); **6a-3** device timing settable process-wide
+with a hand-set precedence, copied back into every chunk on save and into the recents; **6b-1** a
+generic OSCQuery server in the library (`lib/oscquery/oscquery/server/`: a `Tree` served over HTTP and
+websocket on juce_simpleweb, LISTEN, the `PATH_*` notifications, OSC in over websocket and its own
+UDP port, per-client ACCESS by address for both, measured against C1, C4, C6, C7, L1–L4 by the
+library's own client); **6b-2** the plugin's server in the registry (`src/core/server/`), read-only,
+announced over DNS-SD by the Finder's Discovery, its tree `/plugin/<id>/slot/<n>/...`, `/device/<i>/...`,
+`/server/...`, C5 across a restart; **6b-3** writes: a slot bound, ranged, scaled, directed, named or
+unbound over the server through a command queue per instance, a second wake and a drain on the shim's
+main thread, the host told; a stdlib Python script as the worked example; **6d-1** the editor's
+data-driven items (rates each way, websocket state, last error with its age, reachability dot and last
+seen, the bind refusal and the Test error shown, the device RANGE greyed when overridden with a reset,
+per-device timing, inline display name, *Clear stale*, *Copy tree as JSON*, the tooltips); **6c+6e**
+the Monitor plugin (`QMon` for VST3 and AU, a sixth CLAP descriptor) and its view (devices, every
+instance's slots, the server, the settings) over a headless model; **6d-2** the interaction items after
+the author's look (drag a leaf onto a slot, `$instance`, *Monitor…* from any editor); **6f** the bench,
+the records, the handoff.
+
+- *Decided by the author the same day:* **the Monitor is a sixth CLAP descriptor**,
+  `io.github.pob31.oqa.QMon`, zero parameters, fixed for good; **server writes from loopback only by
+  default**, a setting (`server_allow`) opens it, other clients see the writable leaves as ACCESS 1,
+  the same list for UDP and websocket OSC; **the server's HTTP port is ephemeral by default**,
+  announced, shown in the Monitor, a setting pins it, a pinned port that fails to bind is a visible
+  error and never a silent fall-back; **`$instance` is a number the user sets per instance**, kept in
+  the chunk (`instance`, default 1), a path typed with the token bound with it substituted and the
+  pattern kept (`path_pattern`) so the Monitor applies one pattern across instances, the track name a
+  hint only; **instances stay registered for the plugin's life**, inactive while the host has stopped
+  their audio (the Phase 3 contract amended in place); **the server's NAME is "OSCQuery Automation @
+  <machine> (<host app>)"** with a read-only `/server/process_id` leaf as its identity leaf.
+- *Facts found while planning:* the registry's UDP receiver starts only when a receiving slot exists
+  or the port is set, and routes by device group path then sender, so it cannot be the server's
+  `OSC_PORT` (the server gets a UDP endpoint of its own); every push re-applies the chunk's device
+  timing, so a Monitor-set timing needs a hand-set precedence like the address and `saveState()`
+  copying it back; `statusJson (void)` is in the ABI already and only `Instance` lacks the wrapper;
+  `Recents` owns its `PropertiesFile`, and two such objects on one file overwrite each other's keys,
+  so the settings get a sibling file; `status()` serialises under the registry lock that every
+  streamed value takes, so the Monitor and the server would stall record unless the snapshot is taken
+  under the lock and serialised outside; `Slot::setRange` overwrites the device's range, so the device
+  RANGE for the greyed display comes from the plan's check (`device_range_min/max` in `slots[]`), no
+  chunk change; a NAME cannot be an OSC address segment, so `/device/<ordinal>/name`; the CLAP's record
+  wake lands on the audio thread, a command needs `request_callback` → `onMainThread()`; the mock clamps
+  ACCESS on HTTP only, so it is no reference for L3; announcing on the Finder's Discovery means browsing
+  runs from registry start; `ownPort` keeps our own server out of our own Finder, another process's
+  appears as a bindable device. **The PRD fixes the namespace `/plugin/<instance>/slot/<n>/...`
+  (UX, Headless use): it is the PRD's address, not a device's, and the one exception to "no typed OSC
+  address in `src/`"; every other segment is the implementer's and lives in one file,
+  `src/core/server/ServerNamespace.h`.**
+- *Implementer's decisions, the author's to overrule:* the generic server in the library and the
+  plugin's tree in the core, the mock not rebuilt on it in this phase (its fault injection is
+  scaffolding, and a mock on the server under test would make the self-check circular; Phase 8's CLI is
+  the independent judge); the server's `OSC_PORT` its own UDP endpoint, `WS_PORT` absent, `EXTENSIONS`
+  ACCESS, VALUE, RANGE, TYPE, DESCRIPTION, LISTEN, PATH_CHANGED, PATH_ADDED, PATH_REMOVED,
+  `server_enabled` on by default; the tree as the plan names it (`label`, `instance`, per slot `path`,
+  `device` as NAME, `arg_index`, `type`, `range/min`, `range/max` with a RANGE of ±1e6 device units so
+  C4 holds on our own leaves, `scaling`, `direction`, `display_name`, `value` 0–1 read-only, `state`
+  read-only; `/device/<i>` and `/server` read-only), the Monitor's 0-slot instance left out, `path` ""
+  an unbind, PATH_ADDED/REMOVED as instances come and go; writes as commands (strings) in a
+  mutex-guarded deque per instance, two additive ABI entries, drained on the shim's main thread (JUCE
+  `AsyncUpdater`, CLAP `request_callback`, the 50 ms tick as fallback), `Instance::bindPath` reusing the
+  editor's rebind lookup and serving the typed `$instance` path too, a `device` NAME accepted when the
+  registry or Finder knows it and refused with the reason in `state` otherwise, results asynchronous
+  by design; rates over one second ticked by the resolver thread; `instances` the array and
+  `instance_count` the count; `deviceSetTiming` additive with a hand-set flag; `path_pattern` and
+  `instance` optional additive chunk fields, version unchanged; *Clear stale* unbinds `missing`,
+  `retyped` and `renamed` slots and not `unauthorised` ones, and never fires CLAP's `clear()`; three
+  failure rows in the PRD's table first: server write refused, server port in use, announce failed;
+  the tooltip words proposed from the PRD's table (unreachable "no HOST_INFO answer since <ago>",
+  unauthorised "the device reports ACCESS <n> to this client: not on its allow-list", stale "<path>
+  missing/retyped/renamed → <new>; the lane keeps its automation, nothing is sent", range unknown "no
+  RANGE: enter min and max", echo loop "<n> echoes dropped by the loop guard", dropped sends "<n> held
+  by the rate limiter, <n> datagrams dropped").
 
 ---
 

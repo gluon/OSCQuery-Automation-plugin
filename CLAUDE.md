@@ -77,12 +77,15 @@ Each plugin instance owns a fixed pool of **N generic slots** (N = 32 by default
   `JUCE_VST3_CAN_REPLACE_VST2=0`. The VST3 and AU IDs derive from these; changing one orphans
   every saved session. Shims are `src/shims/juce/` (VST3 and AU) and `src/shims/clap/`
   (decided 2026-11-04). **The CLAP ids are `io.github.pob31.oqa.Q008` … `Q128`**, the bundle
-  ids the JUCE shim gives the same codes, one `.clap` listing all five; its macOS bundle id is
-  `io.github.pob31.oqa.clap` (decided 2026-11-09).
+  ids the JUCE shim gives the same codes, one `.clap` listing all five, and `io.github.pob31.oqa.QMon`
+  for the Monitor; its macOS bundle id is `io.github.pob31.oqa.clap` (decided 2026-11-09).
 - **The Core profile adds no field to OSCQuery.** No UUID, no `TIMETAGS`, no `REPLY_PORT`.
   Anything the plugin needs beyond the proposal is a plugin-side setting or lives in the device's
   own tree. OSCQuery is itself a proposal that needs support, not a rewrite.
-- **No typed OSC address anywhere in `src/`.** Addresses appear only in test fixtures.
+- **No typed OSC address anywhere in `src/`.** Addresses appear only in test fixtures. The one
+  exception is the plugin's own server's namespace, which the PRD fixes (`/plugin/<instance>/slot/<n>/...`,
+  UX, Headless use): its segments live in `src/core/server/ServerNamespace.h` and nowhere else
+  (decided 2026-11-09, Phase 6).
 - **Standardisation is out of scope.** The profile draft is published in `docs/spec/`; who
   adopts it is not this project's deliverable.
 - **Commits go straight to `main`** until Julien Bayle starts contributing; pull requests from
