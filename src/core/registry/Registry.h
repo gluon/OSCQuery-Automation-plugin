@@ -164,6 +164,11 @@ namespace oqa::core
         InstanceRecord* registerInstance (const std::string& label, int slotCount);
         void unregisterInstance (InstanceRecord* instance);
 
+        /*  Registered for the plugin's life (Phase 6): the host stopped or
+            restarted the instance's audio. For the status; the gather waits
+            only for instances that posted recently anyway. */
+        void setInstanceActive (InstanceRecord* instance, bool active);
+
         /*  The instance's bindings, from its chunk: devices are resolved (and
             started) and a plan built. False with the reason when the chunk
             names what cannot be bound at all; slots that cannot go are left

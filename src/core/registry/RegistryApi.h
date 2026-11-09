@@ -139,6 +139,11 @@ typedef struct OqaCoreApi
         the rest. What it lists is the status JSON's `found`. */
     void (*finderEnsure) (void);
     void (*finderAddManual) (const char* host, int port);
+
+    /*  Additive, 2026-11-09 (Phase 6a-2). An instance is registered for the
+        plugin's life and says here whether the host runs its audio; the
+        status (its own and the process-wide one, `instances[]`) shows it. */
+    void (*instanceSetActive) (OqaInstance* instance, int active);
 } OqaCoreApi;
 
 /*  The shared library's export. Declared with the export attribute only

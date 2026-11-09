@@ -193,6 +193,11 @@ namespace
             Registry::shared().finderAddManual (host, port);
     }
 
+    void instanceSetActive (OqaInstance* instance, int active)
+    {
+        Registry::shared().setInstanceActive (recordOf (instance), active != 0);
+    }
+
     const OqaCoreApi table {
         OQA_CORE_ABI_VERSION,
         sizeof (OqaCoreApi),
@@ -213,7 +218,8 @@ namespace
         instanceSetReceiver,
         instancePollReceived,
         finderEnsure,
-        finderAddManual
+        finderAddManual,
+        instanceSetActive
     };
 }
 

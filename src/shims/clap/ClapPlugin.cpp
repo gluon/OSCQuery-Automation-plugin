@@ -98,6 +98,7 @@ namespace oqa::clapshim
     bool ClapPlugin::activate (double, std::uint32_t, std::uint32_t) noexcept
     {
         core.connect();
+        core.setActive (true);
         return true;
     }
 
@@ -114,7 +115,10 @@ namespace oqa::clapshim
                 _host.paramsRequestFlush();
         }
 
-        core.disconnect();
+        /*  Registered for the plugin's life (Phase 6): the instance stays in
+            the registry, inactive, so the server's paths and the Monitor's row
+            stay; destroy() disconnects. */
+        core.setActive (false);
     }
 
     const void* ClapPlugin::extension (const char* id) noexcept

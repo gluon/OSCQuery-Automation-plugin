@@ -126,7 +126,8 @@ TEST_CASE ("loader: the shared library built here loads, is version 1, and runs 
         REQUIRE (all != nullptr);
         const auto whole = juce::JSON::parse (juce::String (all));
         loaded.api->freeString (all);
-        CHECK (static_cast<int> (whole.getProperty ("instances", 0)) == 1);
+        CHECK (static_cast<int> (whole.getProperty ("instance_count", 0)) == 1);
+        CHECK (whole.getProperty ("instances", {}).size() == 1);
     }
 
     /*  The library's table is version 1 with the additive shutdown present. */

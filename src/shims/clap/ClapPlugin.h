@@ -25,7 +25,9 @@
       init, activate      connect() to the registry (in init too, so an
                           editor opened on a never-activated plugin has a
                           registry; again in activate, a host may restart)
-      deactivate, destroy disconnect()
+      deactivate          the instance marked inactive, still registered (Phase
+                          6: the server's paths and the Monitor's row stay)
+      destroy             disconnect()
       process, flush      the parameter events are applied (the last value
                           of each slot in the block; decided 2026-11-09, the
                           sample-accurate send waits for a device that

@@ -77,6 +77,12 @@ namespace oqa::core
         handle = nullptr;
     }
 
+    void Instance::setActive (bool active)
+    {
+        if (handle != nullptr && api != nullptr && tableHas (api, &OqaCoreApi::instanceSetActive))
+            api->instanceSetActive (handle, active ? 1 : 0);
+    }
+
     //==============================================================================
     bool Instance::canReceive() const noexcept
     {
@@ -506,6 +512,15 @@ namespace oqa::core
             return std::nullopt;
 
         return takeError (text);
+    }
+
+    std::string Instance::processStatusJson() const
+    {
+        if (api == nullptr)
+            return "{}";
+
+        char* text = api->statusJson();
+        return text != nullptr ? takeError (text) : std::string ("{}");
     }
 
     std::string Instance::statusJson() const

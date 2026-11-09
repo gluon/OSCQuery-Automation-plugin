@@ -78,10 +78,15 @@ namespace oqa::core
         /** Register with the registry and hand over the bindings. Safe to repeat. */
         void connect();
 
-        /** Leave the registry. Safe to repeat. */
+        /** Leave the registry. Safe to repeat. The destructor's; a shim calls setActive (false) when audio stops. */
         void disconnect();
 
         bool isConnected() const noexcept { return handle != nullptr; }
+
+        /*  Registered for the plugin's life (Phase 6): the host stopped or
+            restarted this instance's audio. Nothing is sent for an inactive
+            instance (nothing is posted); the status and the Monitor say so. */
+        void setActive (bool active);
 
         //==============================================================================
         //  The state. Message thread.
@@ -192,6 +197,9 @@ namespace oqa::core
 
         /** The registry's view of this instance's devices, and its warnings, as JSON. */
         std::string statusJson() const;
+
+        /** The registry's view of everything (every device, every instance, the settings, the Finder): the Monitor's. */
+        std::string processStatusJson() const;
 
         /** The registry's process-wide settings as JSON (direct_send, receive_port, gesture_timeout_ms...). */
         std::string settingsJson() const;

@@ -344,6 +344,12 @@ namespace oqa::core
         bool mayDrive = true;       // a sending slot joins its group's driven arguments
         bool mayReceive = true;     // a receiving slot is delivered to
 
+        /*  The device's own RANGE for the argument, when the tree has one (6a-2):
+            what the editor greys beside a user-overridden range, and what a
+            reset goes back to. The slot's range is the chunk's; this is the
+            tree's. */
+        std::optional<double> deviceRangeMin, deviceRangeMax;
+
         bool stale() const noexcept
         {
             return state == SlotState::missing || state == SlotState::retyped || state == SlotState::renamed;
@@ -356,6 +362,12 @@ namespace oqa::core
         std::uint32_t id = 0;
         std::string label;
         int slotCount = 0;
+
+        /*  Registered for the plugin's life (decided 2026-11-09, Phase 6):
+            false while the host has stopped the instance's audio. The gather
+            already waits only for instances that posted within the window; this
+            is for the status, the Monitor and the server. */
+        std::atomic<bool> active { true };
 
         std::atomic<const InstancePlan*> plan { nullptr };
         std::vector<std::unique_ptr<InstancePlan>> plans;       // every plan ever, the live one last
@@ -895,6 +907,12 @@ namespace oqa::core
                         return;
                     }
 
+                    if (const auto view = node->argument (arg); view.range.has_value() && view.range->hasMinMax())
+                    {
+                        out.deviceRangeMin = *view.range->min;
+                        out.deviceRangeMax = *view.range->max;
+                    }
+
                     const auto access = std::to_string (node->effectiveAccess());
                     out.mayDrive = slot.sends() && node->bindableForSend();
                     out.mayReceive = slot.receives() && node->bindableForRecord();
@@ -1226,7 +1244,50 @@ namespace oqa::core
                 o->setProperty ("groups", static_cast<int> (allGroups.size()));
             }
 
+            {
+                auto* rates = new juce::DynamicObject();
+                rates->setProperty ("bundles_s", rateBundles.load (std::memory_order_relaxed));
+                rates->setProperty ("messages_s", rateMessages.load (std::memory_order_relaxed));
+                rates->setProperty ("received_s", rateReceived.load (std::memory_order_relaxed));
+                rates->setProperty ("udp_received_s", rateUdpReceived.load (std::memory_order_relaxed));
+                o->setProperty ("rates", juce::var (rates));
+            }
+
+            {
+                const auto at = lastErrorNanos.load (std::memory_order_relaxed);
+                o->setProperty ("last_error_ms_ago", at == 0 ? juce::int64 (-1)
+                                                             : juce::int64 (std::max<std::int64_t> (0, (unixNanosNow() - at) / 1000000)));
+            }
+
             return juce::var (o);
+        }
+
+        /** The resolver's tick: the counters' change since the last sample, per second. */
+        void sampleRates (std::chrono::steady_clock::time_point now)
+        {
+            const auto bundles = bundlesSent.load (std::memory_order_relaxed);
+            const auto messages = messagesSent.load (std::memory_order_relaxed);
+            const auto received = valuesReceived.load (std::memory_order_relaxed);
+            const auto udpValues = udpReceived.load (std::memory_order_relaxed);
+
+            if (ratePrevAt != std::chrono::steady_clock::time_point {})
+            {
+                const auto seconds = std::chrono::duration<double> (now - ratePrevAt).count();
+
+                if (seconds > 0.05)
+                {
+                    rateBundles.store ((bundles - ratePrevBundles) / seconds, std::memory_order_relaxed);
+                    rateMessages.store ((messages - ratePrevMessages) / seconds, std::memory_order_relaxed);
+                    rateReceived.store ((received - ratePrevReceived) / seconds, std::memory_order_relaxed);
+                    rateUdpReceived.store ((udpValues - ratePrevUdp) / seconds, std::memory_order_relaxed);
+                }
+            }
+
+            ratePrevBundles = bundles;
+            ratePrevMessages = messages;
+            ratePrevReceived = received;
+            ratePrevUdp = udpValues;
+            ratePrevAt = now;
         }
 
     private:
@@ -1339,6 +1400,7 @@ namespace oqa::core
             };
             callbacks.onError = [this] (const std::string& message)
             {
+                lastErrorNanos.store (unixNanosNow(), std::memory_order_relaxed);
                 const std::lock_guard<std::mutex> guard (settingsLock);
                 lastCallbackError = message;
             };
@@ -1875,6 +1937,15 @@ namespace oqa::core
         std::atomic<std::uint64_t> refused { 0 };
         std::atomic<std::uint64_t> rounds { 0 };
 
+        /*  Rates over the last second (6a-2), sampled by the resolver's tick
+            from the counters above, so every reader (editors, the Monitor, the
+            server) shows the same numbers. The previous sample is the tick's
+            own; the rates are read anywhere. */
+        std::uint64_t ratePrevBundles = 0, ratePrevMessages = 0, ratePrevReceived = 0, ratePrevUdp = 0;
+        std::chrono::steady_clock::time_point ratePrevAt {};
+        std::atomic<double> rateBundles { 0.0 }, rateMessages { 0.0 }, rateReceived { 0.0 }, rateUdpReceived { 0.0 };
+        std::atomic<std::int64_t> lastErrorNanos { 0 };     ///< when the library last reported an error; 0 never
+
         //  Record.
         std::function<void (std::vector<Delivery>&)> onReceived;
         std::atomic<double> guardMs { 50.0 };
@@ -2025,12 +2096,14 @@ namespace oqa::core
                 }
 
                 bool anySearching = false;
+                const auto now = std::chrono::steady_clock::now();
 
                 for (auto* entry : entries)
                 {
                     if (threadShouldExit())
                         return;
 
+                    entry->sampleRates (now);
                     entry->identify();
                     anySearching = anySearching || entry->needsSearch();
                 }
@@ -2353,6 +2426,12 @@ namespace oqa::core
         auto* out = record.get();
         impl->instances.emplace (out->id, std::move (record));
         return out;
+    }
+
+    void Registry::setInstanceActive (InstanceRecord* instance, bool active)
+    {
+        if (instance != nullptr)
+            instance->active.store (active, std::memory_order_relaxed);
     }
 
     void Registry::unregisterInstance (InstanceRecord* instance)
@@ -2770,6 +2849,29 @@ namespace oqa::core
         return out;
     }
 
+    namespace
+    {
+        /** One bound slot's standing, as the status says it (per instance and in the Monitor's list). */
+        juce::var slotCheckVar (int id, const SlotCheck& check)
+        {
+            auto* s = new juce::DynamicObject();
+            s->setProperty ("id", id);
+            s->setProperty ("state", slotStateName (check.state));
+            s->setProperty ("detail", juce::String (check.detail));
+
+            if (! check.renamedTo.empty())
+                s->setProperty ("renamed_to", juce::String (check.renamedTo));
+
+            if (check.deviceRangeMin.has_value() && check.deviceRangeMax.has_value())
+            {
+                s->setProperty ("device_range_min", *check.deviceRangeMin);
+                s->setProperty ("device_range_max", *check.deviceRangeMax);
+            }
+
+            return juce::var (s);
+        }
+    }
+
     juce::var Registry::status (InstanceRecord* instance) const
     {
         auto* o = new juce::DynamicObject();
@@ -2794,19 +2896,10 @@ namespace oqa::core
                 juce::Array<juce::var> slots;
 
                 for (const auto& [id, check] : instance->slotChecks)
-                {
-                    auto* s = new juce::DynamicObject();
-                    s->setProperty ("id", id);
-                    s->setProperty ("state", slotStateName (check.state));
-                    s->setProperty ("detail", juce::String (check.detail));
-
-                    if (! check.renamedTo.empty())
-                        s->setProperty ("renamed_to", juce::String (check.renamedTo));
-
-                    slots.add (juce::var (s));
-                }
+                    slots.add (slotCheckVar (id, check));
 
                 o->setProperty ("slots", slots);
+                o->setProperty ("active", instance->active.load (std::memory_order_relaxed));
                 o->setProperty ("direct_sent", static_cast<juce::int64> (instance->directSent.load()));
                 o->setProperty ("received", static_cast<juce::int64> (instance->received.load()));
                 o->setProperty ("received_dropped", static_cast<juce::int64> (instance->incoming.dropped()));
@@ -2817,7 +2910,51 @@ namespace oqa::core
                 for (const auto& [key, entry] : impl->devices)
                     devices.add (entry->status());
 
-                o->setProperty ("instances", static_cast<int> (impl->instances.size()));
+                /*  THE MONITOR'S LIST (6a-2): every instance, its bound slots
+                    with what they are bound to (from the chunk it last pushed)
+                    and how the tree judges them. */
+                juce::Array<juce::var> instances;
+
+                for (const auto& [id, record] : impl->instances)
+                {
+                    auto* i = new juce::DynamicObject();
+                    i->setProperty ("id", static_cast<juce::int64> (id));
+                    i->setProperty ("label", juce::String (record->label));
+                    i->setProperty ("slot_count", record->slotCount);
+                    i->setProperty ("active", record->active.load (std::memory_order_relaxed));
+
+                    juce::Array<juce::var> slots;
+
+                    if (record->lastChunk != nullptr)
+                    {
+                        for (const auto& slot : record->lastChunk->slots.all())
+                        {
+                            if (! slot.bound())
+                                continue;
+
+                            const auto found = record->slotChecks.find (slot.hostParamId);
+                            auto s = found != record->slotChecks.end() ? slotCheckVar (slot.hostParamId, found->second)
+                                                                       : slotCheckVar (slot.hostParamId, SlotCheck {});
+                            auto* so = s.getDynamicObject();
+                            so->setProperty ("device_index", slot.deviceIndex);
+                            so->setProperty ("device", slot.deviceIndex >= 0 && static_cast<std::size_t> (slot.deviceIndex) < record->lastChunk->devices.size()
+                                                           ? juce::String (record->lastChunk->devices[static_cast<std::size_t> (slot.deviceIndex)].name)
+                                                           : juce::String());
+                            so->setProperty ("path", juce::String (slot.path));
+                            so->setProperty ("arg_index", static_cast<int> (slot.argIndex));
+                            so->setProperty ("type", juce::String::charToString (static_cast<juce::juce_wchar> (slot.type)));
+                            so->setProperty ("direction", slot.direction == Direction::send ? "send" : slot.direction == Direction::receive ? "receive" : "both");
+                            so->setProperty ("display_name", juce::String (slot.displayName));
+                            slots.add (s);
+                        }
+                    }
+
+                    i->setProperty ("slots", slots);
+                    instances.add (juce::var (i));
+                }
+
+                o->setProperty ("instances", instances);
+                o->setProperty ("instance_count", static_cast<int> (impl->instances.size()));
             }
 
             o->setProperty ("settings", impl->settings.toVar());

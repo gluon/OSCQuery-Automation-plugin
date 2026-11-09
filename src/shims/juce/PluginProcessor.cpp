@@ -59,6 +59,11 @@ namespace oqa::shim
             the values are pushed to the host on the message thread. */
         core.setReceiveWake ([this] { triggerAsyncUpdate(); });
 
+        /*  Registered for the plugin's life (Phase 6): the plugin's own server
+            and the Monitor keep this instance's row whether or not the host
+            runs its audio; prepareToPlay connects again, which is safe. */
+        core.connect();
+
         /*  Every 50 ms: gestures idle past the timeout are closed. Every fifth
             tick, a slow look at the core's revision, so a binding made by
             anything but this editor (a reload, a future headless path)
@@ -92,12 +97,13 @@ namespace oqa::shim
     void PluginProcessor::prepareToPlay (double, int)
     {
         core.connect();
+        core.setActive (true);
     }
 
     void PluginProcessor::releaseResources()
     {
         closeGestures();
-        core.disconnect();
+        core.setActive (false);
     }
 
     void PluginProcessor::processBlock (juce::AudioBuffer<float>&, juce::MidiBuffer&)

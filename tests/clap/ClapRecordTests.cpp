@@ -205,9 +205,10 @@ TEST_CASE ("clap record: a value the device streams becomes GESTURE_BEGIN then V
 
 TEST_CASE ("clap record: while the host is not processing (active, asleep) the wake asks it to flush, and the flush carries the events; the timer keeps asking until the gesture has closed")
 {
-    /*  Deactivated, an instance has left the registry (as the JUCE shim's
-        does in releaseResources), so nothing streams to it; the case for the
-        flush path is a host that stopped processing an active plugin. */
+    /*  The case for the flush path is a host that stopped processing an
+        active plugin (the transport asleep). A deactivated instance stays
+        registered and inactive since Phase 6; the END it owes is the next
+        case's. */
     Rig rig;
     const auto& gain = rig.leafWhere ([] (const Node& n) { return isRangedFloat (n) && n.argumentCount() == 1; });
 
