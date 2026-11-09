@@ -241,6 +241,9 @@ namespace oqa::core
         void shutdown();
 
     private:
+        /** The plugin's own server started, stopped or re-pointed as the settings say (6b-2). */
+        void reconcileServer();
+
         struct Impl;
         std::unique_ptr<Impl> impl;
     };

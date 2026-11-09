@@ -123,6 +123,10 @@ namespace oqa::oscquery::server
         /** PATH_CHANGED for a path whose attributes changed in place. */
         void notifyChanged (const std::string& path);
 
+        /** PATH_ADDED and PATH_REMOVED for an owner that replaced the tree whole with setTree(). */
+        void notifyAdded (const std::string& path);
+        void notifyRemoved (const std::string& path);
+
         //==============================================================================
         //  For the status and the tests.
         std::uint64_t refusedWrites() const;

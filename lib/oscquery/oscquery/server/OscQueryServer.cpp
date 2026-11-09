@@ -620,6 +620,21 @@ namespace oqa::oscquery::server
         impl->notify ("PATH_CHANGED", juce::String (path));
     }
 
+    void OscQueryServer::notifyAdded (const std::string& path)
+    {
+        impl->notify ("PATH_ADDED", juce::String (path));
+    }
+
+    void OscQueryServer::notifyRemoved (const std::string& path)
+    {
+        {
+            const std::lock_guard<std::mutex> guard (impl->lock);
+            impl->dropListenersAtOrUnder (path);
+        }
+
+        impl->notify ("PATH_REMOVED", juce::String (path));
+    }
+
     //==============================================================================
     std::uint64_t OscQueryServer::refusedWrites() const  { return impl->refused.load (std::memory_order_relaxed); }
     std::uint64_t OscQueryServer::acceptedWrites() const { return impl->accepted.load (std::memory_order_relaxed); }

@@ -170,6 +170,11 @@ namespace
                               .getChildFile ("oqa-tests-" + juce::String::toHexString (juce::Random::getSystemRandom().nextInt64()) + ".registry.json");
         const auto path = file.getFullPathName().toStdString();
 
+        /*  And the run's registries serve and announce nothing unless a case
+            turns the server on (Phase 6b-2): a test machine is not a rig. */
+        file.getParentDirectory().createDirectory();
+        file.replaceWithText ("{ \"server_enabled\": false }");
+
       #if defined (_WIN32)
         _putenv_s ("OQA_SETTINGS_FILE", path.c_str());
       #else

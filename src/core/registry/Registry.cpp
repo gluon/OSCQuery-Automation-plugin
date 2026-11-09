@@ -15,8 +15,10 @@
     SPDX-License-Identifier: GPL-3.0-or-later
 */
 
+#include <core/Scaling.h>
 #include <core/registry/Registry.h>
 #include <core/registry/SettingsFile.h>
+#include <core/server/PluginServer.h>
 
 #include <core/Identity.h>
 #include <core/registry/ChangeRing.h>
@@ -368,6 +370,9 @@ namespace oqa::core
             already waits only for instances that posted within the window; this
             is for the status, the Monitor and the server. */
         std::atomic<bool> active { true };
+
+        /** Each slot's last posted host value, for the server's `value` leaves (6b-2). Written by post(). */
+        std::unique_ptr<std::atomic<float>[]> lastValues;
 
         std::atomic<const InstancePlan*> plan { nullptr };
         std::vector<std::unique_ptr<InstancePlan>> plans;       // every plan ever, the live one last
@@ -2063,12 +2068,41 @@ namespace oqa::core
             {
                 const std::lock_guard<std::mutex> guard (finderLock);
                 finderOptions = options;
+                finderOptions.discovery.announceAs = announceName;
+                finderOptions.discovery.ownPort = announceHttpPort;
+                finderOptions.discovery.oscPort = announceOscPort;
 
                 if (finderRunning)
                 {
                     finder.stop();
                     finderRunning = finder.start (finderOptions);
                 }
+            }
+
+            /*  The plugin's own server announced through the one Discovery
+                (6b-2): the Finder runs from here on, browsing too. An empty
+                name stops announcing. */
+            void setAnnounce (const std::string& name, int httpPort, int oscPort)
+            {
+                {
+                    const std::lock_guard<std::mutex> guard (finderLock);
+                    announceName = name;
+                    announceHttpPort = httpPort;
+                    announceOscPort = oscPort;
+                    finderOptions.discovery.announceAs = name;
+                    finderOptions.discovery.ownPort = httpPort;
+                    finderOptions.discovery.oscPort = oscPort;
+
+                    if (finderRunning)
+                    {
+                        finder.stop();
+                        finderRunning = finder.start (finderOptions);
+                        return;
+                    }
+                }
+
+                if (! name.empty())
+                    ensureFinder();
             }
 
             std::vector<oscquery::Finder::Candidate> found() const
@@ -2143,9 +2177,24 @@ namespace oqa::core
             oscquery::Finder finder;
             oscquery::Finder::Options finderOptions;
             bool finderRunning = false;
+            std::string announceName;           // under finderLock
+            int announceHttpPort = 0, announceOscPort = 0;
         };
 
         std::unique_ptr<Resolver> resolver;
+
+        /*  THE PLUGIN'S OWN SERVER (6b-2): one per process, started when the
+            settings say so, rebuilt from the status whenever something changed,
+            stopped before the resolver at shutdown. Null until the registry is
+            whole. */
+        std::unique_ptr<server::PluginServer> server;
+        RegistrySettings serverSettingsInUse;       // what the running server was started with, under lock
+
+        void serverChanged() noexcept
+        {
+            if (server != nullptr)
+                server->rebuildSoon();
+        }
 
         //==============================================================================
         /*  THE UDP RECEIVER (4b; PRD: "the plugin opens a UDP listener and shows
@@ -2376,6 +2425,73 @@ namespace oqa::core
         }
 
         impl->resolver = std::make_unique<Impl::Resolver> (*impl);
+
+        server::PluginServer::Hooks hooks;
+        hooks.processStatus = [this] { return status(); };
+        hooks.pullValues = [this] (std::vector<server::PluginServer::SlotValue>& out)
+        {
+            const std::lock_guard<std::mutex> guard (impl->lock);
+
+            for (const auto& [id, record] : impl->instances)
+            {
+                if (record->lastChunk == nullptr || record->lastValues == nullptr)
+                    continue;
+
+                for (const auto& slot : record->lastChunk->slots.all())
+                    if (slot.bound() && slot.hostParamId >= 0 && slot.hostParamId < record->slotCount)
+                        out.push_back ({ id, slot.hostParamId, record->lastValues[static_cast<std::size_t> (slot.hostParamId)].load (std::memory_order_relaxed) });
+            }
+        };
+        hooks.announce = [this] (const std::string& name, int httpPort, int oscPort)
+        {
+            if (impl->resolver != nullptr)
+                impl->resolver->setAnnounce (name, httpPort, oscPort);
+        };
+        hooks.unannounce = [this]
+        {
+            if (impl->resolver != nullptr)
+                impl->resolver->setAnnounce ({}, 0, 0);
+        };
+        impl->server = std::make_unique<server::PluginServer> (std::move (hooks));
+
+        reconcileServer();
+    }
+
+    void Registry::reconcileServer()
+    {
+        RegistrySettings wanted;
+
+        {
+            const std::lock_guard<std::mutex> guard (impl->lock);
+            wanted = impl->settings;
+        }
+
+        if (impl->server == nullptr)
+            return;
+
+        const auto& inUse = impl->serverSettingsInUse;
+        const bool restart = impl->server->isRunning() != wanted.serverEnabled
+                             || (wanted.serverEnabled && (inUse.serverPort != wanted.serverPort
+                                                          || inUse.serverOscPort != wanted.serverOscPort
+                                                          || inUse.serverName != wanted.serverName));
+
+        if (restart)
+        {
+            impl->server->stop();
+
+            if (wanted.serverEnabled)
+            {
+                std::string error;
+                (void) impl->server->start (wanted, error);       // a failure stays in the server's status
+            }
+        }
+        else if (wanted.serverEnabled)
+        {
+            impl->server->setAllow (wanted.serverAllow);
+        }
+
+        const std::lock_guard<std::mutex> guard (impl->lock);
+        impl->serverSettingsInUse = wanted;
     }
 
     Registry::~Registry()
@@ -2391,6 +2507,9 @@ namespace oqa::core
             ending, or a test that wants no thread left when main returns.
             Taken out from under the lock before they are destroyed: a device
             being stopped may be mid-delivery, waiting for that very lock. */
+        if (impl->server != nullptr)
+            impl->server->stop();
+
         if (impl->resolver != nullptr)
             impl->resolver->stopNow();
 
@@ -2429,6 +2548,10 @@ namespace oqa::core
         record->label = label;
         record->slotCount = std::max (0, slotCount);
         record->directBuffer.resize (4096);
+        record->lastValues = std::make_unique<std::atomic<float>[]> (static_cast<std::size_t> (std::max (1, record->slotCount)));
+
+        for (int i = 0; i < record->slotCount; ++i)
+            record->lastValues[static_cast<std::size_t> (i)].store (0.0f, std::memory_order_relaxed);
 
         auto empty = std::make_unique<InstancePlan>();
         empty->groupOfSlot.assign (static_cast<std::size_t> (record->slotCount), nullptr);
@@ -2438,13 +2561,17 @@ namespace oqa::core
 
         auto* out = record.get();
         impl->instances.emplace (out->id, std::move (record));
+        impl->serverChanged();
         return out;
     }
 
     void Registry::setInstanceActive (InstanceRecord* instance, bool active)
     {
         if (instance != nullptr)
+        {
             instance->active.store (active, std::memory_order_relaxed);
+            impl->serverChanged();
+        }
     }
 
     void Registry::unregisterInstance (InstanceRecord* instance)
@@ -2462,6 +2589,7 @@ namespace oqa::core
             entry->removeGroups (instance->id);
 
         impl->instances.erase (found);
+        impl->serverChanged();
     }
 
     bool Registry::setBindings (InstanceRecord* instance, const StateChunk& chunk, std::string& error)
@@ -2483,6 +2611,7 @@ namespace oqa::core
 
             instance->lastChunk = std::make_unique<StateChunk> (chunk);
             impl->applyBindings (instance, chunk);
+            impl->serverChanged();
         }
 
         impl->reconcileReceiver();
@@ -2702,6 +2831,8 @@ namespace oqa::core
 
             applyBindings (instance.get(), *instance->lastChunk);
         }
+
+        serverChanged();
     }
 
     bool Registry::setBindingsJson (InstanceRecord* instance, std::string_view chunkJson, std::string& error)
@@ -2739,6 +2870,9 @@ namespace oqa::core
     {
         if (instance == nullptr || slot < 0 || slot >= instance->slotCount)
             return;
+
+        if (instance->lastValues != nullptr)
+            instance->lastValues[static_cast<std::size_t> (slot)].store (normalised, std::memory_order_relaxed);
 
         const auto* plan = instance->plan.load (std::memory_order_acquire);
         auto* group = plan->groupOfSlot[static_cast<std::size_t> (slot)];
@@ -2958,6 +3092,15 @@ namespace oqa::core
                             so->setProperty ("type", juce::String::charToString (static_cast<juce::juce_wchar> (slot.type)));
                             so->setProperty ("direction", slot.direction == Direction::send ? "send" : slot.direction == Direction::receive ? "receive" : "both");
                             so->setProperty ("display_name", juce::String (slot.displayName));
+                            so->setProperty ("scaling", scalingName (slot.scaling));
+                            so->setProperty ("unit", juce::String (slot.unit));
+
+                            if (slot.rangeKnown())
+                            {
+                                so->setProperty ("range_min", *slot.rangeMin);
+                                so->setProperty ("range_max", *slot.rangeMax);
+                            }
+
                             slots.add (s);
                         }
                     }
@@ -3011,6 +3154,15 @@ namespace oqa::core
 
             o->setProperty ("found", found);
             o->setProperty ("finder_running", impl->resolver != nullptr && impl->resolver->running());
+
+            /*  The plugin's own server (6b-2). */
+            if (impl->server != nullptr)
+            {
+                auto server = impl->server->status();
+                server.getDynamicObject()->setProperty ("enabled", impl->settings.serverEnabled);
+                server.getDynamicObject()->setProperty ("announcing", impl->server->isRunning() && impl->resolver != nullptr && impl->resolver->running());
+                o->setProperty ("server", server);
+            }
         }
 
         /*  The UDP receiver: the port to type into a device without LISTEN,
@@ -3080,6 +3232,7 @@ namespace oqa::core
         }
 
         impl->reconcileReceiver();
+        reconcileServer();
 
         /*  To disk, outside the lock (a write may take its time). */
         if (impl->settingsFile != juce::File())

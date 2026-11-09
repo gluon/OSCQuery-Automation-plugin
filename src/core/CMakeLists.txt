@@ -54,6 +54,9 @@ add_library(oqa_core STATIC
     registry/RegistryLoader.cpp
     registry/SettingsFile.h
     registry/SettingsFile.cpp
+    server/ServerNamespace.h
+    server/PluginServer.h
+    server/PluginServer.cpp
 
     # 4c: the gesture a received value opens in the host, as bookkeeping the shims share.
     receive/Gesture.h
