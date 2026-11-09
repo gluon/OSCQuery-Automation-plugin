@@ -705,7 +705,8 @@ Built in four commits on `main`, 5a to 5d, in one session. Report of the bench s
   NAME, stale live from Chataigne or ossia score, export from REAPER into Bitwig), with the Phase 3
   and 4 rows in the same sitting; the Mac mini and the NUC through `scripts/farm-check.sh`. The
   Release VST3 and the core DLL from `0d4f939` are installed in `%LOCALAPPDATA%\Programs\Common\VST3\`;
-  the steps are in the bench report.
+  the steps are in the bench report. **CI green on Linux, macOS and Windows** on `e4be98e`
+  (run 42608007320), every subphase's run before it green too.
 
 ---
 

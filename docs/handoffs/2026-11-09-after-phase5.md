@@ -23,8 +23,9 @@ For the next Claude Code session on this repository, and for the author. Read th
   sitting. The Release VST3 and the core DLL from `0d4f939` are installed in
   `%LOCALAPPDATA%\Programs\Common\VST3\`; the steps are in the bench report. Fill the rows, then
   close the three records in the devplan.
-- **CI:** 5a, 5b and 5c green on Linux, macOS and Windows; 5d's run to check. The farm (Mac mini,
-  NUC) has not run Phase 5 yet: `scripts/farm-check.sh` on a bundle clone when the author is home.
+- **CI green on Linux, macOS and Windows** on `e4be98e` (run 42608007320), and on every
+  subphase's push before it. The farm (Mac mini, NUC) has not run Phase 5 yet:
+  `scripts/farm-check.sh` on a bundle clone when the author is home.
   Watch the libc++ build: the resolver thread joins while a throwaway Device may be mid-HTTP
   (3 s timeout), and `std::set` erase-while-iterating in the library's worker.
 
