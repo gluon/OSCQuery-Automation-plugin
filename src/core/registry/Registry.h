@@ -128,6 +128,13 @@ namespace oqa::core
         double loopGuardMs = 50.0;         ///< a value echoed by the device this soon after a send is ignored
         double gestureTimeoutMs = 200.0;   ///< the shim closes a host gesture after this much silence
 
+        //  Phase 6 (2026-11-09): the plugin's own OSCQuery server.
+        bool serverEnabled = true;         ///< serve and announce the slot table
+        int serverPort = 0;                ///< its HTTP (and websocket) port; 0 is ephemeral, announced
+        int serverOscPort = 0;             ///< its OSC_PORT, a UDP endpoint of its own; 0 is ephemeral
+        std::string serverAllow;           ///< who may write: "" loopback only, "any", or addresses separated by commas
+        std::string serverName;            ///< "" for the default, "OSCQuery Automation @ <machine> (<host app>)"
+
         juce::var toVar() const;
 
         /** Fields present in `v` replace this one's; the rest stay. */
@@ -140,7 +147,11 @@ namespace oqa::core
     public:
         class InstanceRecord;
 
+        /** On the per-user settings file, or the one OQA_SETTINGS_FILE names (SettingsFile::chosen()). */
         Registry();
+
+        /** On a settings file of the caller's choosing (tests); an empty File keeps nothing on disk. */
+        explicit Registry (const juce::File& settingsFile);
         ~Registry();
 
         Registry (const Registry&) = delete;
@@ -203,8 +214,14 @@ namespace oqa::core
         /** For tests: where DNS-SD is asked. Restarts the Finder when it runs. */
         void setFinderOptions (const oscquery::Finder::Options& options);
 
+        /*  Replace the settings, tell every device, and write them to the
+            settings file (Phase 6a-1); a file that cannot be written is said
+            in the status's `settings_file`, the settings still applied. */
         void setSettings (const RegistrySettings& settings);
         RegistrySettings settings() const;
+
+        /** Where the settings live on disk; an empty File when nowhere. */
+        juce::File settingsFile() const;
 
         std::size_t deviceCount() const;
         std::size_t instanceCount() const;

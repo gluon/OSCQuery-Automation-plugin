@@ -16,6 +16,7 @@
 */
 
 #include <core/registry/Registry.h>
+#include <core/registry/SettingsFile.h>
 
 #include <core/Identity.h>
 #include <core/registry/ChangeRing.h>
@@ -202,6 +203,11 @@ namespace oqa::core
         o->setProperty ("receive_port", receivePort);
         o->setProperty ("loop_guard_ms", loopGuardMs);
         o->setProperty ("gesture_timeout_ms", gestureTimeoutMs);
+        o->setProperty ("server_enabled", serverEnabled);
+        o->setProperty ("server_port", serverPort);
+        o->setProperty ("server_osc_port", serverOscPort);
+        o->setProperty ("server_allow", juce::String (serverAllow));
+        o->setProperty ("server_name", juce::String (serverName));
         return juce::var (o);
     }
 
@@ -219,6 +225,11 @@ namespace oqa::core
         if (v.hasProperty ("receive_port"))       receivePort = std::clamp (static_cast<int> (v["receive_port"]), 0, 65535);
         if (v.hasProperty ("loop_guard_ms"))      loopGuardMs = std::clamp (static_cast<double> (v["loop_guard_ms"]), 0.0, 10000.0);
         if (v.hasProperty ("gesture_timeout_ms")) gestureTimeoutMs = std::clamp (static_cast<double> (v["gesture_timeout_ms"]), 10.0, 60000.0);
+        if (v.hasProperty ("server_enabled"))     serverEnabled = static_cast<bool> (v["server_enabled"]);
+        if (v.hasProperty ("server_port"))        serverPort = std::clamp (static_cast<int> (v["server_port"]), 0, 65535);
+        if (v.hasProperty ("server_osc_port"))    serverOscPort = std::clamp (static_cast<int> (v["server_osc_port"]), 0, 65535);
+        if (v.hasProperty ("server_allow"))       serverAllow = v["server_allow"].toString().trim().toStdString();
+        if (v.hasProperty ("server_name"))        serverName = v["server_name"].toString().trim().toStdString();
     }
 
     //==============================================================================
@@ -1886,6 +1897,12 @@ namespace oqa::core
     struct Registry::Impl
     {
         mutable std::mutex lock;
+
+        /*  The settings on disk (6a-1): read once here, written on every
+            setSettings; what went wrong, if anything, for the status. */
+        juce::File settingsFile;
+        bool settingsLoaded = false;
+        std::string settingsFileError;
         std::map<std::string, std::unique_ptr<DeviceEntry>> devices;
         std::map<std::uint32_t, std::unique_ptr<InstanceRecord>> instances;
         std::uint32_t nextInstanceId = 1;
@@ -2259,8 +2276,19 @@ namespace oqa::core
         }
     };
 
-    Registry::Registry() : impl (std::make_unique<Impl>())
+    Registry::Registry() : Registry (SettingsFile::chosen()) {}
+
+    Registry::Registry (const juce::File& settingsFile) : impl (std::make_unique<Impl>())
     {
+        impl->settingsFile = settingsFile;
+
+        if (const auto saved = SettingsFile::load (settingsFile, impl->settingsFileError))
+        {
+            impl->settings.applyVar (*saved);
+            impl->directSend.store (impl->settings.directSend, std::memory_order_relaxed);
+            impl->settingsLoaded = true;
+        }
+
         impl->resolver = std::make_unique<Impl::Resolver> (*impl);
     }
 
@@ -2793,6 +2821,14 @@ namespace oqa::core
             }
 
             o->setProperty ("settings", impl->settings.toVar());
+
+        {
+            auto* f = new juce::DynamicObject();
+            f->setProperty ("path", impl->settingsFile.getFullPathName());
+            f->setProperty ("loaded", impl->settingsLoaded);
+            f->setProperty ("error", juce::String (impl->settingsFileError));
+            o->setProperty ("settings_file", juce::var (f));
+        }
         }
 
         o->setProperty ("devices", devices);
@@ -2881,6 +2917,22 @@ namespace oqa::core
         }
 
         impl->reconcileReceiver();
+
+        /*  To disk, outside the lock (a write may take its time). */
+        if (impl->settingsFile != juce::File())
+        {
+            std::string error;
+            const bool written = SettingsFile::save (impl->settingsFile, settings.toVar(), error);
+
+            const std::lock_guard<std::mutex> guard (impl->lock);
+            impl->settingsFileError = written ? std::string() : error;
+            impl->settingsLoaded = impl->settingsLoaded || written;
+        }
+    }
+
+    juce::File Registry::settingsFile() const
+    {
+        return impl->settingsFile;
     }
 
     RegistrySettings Registry::settings() const

@@ -32,6 +32,7 @@
 #include <juce_events/juce_events.h>
 
 #include <clocale>
+#include <cstdlib>
 #include <cstring>
 #include <functional>
 #include <iostream>
@@ -157,12 +158,34 @@ namespace
 #endif
 
 //==============================================================================
+namespace
+{
+    /*  NO TEST TOUCHES THE USER'S SETTINGS (Phase 6a-1): every registry this
+        process makes, this executable's own or the shared library's, reads
+        and writes a file of the test run's own, named by OQA_SETTINGS_FILE
+        before any of them exists. Left in the temporary folder. */
+    void pointSettingsAtATemporaryFile()
+    {
+        const auto file = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                              .getChildFile ("oqa-tests-" + juce::String::toHexString (juce::Random::getSystemRandom().nextInt64()) + ".registry.json");
+        const auto path = file.getFullPathName().toStdString();
+
+      #if defined (_WIN32)
+        _putenv_s ("OQA_SETTINGS_FILE", path.c_str());
+      #else
+        setenv ("OQA_SETTINGS_FILE", path.c_str(), 1);
+      #endif
+    }
+}
+
 int main (int argc, char** argv)
 {
     /*  JUCE is initialised once, for the whole process. go.dot learnt on macOS
         that bringing it up and down around each case fails non-deterministically
         in whichever case runs next. Held for the life of main. */
     const juce::ScopedJuceInitialiser_GUI juceForTheWholeSuite;
+
+    pointSettingsAtATemporaryFile();
 
     /*  --oqa-locale=<name> is ours, not doctest's: doctest would read an unknown
         argument as a test-name filter, so it is stripped before doctest sees the

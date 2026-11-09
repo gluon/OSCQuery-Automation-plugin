@@ -52,6 +52,8 @@ add_library(oqa_core STATIC
     # 3c: finding the shared core library beside the plugin, or doing without.
     registry/RegistryLoader.h
     registry/RegistryLoader.cpp
+    registry/SettingsFile.h
+    registry/SettingsFile.cpp
 
     # 4c: the gesture a received value opens in the host, as bookkeeping the shims share.
     receive/Gesture.h
