@@ -44,6 +44,12 @@
     overridden it, and clearing both goes back to it; *Clear stale* unbinds
     every stale slot; every row has a tooltip in the PRD's failure table's
     words (SlotPresentation.h); a refused Test says why through onNote.
+
+    PHASE 6d-2: a leaf dragged from the tree drops on a row (the table is
+    the DragAndDropTarget; the editor binds, onLeafDropped); the Path cell
+    takes a typed or pasted path, with the $instance token or without
+    (onPathTyped; empty unbinds); the instance's number sits by the title;
+    *Monitor...* opens the registry's view (onMonitor).
 */
 
 #include "SlotPresentation.h"
@@ -57,6 +63,7 @@
 namespace oqa::editor
 {
     class SlotTable final : public juce::Component,
+                            public juce::DragAndDropTarget,
                             private juce::TableListBoxModel
     {
     public:
@@ -83,6 +90,22 @@ namespace oqa::editor
 
         /** A word for the editor's warnings line (a Test that failed, a stale clear's count). */
         std::function<void (const juce::String&)> onNote;
+
+        /** A leaf from the tree dropped on a slot row: the path, for the device whose tree is shown (6d-2). */
+        std::function<void (int slot, const juce::String& path)> onLeafDropped;
+
+        /** A path typed into a row's Path cell, with or without $instance; empty to unbind (6d-2). */
+        std::function<void (int slot, const juce::String& path)> onPathTyped;
+
+        /** The Monitor... button (6d-2). */
+        std::function<void()> onMonitor;
+
+        //  juce::DragAndDropTarget
+        bool isInterestedInDragSource (const SourceDetails& details) override;
+        void itemDragEnter (const SourceDetails& details) override;
+        void itemDragMove (const SourceDetails& details) override;
+        void itemDragExit (const SourceDetails& details) override;
+        void itemDropped (const SourceDetails& details) override;
 
         /** The registry's word on a bound slot: {id, state, detail, renamed_to}, or void. */
         juce::var slotStatus (int row) const;
@@ -119,16 +142,24 @@ namespace oqa::editor
         class ChoiceEditor;
         class ButtonCell;
         class NameEditor;
+        class PathEditor;
+
+        int rowUnderDrag (const SourceDetails& details) const;
+        void updateInstanceNumber();
 
         core::Instance& instance;
         std::function<float (int)> slotValue;
         juce::var status;
 
         juce::Label title { {}, "Slots" };
+        juce::Label instanceLabel { {}, "$instance" };
+        juce::Label instanceField;
+        juce::TextButton monitorButton { "Monitor..." };
         juce::TextButton clearStaleButton { "Clear stale" };
         juce::TextButton exportButton { "Export..." };
         juce::TextButton importButton { "Import..." };
         juce::TableListBox table { "slots", this };
+        int dropRow = -1;       ///< the row a dragged leaf is over, or -1
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SlotTable)
     };

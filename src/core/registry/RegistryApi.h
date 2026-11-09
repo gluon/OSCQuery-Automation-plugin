@@ -160,6 +160,14 @@ typedef struct OqaCoreApi
         freed with freeString, that Instance::pollCommands applies. */
     void (*instanceSetCommandWake) (OqaInstance* instance, void (*wake) (void* context), void* context);
     char* (*instancePollCommandsJson) (OqaInstance* instance);
+
+    /*  Additive, 2026-11-09 (Phase 6d-2). A command queued for the instance
+        of this id (the process-wide status's `instances[].id`), one JSON
+        object {slot, kind, text, text2, number} as pollCommandsJson lists
+        them: the Monitor applies a path pattern across instances this way.
+        Returns 0, or 1 when no instance has the id or the JSON is not a
+        command. */
+    int (*instanceEnqueueCommandJson) (unsigned instanceId, const char* json);
 } OqaCoreApi;
 
 /*  The shared library's export. Declared with the export attribute only

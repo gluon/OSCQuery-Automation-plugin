@@ -37,6 +37,9 @@
                 commit: default rate limit, resend, loop guard, gesture
                 timeout, receive port, the server's enable, ports, allow-
                 list and name, direct send with its warning; Clear recents
+      pattern   a slot number, a path with $instance and a device NAME,
+                bound in every slot plugin at once (6d-2): each instance
+                substitutes its own number, as the server's commands do
 
     Owns nothing: every change goes through the Actions, which the root
     wires to a core::Instance (a Monitor's or any instance's).
@@ -60,6 +63,9 @@ namespace oqa::editor
             std::function<bool (const juce::String& name, const juce::String& identity, const juce::String& host, int port)> pointDevice;
             std::function<bool (const juce::String& settingsJson, juce::String& error)> setSettings;
             std::function<int()> clearRecents;
+
+            /** A command for the instance of this id, as the server would queue it (6d-2): bind a pattern across instances. */
+            std::function<bool (juce::int64 instanceId, int slot, const juce::String& kind, const juce::String& text, const juce::String& text2, double number)> commandInstance;
         };
 
         explicit MonitorView (Actions actions);
@@ -86,6 +92,13 @@ namespace oqa::editor
 
         juce::Label serverLabel, infoLabel, noteLabel;
         juce::Label devicesTitle { {}, "Devices" }, slotsTitle { {}, "Slots" }, settingsTitle { {}, "Settings" };
+
+        //  Apply a pattern across instances (6d-2; PRD, UX: "apply the same
+        //  path pattern across instances with $instance").
+        juce::Label patternLabel { {}, "Bind slot" };
+        juce::Label patternSlot, patternPath, patternDevice;
+        juce::TextButton patternApply { "to every instance" };
+        void applyPattern();
         std::unique_ptr<DeviceRows> deviceRows;
         std::unique_ptr<SlotRows> slotRows;
         juce::TableListBox devices, slots;

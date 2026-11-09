@@ -16,6 +16,7 @@
 */
 
 #include "SlotTable.h"
+#include "TreePane.h"
 
 #include <optional>
 
@@ -113,6 +114,53 @@ namespace oqa::editor
         int row = 0;
         std::optional<double> deviceMin, deviceMax;
         juce::TextEditor minField, maxField;
+    };
+
+    /** The path, typed or pasted in place: double-click, type, Enter; $instance allowed; empty unbinds (6d-2). */
+    class SlotTable::PathEditor final : public juce::Component
+    {
+    public:
+        explicit PathEditor (SlotTable& owner) : table (owner)
+        {
+            label.setFont (juce::FontOptions (12.0f));
+            label.setEditable (false, true, false);
+            label.setMinimumHorizontalScale (0.6f);
+            label.onTextChange = [this]
+            {
+                if (table.onPathTyped != nullptr)
+                    table.onPathTyped (row, label.getText().trim());
+            };
+            label.onEditorShow = [this]
+            {
+                /*  The pattern is what the user typed; editing starts from it. */
+                const auto& slot = table.instance.chunk().slots[row];
+
+                if (auto* e = label.getCurrentTextEditor())
+                    e->setText (juce::String (slot.pathPattern.empty() ? slot.path : slot.pathPattern), false);
+            };
+            addAndMakeVisible (label);
+        }
+
+        void setRow (int newRow)
+        {
+            row = newRow;
+            label.setText (table.cellText (row, Column::path), juce::dontSendNotification);
+            label.setTooltip (table.getCellTooltip (row, Column::path)
+                              + (table.getCellTooltip (row, Column::path).isEmpty() ? "" : " ")
+                              + "Double-click to type or paste a path; $instance stands for this instance's number"
+                              + (table.instance.chunk().slots[row].pathPattern.empty() ? juce::String (".")
+                                                                                        : " (pattern " + juce::String (table.instance.chunk().slots[row].pathPattern) + ")."));
+            const bool patterned = ! table.instance.chunk().slots[row].pathPattern.empty();
+            label.setColour (juce::Label::textColourId,
+                             patterned ? juce::Colours::lightskyblue : getLookAndFeel().findColour (juce::ListBox::textColourId));
+        }
+
+        void resized() override { label.setBounds (getLocalBounds()); }
+
+    private:
+        SlotTable& table;
+        int row = 0;
+        juce::Label label;
     };
 
     /** The display name, edited in place: double-click, type, Enter. */
@@ -284,6 +332,37 @@ namespace oqa::editor
         importButton.onClick = [this] { if (onImport != nullptr) onImport(); };
         addAndMakeVisible (importButton);
 
+        instanceLabel.setFont (juce::FontOptions (12.0f));
+        instanceLabel.setTooltip ("The number $instance stands for in this instance's paths (ToscA-style per-track numbering). Kept in the session; every slot bound through a pattern follows it.");
+        addAndMakeVisible (instanceLabel);
+        instanceField.setFont (juce::FontOptions (12.0f));
+        instanceField.setEditable (true, false, false);
+        instanceField.setJustificationType (juce::Justification::centred);
+        instanceField.setColour (juce::Label::outlineColourId, juce::Colours::grey.withAlpha (0.5f));
+        instanceField.setTooltip (instanceLabel.getTooltip());
+        instanceField.onTextChange = [this]
+        {
+            const int number = instanceField.getText().getIntValue();
+
+            if (number >= 1 && number != instance.instanceNumber())
+            {
+                instance.setInstanceNumber (number);
+
+                if (onNote != nullptr && ! instance.warnings().empty())
+                    onNote (juce::String (instance.warnings().back()));
+
+                changed();
+            }
+
+            updateInstanceNumber();
+        };
+        addAndMakeVisible (instanceField);
+        updateInstanceNumber();
+
+        monitorButton.setTooltip ("The registry's view: every device, every slot across instances, rates, errors, the server, the settings. Not modal.");
+        monitorButton.onClick = [this] { if (onMonitor != nullptr) onMonitor(); };
+        addAndMakeVisible (monitorButton);
+
         clearStaleButton.setTooltip ("Unbind every slot whose path the device no longer serves (missing, retyped or moved). The lanes keep their automation.");
         clearStaleButton.onClick = [this]
         {
@@ -320,11 +399,16 @@ namespace oqa::editor
     {
         auto area = getLocalBounds();
         auto top = area.removeFromTop (24);
+        monitorButton.setBounds (top.removeFromRight (80).reduced (0, 2));
+        top.removeFromRight (8);
         importButton.setBounds (top.removeFromRight (80).reduced (0, 2));
         top.removeFromRight (4);
         exportButton.setBounds (top.removeFromRight (80).reduced (0, 2));
         top.removeFromRight (4);
         clearStaleButton.setBounds (top.removeFromRight (90).reduced (0, 2));
+        top.removeFromRight (8);
+        instanceField.setBounds (top.removeFromRight (44).reduced (0, 3));
+        instanceLabel.setBounds (top.removeFromRight (66));
         title.setBounds (top);
         table.setBounds (area);
     }
@@ -350,9 +434,59 @@ namespace oqa::editor
         return state == "missing" || state == "retyped" || state == "renamed";
     }
 
+    void SlotTable::updateInstanceNumber()
+    {
+        if (! instanceField.isBeingEdited())
+            instanceField.setText (juce::String (instance.instanceNumber()), juce::dontSendNotification);
+    }
+
+    //==============================================================================
+    //  A leaf dragged from the tree (6d-2).
+    int SlotTable::rowUnderDrag (const SourceDetails& details) const
+    {
+        const auto inTable = table.getLocalPoint (this, details.localPosition);
+        const int row = table.getRowContainingPosition (inTable.x, inTable.y);
+        return row >= 0 && row < instance.slotCount() ? row : -1;
+    }
+
+    bool SlotTable::isInterestedInDragSource (const SourceDetails& details)
+    {
+        return details.description.toString().startsWith (TreePane::dragPrefix);
+    }
+
+    void SlotTable::itemDragEnter (const SourceDetails& details) { itemDragMove (details); }
+
+    void SlotTable::itemDragMove (const SourceDetails& details)
+    {
+        const int row = rowUnderDrag (details);
+
+        if (row != dropRow)
+        {
+            dropRow = row;
+            table.repaint();
+        }
+    }
+
+    void SlotTable::itemDragExit (const SourceDetails&)
+    {
+        dropRow = -1;
+        table.repaint();
+    }
+
+    void SlotTable::itemDropped (const SourceDetails& details)
+    {
+        const int row = rowUnderDrag (details);
+        dropRow = -1;
+        table.repaint();
+
+        if (row >= 0 && onLeafDropped != nullptr)
+            onLeafDropped (row, details.description.toString().substring (juce::String (TreePane::dragPrefix).length()));
+    }
+
     void SlotTable::refresh (const juce::var& registryStatus)
     {
         status = registryStatus;
+        updateInstanceNumber();
 
         bool anyStale = false;
 
@@ -533,7 +667,7 @@ namespace oqa::editor
         }
     }
 
-    void SlotTable::paintRowBackground (juce::Graphics& g, int row, int, int, bool selected)
+    void SlotTable::paintRowBackground (juce::Graphics& g, int row, int width, int height, bool selected)
     {
         const auto& colours = getLookAndFeel();
 
@@ -541,6 +675,15 @@ namespace oqa::editor
             g.fillAll (colours.findColour (juce::ListBox::backgroundColourId).brighter (0.25f));
         else if (row % 2 == 1)
             g.fillAll (colours.findColour (juce::ListBox::backgroundColourId).brighter (0.05f));
+
+        /*  The row a dragged leaf would bind. */
+        if (row == dropRow)
+        {
+            g.setColour (juce::Colours::lightskyblue.withAlpha (0.25f));
+            g.fillRect (0, 0, width, height);
+            g.setColour (juce::Colours::lightskyblue);
+            g.drawRect (0, 0, width, height, 2);
+        }
     }
 
     void SlotTable::paintCell (juce::Graphics& g, int row, int column, int width, int height, bool)
@@ -571,6 +714,20 @@ namespace oqa::editor
     {
         switch (column)
         {
+            case Column::path:
+            {
+                auto* editor = dynamic_cast<PathEditor*> (existing);
+
+                if (editor == nullptr)
+                {
+                    delete existing;
+                    editor = new PathEditor (*this);
+                }
+
+                editor->setRow (row);
+                return editor;
+            }
+
             case Column::name:
             {
                 auto* editor = dynamic_cast<NameEditor*> (existing);

@@ -44,6 +44,7 @@ add_executable(oqa_core_tests
     CommandTests.cpp
     PresentationTests.cpp
     MonitorModelTests.cpp
+    PatternTests.cpp
     # The Monitor's rows, juce_core only (src/editor/README.md): compiled here, not through
     # oqa::editor, whose other sources want a GUI module.
     "${CMAKE_SOURCE_DIR}/src/editor/MonitorModel.cpp")

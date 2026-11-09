@@ -189,6 +189,7 @@ namespace oqa::core
     {
         deviceIndex = -1;
         path.clear();
+        pathPattern.clear();
         argIndex = 0;
         type = 'f';
         rangeMin.reset();

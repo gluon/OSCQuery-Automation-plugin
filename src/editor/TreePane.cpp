@@ -129,6 +129,19 @@ namespace oqa::editor
                 pane.onLeafClicked (node);
         }
 
+        /*  Drag a bindable leaf onto a slot row (PRD, UX: "Binding is drag
+            from the tree to a slot row"; 6d-2): the description is the
+            path, prefixed so the slot table knows it is ours. The tree view
+            starts the drag itself once an ancestor is a DragAndDropContainer
+            (EditorRoot). */
+        juce::var getDragSourceDescription() override
+        {
+            if (node.isLeaf() && node.bindable())
+                return juce::String (TreePane::dragPrefix) + juce::String (node.fullPath);
+
+            return {};
+        }
+
     private:
         TreePane& pane;
         const oscquery::Node& node;

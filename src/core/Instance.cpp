@@ -16,6 +16,7 @@
 */
 
 #include <core/Instance.h>
+#include <core/PathPattern.h>
 
 #include <oscquery/tree/Tree.h>
 
@@ -191,7 +192,7 @@ namespace oqa::core
                 return false;
             }
 
-            if (! bindPath (slot, device, text, 0, why))
+            if (! bindPattern (slot, device, text, 0, why))
                 return false;
 
             pendingDevice.erase (slot);
@@ -380,10 +381,70 @@ namespace oqa::core
         push();
     }
 
+    bool Instance::bindPattern (int slot, int deviceIndex, const std::string& patternIn, std::size_t argument, std::string& why)
+    {
+        /*  A copy: the caller's reference may be the slot's own pathPattern,
+            which bind() clears below (setInstanceNumber passes it). */
+        const std::string pattern = patternIn;
+
+        if (! hasInstanceToken (pattern))
+            return bindPath (slot, deviceIndex, pattern, argument, why);
+
+        if (! bindPath (slot, deviceIndex, substituteInstance (pattern, state.instanceNumber), argument, why))
+            return false;
+
+        /*  Every slot the path took (one, or consecutive for an fff) keeps the pattern. */
+        if (slot >= 0 && slot < count)
+            for (const int s : state.slots.groupOf (slot))
+                if (s >= 0 && s < count)
+                    state.slots[s].pathPattern = pattern;
+
+        push();
+        return true;
+    }
+
     void Instance::setInstanceNumber (int number)
     {
         state.instanceNumber = std::clamp (number, 1, 9999);
         push();
+
+        /*  Every patterned slot follows the number; one that cannot keeps
+            its binding and the reason is kept past the pushes below. */
+        std::vector<std::string> failures;
+        std::vector<int> done;
+
+        for (int slot = 0; slot < count; ++slot)
+        {
+            const auto s = state.slots[slot];   // a copy: bindPattern rewrites the slot
+
+            if (s.pathPattern.empty() || ! s.bound() || std::find (done.begin(), done.end(), slot) != done.end())
+                continue;
+
+            for (const int g : state.slots.groupOf (slot))
+                done.push_back (g);
+
+            std::string why;
+
+            if (! bindPattern (slot, s.deviceIndex, s.pathPattern, static_cast<std::size_t> (std::max (0, s.argIndex)), why))
+                failures.push_back ("slot " + std::to_string (slot) + " kept at " + state.slots[slot].path + ": " + why);
+        }
+
+        lastWarnings.insert (lastWarnings.end(), failures.begin(), failures.end());
+    }
+
+    bool Instance::commandInstance (juce::int64 instanceId, int slot, const std::string& kind, const std::string& text, const std::string& text2, double number)
+    {
+        if (handle == nullptr || api == nullptr || instanceId < 0 || ! tableHas (api, &OqaCoreApi::instanceEnqueueCommandJson))
+            return false;
+
+        auto* o = new juce::DynamicObject();
+        o->setProperty ("slot", slot);
+        o->setProperty ("kind", juce::String (kind));
+        o->setProperty ("text", juce::String (text));
+        o->setProperty ("text2", juce::String (text2));
+        o->setProperty ("number", number);
+        const auto json = juce::JSON::toString (juce::var (o), true).toStdString();
+        return api->instanceEnqueueCommandJson (static_cast<unsigned> (instanceId), json.c_str()) == 0;
     }
 
     void Instance::setActive (bool active)
@@ -724,6 +785,7 @@ namespace oqa::core
         if (! state.slots[slot].bind (node, argument, deviceIndex, why))
             return false;
 
+        state.slots[slot].pathPattern.clear();
         push();
         return true;
     }
@@ -738,6 +800,10 @@ namespace oqa::core
 
         if (! state.slots.bindAll (firstSlot, node, deviceIndex, why))
             return false;
+
+        for (std::size_t i = 0; i < node.argumentCount(); ++i)
+            if (const int s = firstSlot + static_cast<int> (i); s >= 0 && s < count)
+                state.slots[s].pathPattern.clear();
 
         push();
         return true;

@@ -30,10 +30,14 @@
       bottom   the status bar: shared core library or alone, each device's
                state and rates, the core's warnings
 
-    BINDING IS CLICK A SLOT, THEN CLICK A LEAF. A multi-argument leaf takes
-    consecutive slots from the one selected. Every bind writes the hash of the
-    tree shown into the chunk (Phase 5a: the "tree changed since the bind"
-    notice compares with it). Drag-and-drop and the bulk operations are Phase 6.
+    BINDING IS CLICK A SLOT, THEN CLICK A LEAF, OR DRAG A LEAF ONTO A ROW
+    (6d-2: the root is the DragAndDropContainer, the tree's items the sources,
+    the slot table the target), OR TYPE A PATH into the Path cell, with the
+    $instance token or without (6d-2). A multi-argument leaf takes consecutive
+    slots from the one selected or dropped on. Every bind writes the hash of
+    the tree shown into the chunk (Phase 5a: the "tree changed since the bind"
+    notice compares with it). *Monitor...* opens the registry's view in a
+    window of its own, not modal (6d-2).
 
     PHASE 5: the device list's *Identity…* arms the next leaf click to set the
     selected device's identity leaf instead of binding; a stale slot's *Rebind*
@@ -54,6 +58,7 @@
 */
 
 #include "DeviceList.h"
+#include "MonitorRoot.h"
 #include "SlotTable.h"
 #include "StatusBar.h"
 #include "TreePane.h"
@@ -76,6 +81,7 @@ namespace oqa::editor
     };
 
     class EditorRoot final : public juce::Component,
+                             public juce::DragAndDropContainer,
                              private juce::Timer
     {
     public:
@@ -96,9 +102,15 @@ namespace oqa::editor
         void leafClicked (const oscquery::Node& node);
         void bindSelectedSlotTo (const oscquery::Node& node, int deviceIndex);
         void rebind (int slot);
+        void leafDropped (int slot, const juce::String& path);
+        void pathTyped (int slot, const juce::String& path);
+        void openMonitor();
         void exportBindings();
         void importBindings();
         void tellHost();
+
+        /** The Monitor's window, owned here, closed with the editor (6d-2). */
+        class MonitorWindow;
 
         Host host;
 
@@ -116,6 +128,7 @@ namespace oqa::editor
         int identityDevice = -1;        ///< the device whose identity the next leaf click sets, or -1
         std::unique_ptr<juce::FileChooser> chooser;
         juce::String editorNote;        ///< the editor's own word for the warnings line (a refused import), until the next action
+        std::unique_ptr<MonitorWindow> monitorWindow;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (EditorRoot)
     };

@@ -184,6 +184,12 @@ namespace oqa::core
         void setCommandWake (InstanceRecord* instance, void (*wake) (void* context), void* context);
         std::string pollCommandsJson (InstanceRecord* instance);
 
+        /*  A command queued for the instance of this id, as a server write
+            would queue it: {slot, kind, text, text2, number} (6d-2, the
+            Monitor's apply-across-instances). False when no instance has the
+            id or the JSON is not a command. */
+        bool enqueueCommandJson (std::uint32_t instanceId, const std::string& json);
+
         /*  The instance's bindings, from its chunk: devices are resolved (and
             started) and a plan built. False with the reason when the chunk
             names what cannot be bound at all; slots that cannot go are left

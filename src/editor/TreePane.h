@@ -50,6 +50,9 @@ namespace oqa::editor
         /** A new tree (or none); rebuilds the view. */
         void setTree (std::optional<oscquery::Tree> tree, const juce::String& deviceName);
 
+        /** What a dragged leaf's description starts with; the rest is its path (6d-2). */
+        static constexpr const char* dragPrefix = "oqa-leaf:";
+
         /** True when the pane holds a tree with this hash, so a refresh can be skipped. */
         bool holds (const juce::String& treeHash) const noexcept { return shownHash == treeHash; }
 

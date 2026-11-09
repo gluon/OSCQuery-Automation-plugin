@@ -2724,6 +2724,42 @@ namespace oqa::core
         return juce::JSON::toString (juce::var (list), false).toStdString();
     }
 
+    bool Registry::enqueueCommandJson (std::uint32_t instanceId, const std::string& json)
+    {
+        const auto parsed = juce::JSON::parse (juce::String (json));
+
+        if (parsed.getDynamicObject() == nullptr || ! parsed.hasProperty ("kind"))
+            return false;
+
+        InstanceRecord::Command command;
+        command.slot = static_cast<int> (parsed.getProperty ("slot", -1));
+        command.kind = parsed.getProperty ("kind", "").toString().toStdString();
+        command.text = parsed.getProperty ("text", "").toString().toStdString();
+        command.text2 = parsed.getProperty ("text2", "").toString().toStdString();
+        command.number = static_cast<double> (parsed.getProperty ("number", 0.0));
+
+        if (command.kind.empty())
+            return false;
+
+        const std::lock_guard<std::mutex> guard (impl->lock);
+        const auto found = impl->instances.find (instanceId);
+
+        if (found == impl->instances.end())
+            return false;
+
+        auto* instance = found->second.get();
+
+        if (instance->commands.size() >= 256)
+            return false;
+
+        instance->commands.push_back (std::move (command));
+
+        if (instance->commandWake != nullptr)
+            instance->commandWake (instance->commandWakeContext);
+
+        return true;
+    }
+
     void Registry::setInstanceActive (InstanceRecord* instance, bool active)
     {
         if (instance != nullptr)

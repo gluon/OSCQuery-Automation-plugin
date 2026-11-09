@@ -46,6 +46,7 @@ namespace oqa::core
             constexpr const char* hostParamId     = "host_param_id";
             constexpr const char* deviceIndex     = "device_index";
             constexpr const char* path            = "path";
+            constexpr const char* pathPattern     = "path_pattern";
             constexpr const char* argIndex        = "arg_index";
             constexpr const char* type            = "type";
             constexpr const char* range           = "range";
@@ -65,7 +66,7 @@ namespace oqa::core
         };
 
         const std::set<std::string> slotKeys {
-            key::hostParamId, key::deviceIndex, key::path, key::argIndex, key::type, key::range,
+            key::hostParamId, key::deviceIndex, key::path, key::pathPattern, key::argIndex, key::type, key::range,
             key::scaling, key::direction, key::displayName, key::rangeOverridden, key::unit, key::critical
         };
 
@@ -281,6 +282,7 @@ namespace oqa::core
             slot.displayName = stringOf (object->getProperty (key::displayName));
             slot.unit        = stringOf (object->getProperty (key::unit));
             slot.critical    = static_cast<bool> (object->getProperty (key::critical));
+            slot.pathPattern = stringOf (object->getProperty (key::pathPattern));
 
             juce::NamedValueSet extras;
             keepExtras (*object, slotKeys, extras);
@@ -298,6 +300,11 @@ namespace oqa::core
             object->setProperty (key::hostParamId, slot.hostParamId);
             object->setProperty (key::deviceIndex, slot.deviceIndex);
             object->setProperty (key::path,        juce::String (slot.path));
+
+            /*  Only where there is one: a chunk without patterns reads as before (6d-2). */
+            if (! slot.pathPattern.empty())
+                object->setProperty (key::pathPattern, juce::String (slot.pathPattern));
+
             object->setProperty (key::argIndex,    slot.argIndex);
             object->setProperty (key::type,        juce::String::charToString (static_cast<juce::juce_wchar> (slot.type)));
 

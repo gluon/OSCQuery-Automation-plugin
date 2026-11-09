@@ -22,6 +22,38 @@
 
 namespace oqa::editor
 {
+    /** The registry's view over this instance, in a window of its own (6d-2). */
+    class EditorRoot::MonitorWindow final : public juce::DocumentWindow
+    {
+    public:
+        MonitorWindow (EditorRoot& ownerIn, MonitorHost host)
+            : juce::DocumentWindow ("OSCQuery Automation Monitor",
+                                    ownerIn.getLookAndFeel().findColour (juce::ResizableWindow::backgroundColourId),
+                                    juce::DocumentWindow::allButtons),
+              owner (ownerIn)
+        {
+            setUsingNativeTitleBar (true);
+            setContentOwned (new MonitorRoot (std::move (host)), true);
+            setResizable (true, false);
+            setResizeLimits (MonitorRoot::minimumWidth, MonitorRoot::minimumHeight, MonitorRoot::maximumWidth, MonitorRoot::maximumHeight);
+            centreWithSize (MonitorRoot::defaultWidth, MonitorRoot::defaultHeight);
+            setVisible (true);
+        }
+
+        void closeButtonPressed() override
+        {
+            /*  Owned by the editor: deleted on its next tick, not from inside this call. */
+            juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<EditorRoot> (&owner)]
+            {
+                if (safe != nullptr)
+                    safe->monitorWindow.reset();
+            });
+        }
+
+    private:
+        EditorRoot& owner;
+    };
+
     EditorRoot::EditorRoot (Host hostIn)
         : host (std::move (hostIn)),
           devices (host.instance),
@@ -45,6 +77,9 @@ namespace oqa::editor
         slots.onExport = [this] { exportBindings(); };
         slots.onImport = [this] { importBindings(); };
         slots.onNote = [this] (const juce::String& note) { editorNote = note; };
+        slots.onLeafDropped = [this] (int slot, const juce::String& path) { leafDropped (slot, path); };
+        slots.onPathTyped = [this] (int slot, const juce::String& path) { pathTyped (slot, path); };
+        slots.onMonitor = [this] { openMonitor(); };
 
         status.setCoreNote (host.coreNote);
         status.onReceivePortChanged = [this] (int port)
@@ -69,6 +104,7 @@ namespace oqa::editor
     EditorRoot::~EditorRoot()
     {
         stopTimer();
+        monitorWindow.reset();
     }
 
     void EditorRoot::paint (juce::Graphics& g)
@@ -280,6 +316,81 @@ namespace oqa::editor
 
         slots.selectSlot (slot);
         deviceSelected (bound.deviceIndex);
+    }
+
+    /*  A leaf dropped on a row (6d-2): bound for the device whose tree is
+        shown, as a click would bind it to the selected slot. */
+    void EditorRoot::leafDropped (int slot, const juce::String& path)
+    {
+        const int deviceIndex = devices.selectedDevice();
+
+        if (slot < 0 || deviceIndex < 0 || path.isEmpty())
+            return;
+
+        std::string why;
+
+        if (! host.instance.bindPath (slot, deviceIndex, path.toStdString(), 0, why))
+        {
+            editorNote = "bind refused: " + juce::String (why);
+            return;
+        }
+
+        tellHost();
+        slots.selectSlot (slot);
+    }
+
+    /*  A path typed into a row (6d-2): on the slot's device when it has one,
+        else the selected device; $instance is this instance's number; empty
+        unbinds. The pattern is kept on the slot. */
+    void EditorRoot::pathTyped (int slot, const juce::String& path)
+    {
+        if (slot < 0 || slot >= host.instance.slotCount())
+            return;
+
+        const auto& bound = host.instance.chunk().slots[slot];
+
+        if (path.isEmpty())
+        {
+            if (bound.bound())
+            {
+                host.instance.unbind (slot);
+                tellHost();
+            }
+
+            return;
+        }
+
+        if (path == juce::String (bound.pathPattern.empty() ? bound.path : bound.pathPattern))
+            return;
+
+        const int deviceIndex = bound.bound() ? bound.deviceIndex : devices.selectedDevice();
+
+        if (deviceIndex < 0)
+        {
+            editorNote = "bind refused: select a device first";
+            return;
+        }
+
+        std::string why;
+
+        if (! host.instance.bindPattern (slot, deviceIndex, path.toStdString(), 0, why))
+        {
+            editorNote = "bind refused: " + juce::String (why);
+            return;
+        }
+
+        tellHost();
+    }
+
+    void EditorRoot::openMonitor()
+    {
+        if (monitorWindow != nullptr)
+        {
+            monitorWindow->toFront (true);
+            return;
+        }
+
+        monitorWindow = std::make_unique<MonitorWindow> (*this, MonitorHost { host.instance, host.coreNote });
     }
 
     void EditorRoot::exportBindings()

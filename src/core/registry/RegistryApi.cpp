@@ -208,6 +208,14 @@ namespace
         return duplicate (Registry::shared().pollCommandsJson (recordOf (instance)));
     }
 
+    int instanceEnqueueCommandJson (unsigned instanceId, const char* json)
+    {
+        if (json == nullptr)
+            return 1;
+
+        return Registry::shared().enqueueCommandJson (static_cast<std::uint32_t> (instanceId), json) ? 0 : 1;
+    }
+
     int deviceSetTiming (const char* name, const char* identityValue, int honoursTimetags, double offsetMs)
     {
         if (name == nullptr)
@@ -240,7 +248,8 @@ namespace
         instanceSetActive,
         deviceSetTiming,
         instanceSetCommandWake,
-        instancePollCommandsJson
+        instancePollCommandsJson,
+        instanceEnqueueCommandJson
     };
 }
 

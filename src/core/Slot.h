@@ -92,6 +92,12 @@ namespace oqa::core
         std::string path;
         int argIndex = 0;
 
+        /*  The pattern `path` was resolved from, with its $instance token
+            (PathPattern.h; chunk `path_pattern`), empty for a slot bound to
+            an explicit path. Kept so a change of the instance's number
+            rebinds (Phase 6d-2). */
+        std::string pathPattern;
+
         char type = 'f';
 
         std::optional<double> rangeMin;

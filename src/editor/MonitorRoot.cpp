@@ -46,6 +46,11 @@ namespace oqa::editor
                 return ok;
             };
 
+            a.commandInstance = [&instance] (juce::int64 id, int slot, const juce::String& kind, const juce::String& text, const juce::String& text2, double number)
+            {
+                return instance.commandInstance (id, slot, kind.toStdString(), text.toStdString(), text2.toStdString(), number);
+            };
+
             a.clearRecents = []
             {
                 oscquery::Recents recents;

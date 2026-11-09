@@ -490,6 +490,48 @@ namespace oqa::editor
         settingsViewport.setViewedComponent (settings.get(), false);
         settingsViewport.setScrollBarsShown (true, false);
         addAndMakeVisible (settingsViewport);
+
+        /*  The pattern row. */
+        patternLabel.setFont (juce::FontOptions (12.0f));
+        addAndMakeVisible (patternLabel);
+
+        for (auto* field : { &patternSlot, &patternPath, &patternDevice })
+        {
+            field->setFont (juce::FontOptions (12.0f));
+            field->setEditable (true, false, false);
+            field->setColour (juce::Label::outlineColourId, juce::Colours::grey.withAlpha (0.5f));
+            addAndMakeVisible (*field);
+        }
+
+        patternSlot.setText ("1", juce::dontSendNotification);
+        patternSlot.setJustificationType (juce::Justification::centred);
+        patternSlot.setTooltip ("The slot, counted from 1, in every instance.");
+        patternPath.setTooltip ("A path with $instance, which each instance replaces by its own number; a plain path binds the same leaf everywhere.");
+        patternDevice.setTooltip ("The device NAME to bind on; empty keeps each slot's device, or the instance's first.");
+        patternApply.setTooltip ("Queue the bind for every slot plugin in this process, as a write to the plugin's own server would. The result shows in each row's state.");
+        patternApply.onClick = [this] { applyPattern(); };
+        addAndMakeVisible (patternApply);
+    }
+
+    void MonitorView::applyPattern()
+    {
+        const int slot = patternSlot.getText().getIntValue() - 1;
+        const auto path = patternPath.getText().trim();
+        const auto device = patternDevice.getText().trim();
+
+        if (slot < 0 || path.isEmpty() || actions.commandInstance == nullptr)
+        {
+            setNote ("a slot number from 1 and a path are needed");
+            return;
+        }
+
+        int queued = 0;
+
+        for (const auto& i : shown.instances)
+            if (i.slotCount > slot && actions.commandInstance (i.id, slot, "bind", path, device, 0.0))
+                ++queued;
+
+        setNote (juce::String (queued) + " instance(s) asked to bind slot " + juce::String (slot + 1) + " to " + path);
     }
 
     MonitorView::~MonitorView()
@@ -560,7 +602,17 @@ namespace oqa::editor
         devicesTitle.setBounds (top.removeFromTop (22));
         devices.setBounds (top);
         area.removeFromTop (6);
-        slotsTitle.setBounds (area.removeFromTop (22));
+
+        auto slotsTop = area.removeFromTop (22);
+        slotsTitle.setBounds (slotsTop.removeFromLeft (60));
+        patternApply.setBounds (slotsTop.removeFromRight (130).reduced (0, 1));
+        slotsTop.removeFromRight (4);
+        patternLabel.setBounds (slotsTop.removeFromLeft (60));
+        patternSlot.setBounds (slotsTop.removeFromLeft (36).reduced (0, 2));
+        slotsTop.removeFromLeft (4);
+        patternDevice.setBounds (slotsTop.removeFromRight (juce::jmin (160, slotsTop.getWidth() / 3)).reduced (0, 2));
+        slotsTop.removeFromRight (4);
+        patternPath.setBounds (slotsTop.reduced (0, 2));
         slots.setBounds (area);
     }
 }

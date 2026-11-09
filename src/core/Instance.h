@@ -236,9 +236,27 @@ namespace oqa::core
         /** The chunk's device with this NAME, added from the registry's known or found devices when it is not yet there; -1 when nobody knows it. */
         int deviceIndexFor (const std::string& name);
 
-        /** The number $instance stands for in this instance's paths (the chunk's `instance`). */
+        /*  A typed or pasted path, with or without the $instance token
+            (PathPattern.h; Phase 6d-2): the token replaced by this instance's
+            number, bound as bindPath does, and the pattern kept on the slot(s)
+            so a change of number rebinds. A path without the token is bindPath
+            with no pattern kept. */
+        bool bindPattern (int slot, int deviceIndex, const std::string& pattern, std::size_t argument, std::string& why);
+
+        /*  The number $instance stands for in this instance's paths (the
+            chunk's `instance`). Setting it rebinds every slot with a pattern;
+            a slot whose new path the device does not serve keeps its binding,
+            and warnings() says which. */
         int instanceNumber() const noexcept { return state.instanceNumber; }
         void setInstanceNumber (int number);
+
+        /*  A command for another instance of this process, by the id the
+            process-wide status gives it: the same commands the plugin's own
+            server queues (bind, unbind, device, display_name, scaling,
+            direction, range_min, range_max, instance), so the Monitor applies
+            a pattern across instances (6d-2). False when the registry has no
+            such instance or no such entry. */
+        bool commandInstance (juce::int64 instanceId, int slot, const std::string& kind, const std::string& text, const std::string& text2, double number);
 
         /*  Unbind every slot the registry calls missing, retyped or renamed
             (PRD, UX: "clear all stale"); not the unauthorised, which still
