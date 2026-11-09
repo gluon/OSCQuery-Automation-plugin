@@ -39,7 +39,10 @@ call the plugin makes (`TestHost.h`). Repeatable with `ctest --preset vs-debug` 
 
 clap-validator 0.4.1 on the Release module (Windows): **192 tests run, 138 passed, 0 failed, 0
 warnings, 54 skipped** (the skipped ones are for extensions the plugin does not implement: note
-ports, state-context, and the like).
+ports, state-context, and the like). A later run on the installed copy, with the machine busy,
+warned once that processing denormals took 2x longer: the plugin does no arithmetic on the audio
+(an in-place block is left alone, otherwise it is copied), so that is a microsecond block timed
+twice on a loaded machine, not a denormal path.
 
 ## What JUCE and CLAP say, read from their sources
 
