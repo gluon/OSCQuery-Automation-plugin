@@ -24,9 +24,13 @@
     value once").
 
     The selected row is the slot the next leaf click binds. The state colour
-    follows the PRD's failure table as far as Phase 3 knows it: unbound grey,
+    follows the PRD's failure table as far as Phase 4 knows it: unbound grey,
     active green, bound but without a range (inactive until min and max are
-    entered) amber, bound to a device the registry cannot reach red.
+    entered) amber, bound to a device the registry cannot reach red, receiving
+    from a device without LISTEN that has not yet been told this plugin's UDP
+    port amber with the port in the value cell. A receiving slot's value cell
+    also shows what the device last said ("rx"), beside the host's value,
+    because a lane in Read mode ignores the push and shows its own.
 */
 
 #include <core/Instance.h>
@@ -72,7 +76,9 @@ namespace oqa::editor
 
         juce::String cellText (int row, int column) const;
         juce::Colour stateColour (int row) const;
+        juce::var deviceStatus (int deviceIndex) const;
         bool deviceReachable (int deviceIndex) const;
+        bool waitingForPort (const core::Slot& slot) const;
         void changed();
 
         class RangeEditor;

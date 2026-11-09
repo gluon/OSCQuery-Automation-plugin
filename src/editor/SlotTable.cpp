@@ -239,14 +239,33 @@ namespace oqa::editor
         return instance.slotCount();
     }
 
-    bool SlotTable::deviceReachable (int deviceIndex) const
+    juce::var SlotTable::deviceStatus (int deviceIndex) const
     {
         const auto* devices = status.getProperty ("devices", {}).getArray();
 
         if (devices == nullptr || deviceIndex < 0 || deviceIndex >= devices->size())
+            return {};
+
+        return (*devices)[deviceIndex];
+    }
+
+    bool SlotTable::deviceReachable (int deviceIndex) const
+    {
+        return static_cast<bool> (deviceStatus (deviceIndex).getProperty ("reachable", false));
+    }
+
+    /*  A receiving slot on a device without LISTEN, before the first datagram
+        has come in: record waits for the device to be told this plugin's port
+        (PRD; devplan Phase 4: "the editor says on such a device that record is
+        waiting for the device to be told the port"). */
+    bool SlotTable::waitingForPort (const core::Slot& slot) const
+    {
+        if (! slot.receives() || ! slot.active())
             return false;
 
-        return static_cast<bool> ((*devices)[deviceIndex].getProperty ("reachable", false));
+        const auto device = deviceStatus (slot.deviceIndex);
+        return device.getProperty ("listen", "").toString() == "unsupported"
+            && static_cast<juce::int64> (device.getProperty ("udp_received", 0)) == 0;
     }
 
     juce::Colour SlotTable::stateColour (int row) const
@@ -261,6 +280,9 @@ namespace oqa::editor
 
         if (! deviceReachable (slot.deviceIndex))
             return juce::Colours::orangered;
+
+        if (waitingForPort (slot))
+            return juce::Colours::orange;
 
         return juce::Colours::limegreen;
     }
@@ -296,8 +318,22 @@ namespace oqa::editor
                 if (! slot.active())
                     return juce::String (normalised, 3) + " (no range)";
 
+                if (waitingForPort (slot))
+                    return "waiting for UDP port " + juce::String (static_cast<int> (status.getProperty ("receive_port", 0)));
+
+                /*  What the device last said, beside the host's value, so a lane
+                    in Read mode (which ignores the push) still shows it. */
+                juce::String received;
+
+                if (slot.receives())
+                    if (const auto last = instance.lastReceived (row))
+                    {
+                        const auto rx = slot.toDevice (*last);
+                        received = "  rx " + (slot.isInteger() ? juce::String (static_cast<int> (rx)) : juce::String (rx, 3));
+                    }
+
                 const auto units = slot.toDevice (normalised);
-                return (slot.isInteger() ? juce::String (static_cast<int> (units)) : juce::String (units, 3))
+                return received + " " + (slot.isInteger() ? juce::String (static_cast<int> (units)) : juce::String (units, 3))
                      + (slot.unit.empty() ? juce::String() : " " + juce::String (slot.unit));
             }
             default: return {};

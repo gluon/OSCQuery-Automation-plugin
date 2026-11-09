@@ -20,14 +20,17 @@
 /*
     THE STATUS BAR (PRD, UX: "Per device: packets sent/received per second,
     websocket state, last error"; devplan 3c: the plugin "says so in the status
-    bar" when it runs on its own core). Two lines: the core's word (shared
-    library at a path, or running alone and why), then each device's state,
-    bundles per second since the last refresh, drops, and last error; the
-    core's warnings after that.
+    bar" when it runs on its own core). Four lines: the core's word (shared
+    library at a path, or running alone and why); each device's state, bundles
+    out and values in per second since the last refresh, websocket state, the
+    loop guard's count, drops, and last error; the receive line (Phase 4: the
+    UDP port a device without LISTEN is told, editable here, and this host's
+    addresses beside it); the core's warnings.
 */
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include <functional>
 #include <map>
 #include <vector>
 
@@ -41,14 +44,23 @@ namespace oqa::editor
         void setCoreNote (const juce::String& note);
         void refresh (const juce::var& registryStatus, const std::vector<std::string>& warnings);
 
+        /** The user typed a receive port (0 for ephemeral): the registry's setting, process-wide. */
+        std::function<void (int port)> onReceivePortChanged;
+
         void paint (juce::Graphics& g) override;
+        void resized() override;
 
     private:
         juce::String coreNote;
         juce::String devicesLine;
+        juce::String receiveLine;
         juce::String warningsLine;
 
-        struct Seen { juce::int64 bundles = 0; double atMs = 0.0; };
+        juce::Label receiveLabel { {}, "Receive port" };
+        juce::Label portField;
+        int shownPortSetting = -1;
+
+        struct Seen { juce::int64 bundles = 0; juce::int64 received = 0; double atMs = 0.0; };
         std::map<juce::String, Seen> lastSeen;
     };
 }

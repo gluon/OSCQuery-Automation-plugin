@@ -42,6 +42,14 @@ namespace oqa::editor
         };
 
         status.setCoreNote (host.coreNote);
+        status.onReceivePortChanged = [this] (int port)
+        {
+            /*  The registry's setting, process-wide: every instance's status
+                shows the port the next tick. Not in the chunk (Phase 6 keeps
+                the settings per user). */
+            std::string error;
+            host.instance.setSettingsJson ("{\"receive_port\": " + std::to_string (port) + "}", error);
+        };
 
         layout.setItemLayout (0, 220, -0.6, -0.38);     // the browser
         layout.setItemLayout (1, 6, 6, 6);              // the divider
@@ -68,7 +76,7 @@ namespace oqa::editor
     void EditorRoot::resized()
     {
         auto area = getLocalBounds();
-        status.setBounds (area.removeFromBottom (54));
+        status.setBounds (area.removeFromBottom (72));
         area.reduce (6, 6);
 
         juce::Component* columns[] = { &devices, &divider, &slots };
