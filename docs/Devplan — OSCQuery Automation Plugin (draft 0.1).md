@@ -547,7 +547,7 @@ four commits on `main`, 4a to 4d, in one session. Report of the bench so far:
 - *Still to fill, the author at the DAW:* the done-when's REAPER rows (the Release VST3 and the
   core DLL from `8d548a8` are installed in `%LOCALAPPDATA%\Programs\Common\VST3\`; the steps are
   in the bench report), with the Phase 3 rows in the same sitting; the Mac mini and the NUC through
-  `scripts/farm-check.sh`; CI on three platforms (pushed after 4d).
+  `scripts/farm-check.sh`. **CI green on Linux, macOS and Windows** on `26ad453` (run 42589237831).
 
 ---
 

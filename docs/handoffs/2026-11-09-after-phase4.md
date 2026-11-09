@@ -23,8 +23,7 @@ For the next Claude Code session on this repository, and for the author. Read th
   VST3 as an extra). The Release VST3 and the core DLL from `8d548a8` are installed in
   `%LOCALAPPDATA%\Programs\Common\VST3\`; the steps are in the bench report. Fill the rows, then
   close both records in the devplan.
-- **CI:** the Phase 4 commits were pushed together after 4d; see the run on `main` for the three
-  platforms. The farm (Mac mini, NUC) has not run Phase 4 yet: `scripts/farm-check.sh` on a bundle
+- **CI green on Linux, macOS and Windows** on `26ad453` (run 42589237831). The farm (Mac mini, NUC) has not run Phase 4 yet: `scripts/farm-check.sh` on a bundle
   clone when the author is home. Watch the libc++ build: the Device thread now calls into the
   registry (`received`), and the entry's device is stopped outside the device lock.
 
