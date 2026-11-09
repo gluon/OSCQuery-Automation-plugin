@@ -46,6 +46,14 @@
 
     NUMBERS GO THROUGH juce::JSON, whose text is locale-independent
     (tests/LocaleTests.cpp); the suite runs this under fr_FR as well as C.
+
+    THE EXPORT FILE IS THIS CHUNK (decided by the author 2026-11-09, Phase 5c;
+    PRD "Export and import": "bindings export to a standalone JSON file so
+    Go.dot, ossia or a second DAW can reuse them", "import can address slots
+    by host_param_id"). No envelope, no second schema: what the editor's Export
+    writes is saveState(), what Import reads is loadState(), and
+    tools/convert-mapping.py writes the same from a ToscA or OSCar mapping. A
+    chunk from a bigger variant loads what fits, a warning per slot left out.
 */
 
 #include <core/Slot.h>

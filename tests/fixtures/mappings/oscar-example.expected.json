@@ -1,0 +1,100 @@
+{
+  "version": 1,
+  "devices": [
+    {
+      "name": "Renderer",
+      "last_host": "192.0.2.10",
+      "last_port": 5005,
+      "tree_hash": "",
+      "honours_timetags": false,
+      "offset_ms": 0.0
+    }
+  ],
+  "slots": [
+    {
+      "host_param_id": 0,
+      "device_index": 0,
+      "path": "/track/7/trim",
+      "arg_index": 0,
+      "type": "f",
+      "range": {
+        "min": -12.0,
+        "max": 12.0
+      },
+      "scaling": "linear",
+      "direction": "both",
+      "display_name": "trim",
+      "range_overridden": true,
+      "unit": "",
+      "critical": false
+    },
+    {
+      "host_param_id": 1,
+      "device_index": 0,
+      "path": "/track/7/pres",
+      "arg_index": 0,
+      "type": "f",
+      "range": {
+        "min": 0.0,
+        "max": 100.0
+      },
+      "scaling": "linear",
+      "direction": "both",
+      "display_name": "pres",
+      "range_overridden": true,
+      "unit": "",
+      "critical": false
+    },
+    {
+      "host_param_id": 2,
+      "device_index": 0,
+      "path": "/track/7/bril",
+      "arg_index": 0,
+      "type": "f",
+      "range": {
+        "min": 0.0,
+        "max": 100.0
+      },
+      "scaling": "linear",
+      "direction": "both",
+      "display_name": "bril",
+      "range_overridden": true,
+      "unit": "",
+      "critical": false
+    },
+    {
+      "host_param_id": 3,
+      "device_index": 0,
+      "path": "/track/7/warm",
+      "arg_index": 0,
+      "type": "f",
+      "range": {
+        "min": 0.0,
+        "max": 100.0
+      },
+      "scaling": "linear",
+      "direction": "both",
+      "display_name": "warm",
+      "range_overridden": true,
+      "unit": "",
+      "critical": false
+    },
+    {
+      "host_param_id": 4,
+      "device_index": 0,
+      "path": "/track/7/azim",
+      "arg_index": 0,
+      "type": "f",
+      "range": {
+        "min": -180.0,
+        "max": 180.0
+      },
+      "scaling": "linear",
+      "direction": "both",
+      "display_name": "azimuth",
+      "range_overridden": true,
+      "unit": "",
+      "critical": false
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A ToscA mapping in the shape of the user manual's example (v4, IRCAM): one
+     <parameter> per lane with its 1-based index, name, range and scaling; the
+     address is the prefix, then the track's id, then the name. Written from
+     the manual and forum examples, no schema having been published; a real
+     file replaces it when one turns up (devplan Phase 5c). -->
+<tosca version="0.9" prefix="/track">
+  <parameter index="1" name="azim" min="-180" max="180" scaling="lin"/>
+  <parameter index="2" name="elev" min="-90" max="90" scaling="lin"/>
+  <parameter index="3" name="dist" min="0.1" max="100" scaling="log"/>
+  <parameter index="4" name="gain" min="-60" max="12" scaling="lin"/>
+  <parameter index="6" name="spread" min="0" max="1" scaling="exp"/>
+</tosca>

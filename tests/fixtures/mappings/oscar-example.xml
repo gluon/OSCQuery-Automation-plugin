@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- An OSCar mapping in the shape of the IRCAM forum's examples: one
+     <parameter> per lane in order, with a name, an address pattern holding $1
+     for the track's id, a range and a default. Written from the forum, no
+     schema having been published; a real oscar.xml replaces it when one turns
+     up (devplan Phase 5c). -->
+<oscar>
+  <parameter name="trim" pattern="/track/$1/trim" min="-12" max="12" default="0"/>
+  <parameter name="pres" pattern="/track/$1/pres" min="0" max="100" default="50"/>
+  <parameter name="bril" pattern="/track/$1/bril" min="0" max="100" default="50"/>
+  <parameter name="warm" pattern="/track/$1/warm" min="0" max="100" default="50"/>
+  <parameter name="azimuth" pattern="/track/$1/azim" min="-180" max="180" default="0" scaling="linear"/>
+</oscar>

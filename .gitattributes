@@ -27,8 +27,9 @@ CMakeLists.txt text eol=lf
 *.svg  text eol=lf
 
 # Fixtures compared byte for byte by tests (state chunks, device trees,
-# exported bindings) must be the same bytes on every platform.
+# exported bindings, ToscA and OSCar mappings) must be the same bytes on every platform.
 tests/**/*.json text eol=lf
+tests/**/*.xml  text eol=lf
 
 # Git's own files and the licence, so `git add` stops warning about them.
 .gitattributes text eol=lf

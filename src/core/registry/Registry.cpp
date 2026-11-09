@@ -307,12 +307,13 @@ namespace oqa::core
         client excludes what the slot's direction wants: it still receives when
         it may). Never stored in the chunk: a device repaired later un-stales the
         slot by itself. */
-    enum class SlotState { pending, ok, missing, retyped, renamed, unauthorised };
+    enum class SlotState { pending, ok, missing, retyped, renamed, unauthorised, inactive };
 
     const char* slotStateName (SlotState s) noexcept
     {
         switch (s)
         {
+            case SlotState::inactive:     return "inactive";
             case SlotState::pending:      return "pending";
             case SlotState::ok:           return "ok";
             case SlotState::missing:      return "missing";
@@ -2411,6 +2412,12 @@ namespace oqa::core
 
             if (! slot.active())
             {
+                /*  The PRD's "range unknown": inactive until min and max are entered. */
+                SlotCheck inactive;
+                inactive.state = SlotState::inactive;
+                inactive.detail = "no range yet";
+                inactive.mayDrive = inactive.mayReceive = false;
+                instance->slotChecks[slot.hostParamId] = inactive;
                 instance->warnings.push_back ("slot " + std::to_string (slot.hostParamId) + " (" + slot.path
                                               + ") has no range yet and neither sends nor receives");
                 continue;

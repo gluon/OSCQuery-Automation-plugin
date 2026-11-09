@@ -1,0 +1,100 @@
+{
+  "version": 1,
+  "devices": [
+    {
+      "name": "Renderer",
+      "last_host": "192.0.2.10",
+      "last_port": 5005,
+      "tree_hash": "",
+      "honours_timetags": false,
+      "offset_ms": 0.0
+    }
+  ],
+  "slots": [
+    {
+      "host_param_id": 0,
+      "device_index": 0,
+      "path": "/track/3/azim",
+      "arg_index": 0,
+      "type": "f",
+      "range": {
+        "min": -180.0,
+        "max": 180.0
+      },
+      "scaling": "linear",
+      "direction": "both",
+      "display_name": "azim",
+      "range_overridden": true,
+      "unit": "",
+      "critical": false
+    },
+    {
+      "host_param_id": 1,
+      "device_index": 0,
+      "path": "/track/3/elev",
+      "arg_index": 0,
+      "type": "f",
+      "range": {
+        "min": -90.0,
+        "max": 90.0
+      },
+      "scaling": "linear",
+      "direction": "both",
+      "display_name": "elev",
+      "range_overridden": true,
+      "unit": "",
+      "critical": false
+    },
+    {
+      "host_param_id": 2,
+      "device_index": 0,
+      "path": "/track/3/dist",
+      "arg_index": 0,
+      "type": "f",
+      "range": {
+        "min": 0.1,
+        "max": 100.0
+      },
+      "scaling": "log",
+      "direction": "both",
+      "display_name": "dist",
+      "range_overridden": true,
+      "unit": "",
+      "critical": false
+    },
+    {
+      "host_param_id": 3,
+      "device_index": 0,
+      "path": "/track/3/gain",
+      "arg_index": 0,
+      "type": "f",
+      "range": {
+        "min": -60.0,
+        "max": 12.0
+      },
+      "scaling": "linear",
+      "direction": "both",
+      "display_name": "gain",
+      "range_overridden": true,
+      "unit": "",
+      "critical": false
+    },
+    {
+      "host_param_id": 5,
+      "device_index": 0,
+      "path": "/track/3/spread",
+      "arg_index": 0,
+      "type": "f",
+      "range": {
+        "min": 0.0,
+        "max": 1.0
+      },
+      "scaling": "exp",
+      "direction": "both",
+      "display_name": "spread",
+      "range_overridden": true,
+      "unit": "",
+      "critical": false
+    }
+  ]
+}

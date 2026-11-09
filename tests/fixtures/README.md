@@ -15,3 +15,14 @@ Device trees in exactly the shape a device answers `GET /` with, served by the m
 
 Captures of real devices (WFS-DIY first) are added as their own fixtures when a phase needs them,
 named after the device and its version.
+
+## mappings/
+
+ToscA and OSCar mapping files for `tools/convert-mapping.py` (Phase 5c), and what it writes from
+each (`*.expected.json`, a version-1 state chunk), diffed in CI's `pins` job and loaded by
+`tests/core/ImportTests.cpp`.
+
+| Fixture | What it is |
+| --- | --- |
+| `tosca-example.xml` | The shape of the ToscA user manual's example: `<tosca prefix>` over `<parameter index name min max scaling>`, one index left out to show the gap kept. Written from the manual and forum, no schema having been published; a real file replaces it when one turns up. |
+| `oscar-example.xml` | The shape of the IRCAM forum's OSCar examples: `<oscar>` over `<parameter name pattern min max default>`, `$1` the track's id. As above. |
