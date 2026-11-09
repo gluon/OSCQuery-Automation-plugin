@@ -63,6 +63,20 @@ target_compile_definitions(oqa_clap PRIVATE
     JUCE_DISPLAY_SPLASH_SCREEN=0      # GPLv3 build; nothing of JUCE's is shown
     JUCE_STANDALONE_APPLICATION=0)
 
+# ONE EXPORT, clap_entry, said to the linker as well as the compiler (hidden visibility is
+# set for every target): on macOS the test host found JUCE's constexpr singletons coalesced
+# between the executable and this module, and a String of one copy freed by the other; an
+# export list (Apple) or a version script with -Bsymbolic (GNU ld) keeps this module's
+# symbols its own. Windows exports only what is declared, which is clap_entry.
+if(APPLE)
+    target_link_options(oqa_clap PRIVATE "LINKER:-exported_symbol,_clap_entry")
+elseif(NOT WIN32)
+    target_link_options(oqa_clap PRIVATE
+        "LINKER:--version-script=${CMAKE_CURRENT_SOURCE_DIR}/exports.map"
+        "LINKER:-Bsymbolic")
+    set_property(TARGET oqa_clap APPEND PROPERTY LINK_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/exports.map")
+endif()
+
 target_link_libraries(oqa_clap
     PRIVATE
         clap

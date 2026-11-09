@@ -37,5 +37,19 @@ if(APPLE)
     set_target_properties(oqa_core_shared PROPERTIES INSTALL_NAME_DIR "@loader_path")
 endif()
 
+# ONE EXPORT, SAID TO THE LINKER TOO (Phase 5b): hidden visibility is the compiler's word, and
+# the macOS bench found JUCE's constexpr singletons (juce::var's types) coalesced across the
+# test executable and the CLAP module all the same, a String of one copy freed by the other.
+# An export list on Apple and a version script with -Bsymbolic on GNU ld bind everything but
+# the one entry inside this image, whatever the compiler emitted.
+if(APPLE)
+    target_link_options(oqa_core_shared PRIVATE "LINKER:-exported_symbol,_oqa_core_api")
+elseif(NOT WIN32)
+    target_link_options(oqa_core_shared PRIVATE
+        "LINKER:--version-script=${CMAKE_CURRENT_SOURCE_DIR}/exports.map"
+        "LINKER:-Bsymbolic")
+    set_property(TARGET oqa_core_shared APPEND PROPERTY LINK_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/exports.map")
+endif()
+
 # oqa::oscquery named explicitly for the same archive-order reason as tests/core.
 target_link_libraries(oqa_core_shared PRIVATE oqa::core oqa::oscquery oqa_juce oqa::warnings)

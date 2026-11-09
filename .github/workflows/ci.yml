@@ -186,6 +186,16 @@ jobs:
       - name: Build (Debug)
         run: cmake --build --preset ci-macos-debug
 
+      # What each image exports (Phase 5b): the CLAP module and the core library should
+      # each show one external symbol; JUCE's singletons must be private in all three.
+      - name: Exports of the module, the library and the test host (information)
+        run: |
+          for f in "build/ci-macos/src/shims/clap/oqa_clap_artefacts/Debug/OSCQuery Automation.clap/Contents/MacOS/OSCQuery Automation"                    build/ci-macos/src/core/core-shared/Debug/libOSCQuery-Automation-Core.dylib                    build/ci-macos/tests/clap/Debug/oqa_clap_tests; do
+            echo "== $f"
+            echo "external symbols: $(nm -gU "$f" | wc -l | tr -d ' ')"
+            nm -m "$f" | grep -E "attributesString|emptyString" | head -4 || true
+          done
+
       - name: Test (Debug, C and fr_FR)
         run: ctest --preset ci-macos
 
