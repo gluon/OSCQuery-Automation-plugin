@@ -21,11 +21,17 @@ Target `oqa::core` (static), namespace `oqa::core`, includes as `<core/...>`. It
 | `send/RateLimiter` | Per bound path, default off: WFS-DIY's shape (latest value per key, compared with what was last sent) without its mutex or timer; an optional periodic resend | 3c |
 | `registry/Registry` | One entry per device (`NAME` plus identity value), owning one `oscquery::Device`, one sender (`RawUdpSender`, or `TcpSender` when `OSC_TRANSPORT` says so) and one realtime network thread; instances hand over their chunk and get a plan (slot to group to device) behind one atomic pointer; the thread gathers a block's changes from every instance, makes one bundle per device, splits at the MTU, stamps the time tag, routes CRITICAL leaves on a UDP device to the websocket (L4); the optional direct send encodes and sends from the audio thread, default off | 3c |
 | `registry/RegistryApi` | The C ABI over the registry: one exported table of functions, version 1, exact-match; the same table statically as `staticCoreApi()` for the fallback | 3c |
-| `Instance` | One plugin instance's side: its chunk, `connect`/`disconnect` for the host's lifecycle, `processBlock` posting what moved and ending the block, bind/unbind/range/curve/direction/name for the editor, the Test button, the device's tree and the status as JSON | 3c |
+| `Instance` | One plugin instance's side: its chunk, `connect`/`disconnect` for the host's lifecycle, `processBlock` posting what moved and ending the block, bind/unbind/range/curve/direction/name for the editor, the Test button, the device's tree and the status as JSON; since Phase 5: `pointDevice`, `setDeviceIdentity`, `setDeviceTreeHash`, the Finder wrappers, and `saveState` writing a re-found or pointed address into the chunk | 3c, 5b |
+| `registry/RegistryLoader`, `core-shared/` | The shared core library every plugin binary loads (exact-match ABI version, found beside the plugin by walking up from its own module) and the fallback to this binary's own core, said in the status | 3c |
+| `receive/Gesture` | The host gesture a stream of received values is: opened by the first, closed after the idle timeout, one per slot; pure, on the caller's clock | 4c |
+| `Identity` | An identity leaf's value as text, one spelling for the editor (from the tree's VALUE) and the registry (read without a tree): strings as they are, numbers without a trailing fraction | 5b |
+
+Since Phase 4 the registry also records: every group's path LISTENed, incoming values scaled to 0–1
+and queued per instance, the loop guard, one UDP receiver per process for devices without LISTEN.
+Since Phase 5 it checks every bound slot against the tree (stale and unauthorised slots), confirms
+a device by NAME and identity leaf before driving it, and re-finds a moved one over DNS-SD through
+the resolver's Finder (see `registry/Registry.h`).
 
 Measured on this machine (Debug, loopback, `tests/core/RegistryTests.cpp`): 25 blocks from two
 instances arrive as 25 bundles of two messages; post to the mock's socket median 96 µs, p99
 227 µs; 500 blocks allocate nothing on the audio path, with or without the direct send.
-
-Coming: the shared core library and its loader (3c-3), the JUCE shim's real parameters (3d), the
-editor (3e).

@@ -661,6 +661,52 @@ machine and the Mac mini, the records, the amendments.
   (`finderEnsure`, `finderAddManual`) are additive, version unchanged, an older library refused by
   the loader's size check as in Phase 4.
 
+**Record, 2026-11-09 (built; the DAW rows of the done-when open, Phase 3's and 4's with them).**
+Built in four commits on `main`, 5a to 5d, in one session. Report of the bench so far:
+[`docs/bench/2026-11-09-phase5-reidentify.md`](bench/2026-11-09-phase5-reidentify.md).
+
+- *Done so far, measured on this machine against the mock (Debug, loopback):* a path renamed,
+  removed or retyped shows stale with its detail (and where a renamed one went), sends nothing, is
+  LISTENed no more, keeps its binding, and a path grown back is live again; a chunk reopened
+  against a tree missing one path has that slot stale and the rest live; the `tree_hash` notice,
+  cleared by a rebind's hash; ACCESS as reported to this client (two mocks, one allow-listing this
+  client) makes a sending slot unauthorised that still receives; **a session saved against a mock
+  on one address reopens against it on another, found by NAME over DNS-SD, every slot live, the
+  new address saved**; **two mocks sharing a NAME are told apart by the identity leaf, and by the
+  tree hash**; **with neither, unresolved with both as candidates until pointed once from one
+  instance, every instance following and saving the address**; a different device at the last
+  address is a mismatch never driven; a device pointed at by hand is used whatever NAME answers,
+  with a warning; export and import byte-identical under `C` and `fr_FR`; the converter's output
+  from the ToscA and OSCar fixtures loads, and against a device that does not serve its paths
+  shows every slot stale; one case per row of the PRD's failure-states table. **pluginval 1.0.4
+  passes the Debug VST3 at strictness 5 with the editor.** The core's suite is **110 cases** as
+  `core.C` and `core.fr_FR`.
+- *Implementer's decisions, the author's to overrule:* a `pending` slot (no tree yet, or the device
+  not confirmed) is planned as before and re-checked when the tree lands, so Phase 3's and 4's
+  behaviour is unchanged for a confirmed device; `T` and `F` count as one type for the retype check;
+  a path under a container the device sent without CONTENTS is `pending`, never `missing`; the
+  renames an entry remembers are forgotten when the tree holds the old path again; a device that
+  stops answering while confirmed goes `searching` (its own Device keeps retrying the address, and
+  comes back `confirmed` if it answers again); candidates are kept in the status after an adoption,
+  as the record of the choice; the mock's HOST_INFO `NAME` is settable at run time and the test rig
+  names the mock after the session's device, so every earlier test runs under the NAME compare; a
+  device joins the session from the editor only once it has answered HOST_INFO; the editor's
+  warnings line reads the registry's status, not the instance's last push; the editor's own word
+  (a refused import) stands in that line until the next action; the `inactive` state joins the
+  status's `slots` so the table is complete.
+- *Found on the way:* **a path LISTENed as the websocket opens had its first value read twice**
+  (`onOpened` and the `listenNow` queued behind it), caught by the 100 Hz receive case once LISTEN
+  moved to after the device's confirmation; the library's worker now keeps the paths on the wire
+  since the open, dropped with a removed or renamed path. The mock's HTTP server is dual-stack, so a
+  loopback client's address arrives as `::ffff:127.0.0.1`; the allow-list reads it as IPv4. A JUCE
+  `var` array pointer taken from a temporary dangles (twice in a day, in test code).
+- *Still to fill, the author at the DAW:* the done-when moved to real devices (the hand path with
+  WFS-DIY on this machine then the Mac mini, the DNS-SD path with go.dot, two mocks sharing a
+  NAME, stale live from Chataigne or ossia score, export from REAPER into Bitwig), with the Phase 3
+  and 4 rows in the same sitting; the Mac mini and the NUC through `scripts/farm-check.sh`. The
+  Release VST3 and the core DLL from `0d4f939` are installed in `%LOCALAPPDATA%\Programs\Common\VST3\`;
+  the steps are in the bench report.
+
 ---
 
 ## Phase 5b — Our own CLAP shim · M
