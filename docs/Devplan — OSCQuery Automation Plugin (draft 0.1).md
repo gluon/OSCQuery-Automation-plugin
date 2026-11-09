@@ -1037,6 +1037,8 @@ Built in nine commits on `main` in one session, 6a-1 to 6f, in the plan's order,
   it outlives the registry; and `shutdown()` stops the server's serving first, without unannouncing
   (the unannounce would restart the Finder), then the resolver. The farm's clap-validator runs after
   the fix are in the bench report.
+- **CI green on Linux, macOS and Windows** on `173e733` (run 42688672120): every suite, pluginval on
+  the 32-slot plugin and the Monitor, clap-validator on the six-plugin module, on all three.
 - *The author's open items from planning:* the layout before the drag-bind and bulk operations are
   polished, and the words for the failure-state tooltips, which stand as the implementer's defaults in
   `SlotPresentation.h`.
