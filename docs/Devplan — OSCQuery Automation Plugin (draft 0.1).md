@@ -409,7 +409,8 @@ its loader, the shim's real parameters, the editor's first cut. Report of the be
   first address until pointed (Phase 5 resolves identity); the direct send sends a plain message
   with no bundle and no time tag; the arguments not automated start from the tree's `VALUE` at
   bind time and are not yet refreshed when the tree reloads (Phase 4's LISTEN will keep them
-  current); the AU gets no parameter clump (fixed at construction, it could not follow a rebind;
+  current; **done in 4a, 2026-11-09**: they follow what the device streams, and a plan made before
+  the tree arrived is rebuilt when it lands); the AU gets no parameter clump (fixed at construction, it could not follow a rebind;
   REAPER would put the unit's name in lane titles). NTP seconds wrap at the end of era 0 (2036) as
   NTP's do.
 - *On the Mac mini the same day* (`scripts/farm-check.sh`, Debug): every CTest entry passes, the
@@ -505,6 +506,48 @@ amendments.
   lock order is the registry's lock then a device entry's groups lock, never the reverse; the
   settings `receive_port`, `loop_guard_ms` and `gesture_timeout_ms` join the registry's
   process-wide JSON, their persistence and full UI staying Phase 6's Monitor.
+
+**Record, 2026-11-09 (built; the DAW rows of the done-when open, Phase 3's with them).** Built in
+four commits on `main`, 4a to 4d, in one session. Report of the bench so far:
+[`docs/bench/2026-11-09-phase4-record.md`](bench/2026-11-09-phase4-record.md).
+
+- *Done so far, measured on this machine against the mock (Debug, loopback):* every bound path
+  LISTENed and IGNOREd with its last group; a streamed value scaled to 0–1 by its slot (linear, a
+  toggle, a user-entered log range); an `fff`'s undriven arguments following the device; a plan
+  made before the tree arrived rebuilt when it lands, whole; the loop guard dropping a 10 ms echo
+  and passing a 150 ms one; the host handing a received value back sending nothing; **32 slots in
+  both directions following the mock at 100 Hz for 2 s, 6,400 values, none missed, none echoed
+  back**; a receiving slot without a range saying so; two instances on one path; the audio path
+  allocating nothing with receiving slots; a saved chunk with receiving slots recording
+  (`tests/state/v1-receive.json`); a device without LISTEN delivering over the registry's UDP port
+  once told it, bundles included, two such devices told apart by path and a shared path going to
+  both, counted, a device whose websocket streams having its UDP copies ignored and counted, the
+  port setting moving the receiver; the gesture tracker on the test's clock. **pluginval 1.0.4
+  passes the Debug VST3 at strictness 5 with the editor.** The core's suite is 87 cases as
+  `core.C` and `core.fr_FR`.
+- *Implementer's decisions, the author's to overrule:* **on LISTEN the device's current value is
+  delivered once** (the library reads it over HTTP), so a receiving slot takes the device's value
+  when bound or reloaded, inside a gesture; a host armed in Touch at that moment records a point.
+  **UDP copies for a device whose websocket streams are ignored and counted**, LISTEN being its
+  way, as the PRD's "fallback for devices without websocket" reads; so the WFS-DIY UDP row on the
+  bench needs its websocket refused to the plugin, or stays the mock's. The receiver, once started,
+  runs for the life of the process (a port is cheap; stopping it when the last receiving slot goes
+  would make the shown port come and go). The `both` direction's host-echo skip compares within
+  1e-6 of the last received value, because a host may round-trip the float through a double. The
+  plan rebuild on tree arrival carries the audio thread's last posted values over, so nothing is
+  re-sent for the rebuild alone. `Device::Callbacks::onPathRemoved` and `onPathRenamed` are not
+  wired yet: Phase 5's stale slots.
+- *Found on the way:* **a partly bound `fff` planned before the tree sent a short message** (the
+  open item of the Phase 3 record was a bug, not only a staleness); **a Device thread must never
+  need a lock its joiner holds**: the entry stopped its Device under the device lock while that
+  thread, mid-delivery, waited for the registry's lock whose holder wanted the device lock; stopped
+  outside now, in the destructor and on an address change. Windows lists multicast groups among a
+  machine's addresses (the receive line filters them as Discovery does). The test runner prints a
+  backtrace on an access violation on Windows now (`tests/TestMain.cpp`).
+- *Still to fill, the author at the DAW:* the done-when's REAPER rows (the Release VST3 and the
+  core DLL from `8d548a8` are installed in `%LOCALAPPDATA%\Programs\Common\VST3\`; the steps are
+  in the bench report), with the Phase 3 rows in the same sitting; the Mac mini and the NUC through
+  `scripts/farm-check.sh`; CI on three platforms (pushed after 4d).
 
 ---
 
