@@ -33,7 +33,8 @@ env:
   PLUGINVAL_URL: https://github.com/Tracktion/pluginval/releases/download/v1.0.4
   PLUGIN_DIR: src/shims/juce/oqa_plugin_32_artefacts/Release
   PLUGIN_NAME: OSCQuery Automation 32
-  # clap-validator 0.4.1 (THIRD_PARTY_NOTICES.md); its release assets carry the build string.
+  # clap-validator 0.4.1 (THIRD_PARTY_NOTICES.md); its release assets carry the build string, and
+  # the Linux and macOS zips wrap a tarball (named 0.3.2 by the release's own tooling).
   CLAP_VALIDATOR_URL: https://github.com/free-audio/clap-validator/releases/download/0.4.1
   CLAP_VALIDATOR_BUILD: clap-validator-0.4.1-127-g152b982
   CLAP_DIR: src/shims/clap/oqa_clap_artefacts/Release
@@ -137,7 +138,8 @@ jobs:
         run: |
           curl -sSL -o clap-validator.zip "$CLAP_VALIDATOR_URL/$CLAP_VALIDATOR_BUILD-ubuntu-22.04.zip"
           unzip -q clap-validator.zip -d clap-validator
-          CV=$(find clap-validator -type f -name 'clap-validator*' | head -1)
+          for t in clap-validator/*.tar.gz; do [ -f "$t" ] && tar -xzf "$t" -C clap-validator; done
+          CV=$(find clap-validator -type f -name 'clap-validator' | head -1)
           chmod +x "$CV"
           "$CV" validate "build/ci-linux/$CLAP_DIR/$CLAP_NAME"
 
@@ -201,7 +203,8 @@ jobs:
         run: |
           curl -sSL -o clap-validator.zip "$CLAP_VALIDATOR_URL/$CLAP_VALIDATOR_BUILD-macos-universal.zip"
           unzip -q clap-validator.zip -d clap-validator
-          CV=$(find clap-validator -type f -name 'clap-validator*' | head -1)
+          for t in clap-validator/*.tar.gz; do [ -f "$t" ] && tar -xzf "$t" -C clap-validator; done
+          CV=$(find clap-validator -type f -name 'clap-validator' | head -1)
           chmod +x "$CV"
           "$CV" validate "build/ci-macos/$CLAP_DIR/$CLAP_NAME"
 

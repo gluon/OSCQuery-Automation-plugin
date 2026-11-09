@@ -77,7 +77,8 @@ rm -rf ../clap-validator && mkdir ../clap-validator
 if [ "$OS" = Darwin ]; then CVZ="$CVB-macos-universal.zip"; else CVZ="$CVB-ubuntu-22.04.zip"; fi
 curl -sSL -o ../clap-validator/cv.zip "https://github.com/free-audio/clap-validator/releases/download/0.4.1/$CVZ"
 unzip -q ../clap-validator/cv.zip -d ../clap-validator
-CV=$(find ../clap-validator -type f -name 'clap-validator*' | head -1); chmod +x "$CV"
+for t in ../clap-validator/*.tar.gz; do [ -f "$t" ] && tar -xzf "$t" -C ../clap-validator; done
+CV=$(find ../clap-validator -type f -name 'clap-validator' | head -1); chmod +x "$CV"
 "$CV" validate "$CLAP" > ../farm-oqa-clap-validator.log 2>&1
 RC=$?
 tail -5 ../farm-oqa-clap-validator.log

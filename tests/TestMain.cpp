@@ -94,6 +94,66 @@ namespace
 
     const bool crashHandlerInstalled = (AddVectoredExceptionHandler (1, printBacktraceOnCrash), true);
 }
+#else
+ #include <csignal>
+ #include <cstdlib>
+ #include <exception>
+ #include <execinfo.h>
+ #include <unistd.h>
+
+namespace
+{
+    /*  The POSIX twin (Phase 5b, when a case aborted on the macOS runner with
+        no word of where): doctest reports the signal, restores the previous
+        handlers and raises it again, so this one then prints the frames.
+        backtrace_symbols_fd is async-signal-safe enough for a process that
+        is dying anyway; a Debug build has the names. std::terminate (an
+        exception out of a noexcept function, clap-helpers' Terminate) says
+        so too, with the frames, before the abort. */
+    void printBacktraceOnSignal (int signal)
+    {
+        const char* name = signal == SIGABRT ? "SIGABRT" : signal == SIGSEGV ? "SIGSEGV" : signal == SIGBUS ? "SIGBUS" : "signal";
+        const char head[] = "\nfatal ";
+        write (STDERR_FILENO, head, sizeof (head) - 1);
+        write (STDERR_FILENO, name, std::strlen (name));
+        write (STDERR_FILENO, ", backtrace:\n", 13);
+
+        void* frames[64];
+        const int count = backtrace (frames, 64);
+        backtrace_symbols_fd (frames, count, STDERR_FILENO);
+
+        std::signal (signal, SIG_DFL);
+        std::raise (signal);
+    }
+
+    void printBacktraceOnTerminate()
+    {
+        const char head[] = "\nstd::terminate called";
+        write (STDERR_FILENO, head, sizeof (head) - 1);
+
+        if (const auto current = std::current_exception())
+        {
+            try { std::rethrow_exception (current); }
+            catch (const std::exception& e) { const char with[] = " with exception: "; write (STDERR_FILENO, with, sizeof (with) - 1); write (STDERR_FILENO, e.what(), std::strlen (e.what())); }
+            catch (...) { const char with[] = " with a non-std exception"; write (STDERR_FILENO, with, sizeof (with) - 1); }
+        }
+
+        write (STDERR_FILENO, ", backtrace:\n", 13);
+        void* frames[64];
+        const int count = backtrace (frames, 64);
+        backtrace_symbols_fd (frames, count, STDERR_FILENO);
+        std::abort();
+    }
+
+    const bool crashHandlerInstalled = []
+    {
+        std::signal (SIGABRT, printBacktraceOnSignal);
+        std::signal (SIGSEGV, printBacktraceOnSignal);
+        std::signal (SIGBUS, printBacktraceOnSignal);
+        std::set_terminate (printBacktraceOnTerminate);
+        return true;
+    }();
+}
 #endif
 
 //==============================================================================
