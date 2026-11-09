@@ -46,6 +46,12 @@
     MANUAL ENTRY is a host:port field and a button, because multicast often
     does not cross a show network's VLANs (PRD), and because on this very
     machine nothing announced on the same host is found (Phase 2 bench).
+
+    TIMING (Phase 6d-1; PRD, Transport: "whether a device honours timetags is
+    a per-device setting the user ticks", "a signed offset in milliseconds per
+    device"): a tick and a field for the selected device, set by hand and so
+    process-wide (6a-3). An unreachable device's row is greyed, its last-seen
+    time in its state.
 */
 
 #include <core/Instance.h>
@@ -121,6 +127,11 @@ namespace oqa::editor
         juce::TextButton identityButton { "Identity..." };
         juce::TextEditor manualEntry;
         juce::TextButton addButton { "Add" };
+
+        juce::ToggleButton timetagsToggle { "honours timetags" };
+        juce::Label offsetLabel { {}, "offset ms" };
+        juce::Label offsetField;
+        void updateTiming();
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DeviceList)
     };

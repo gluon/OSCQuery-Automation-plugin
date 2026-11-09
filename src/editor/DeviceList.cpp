@@ -88,6 +88,29 @@ namespace oqa::editor
         addButton.onClick = [this] { addManual(); };
         addAndMakeVisible (addButton);
 
+        /*  The device's timing, by hand (6a-3): the Monitor and every editor
+            share it, and every chunk takes it on its next save. */
+        timetagsToggle.setTooltip ("The device schedules OSC bundles by their timetag: sends carry the intended playback time plus the offset. Off, it receives the immediate tag.");
+        timetagsToggle.onClick = [this]
+        {
+            if (selected >= 0 && selected < static_cast<int> (instance.chunk().devices.size()))
+                instance.setDeviceTiming (selected, timetagsToggle.getToggleState(), instance.chunk().devices[static_cast<std::size_t> (selected)].offsetMs);
+        };
+        addAndMakeVisible (timetagsToggle);
+
+        offsetLabel.setFont (juce::FontOptions (11.0f));
+        addAndMakeVisible (offsetLabel);
+        offsetField.setFont (juce::FontOptions (11.0f));
+        offsetField.setEditable (true, false, false);
+        offsetField.setTooltip ("A signed offset in milliseconds for this device: applied to timetags when the device honours them, else as a send delay. OSC latency compensation, set once per rig.");
+        offsetField.setColour (juce::Label::outlineColourId, juce::Colours::grey.withAlpha (0.5f));
+        offsetField.onTextChange = [this]
+        {
+            if (selected >= 0 && selected < static_cast<int> (instance.chunk().devices.size()))
+                instance.setDeviceTiming (selected, timetagsToggle.getToggleState(), offsetField.getText().getDoubleValue());
+        };
+        addAndMakeVisible (offsetField);
+
         recents.load();
 
         /*  The registry's Finder, one per process (5b): started for this
@@ -117,6 +140,11 @@ namespace oqa::editor
         buttons.removeFromLeft (4);
         identityButton.setBounds (buttons);
 
+        auto timing = area.removeFromBottom (24).reduced (0, 2);
+        timetagsToggle.setBounds (timing.removeFromLeft (juce::jmax (120, timing.getWidth() / 2)));
+        offsetField.setBounds (timing.removeFromRight (56));
+        offsetLabel.setBounds (timing.removeFromRight (60));
+
         list.setBounds (area.withTrimmedBottom (4));
     }
 
@@ -133,6 +161,29 @@ namespace oqa::editor
         identityButton.setEnabled (haveSession);
         identityButton.setButtonText (hasIdentity ? "Clear identity" : (identityArmed ? "Identity: click a leaf" : "Identity..."));
         identityButton.setToggleState (identityArmed && ! hasIdentity, juce::dontSendNotification);
+
+        updateTiming();
+    }
+
+    void DeviceList::updateTiming()
+    {
+        const auto& chunk = instance.chunk();
+        const bool haveSession = selected >= 0 && selected < static_cast<int> (chunk.devices.size());
+        timetagsToggle.setEnabled (haveSession);
+        offsetField.setEnabled (haveSession);
+
+        if (! haveSession)
+        {
+            timetagsToggle.setToggleState (false, juce::dontSendNotification);
+            offsetField.setText ({}, juce::dontSendNotification);
+            return;
+        }
+
+        const auto& ref = chunk.devices[static_cast<std::size_t> (selected)];
+        timetagsToggle.setToggleState (ref.honoursTimetags, juce::dontSendNotification);
+
+        if (! offsetField.isBeingEdited())
+            offsetField.setText (juce::String (ref.offsetMs, 1), juce::dontSendNotification);
     }
 
     void DeviceList::identityDone()
@@ -396,7 +447,8 @@ namespace oqa::editor
         const int addressWidth = juce::jmax (60, (width - 20 - stateWidth) * 2 / 5);
         const int nameWidth = juce::jmax (40, width - 20 - stateWidth - addressWidth);
 
-        g.setColour (colours.findColour (juce::ListBox::textColourId).withAlpha (row.reachable || session ? 1.0f : 0.6f));
+        /*  An unreachable session device is greyed (PRD's failure table), its last-seen time in its state. */
+        g.setColour (colours.findColour (juce::ListBox::textColourId).withAlpha (row.reachable || row.source == Row::Source::candidate ? 1.0f : 0.6f));
         g.setFont (juce::FontOptions (13.0f));
         g.drawText (name, 20, 0, nameWidth, height, juce::Justification::centredLeft, true);
         g.setFont (juce::FontOptions (11.0f));

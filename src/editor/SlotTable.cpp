@@ -17,6 +17,8 @@
 
 #include "SlotTable.h"
 
+#include <optional>
+
 namespace oqa::editor
 {
     //==============================================================================
@@ -40,13 +42,32 @@ namespace oqa::editor
         {
             row = newRow;
             const auto& slot = table.instance.chunk().slots[row];
+            const auto slotStatus = table.slotStatus (row);
+            deviceMin = slotStatus.hasProperty ("device_range_min") ? std::optional<double> (static_cast<double> (slotStatus["device_range_min"])) : std::nullopt;
+            deviceMax = slotStatus.hasProperty ("device_range_max") ? std::optional<double> (static_cast<double> (slotStatus["device_range_max"])) : std::nullopt;
+
             minField.setText (slot.rangeMin.has_value() ? juce::String (*slot.rangeMin) : juce::String(), juce::dontSendNotification);
             maxField.setText (slot.rangeMax.has_value() ? juce::String (*slot.rangeMax) : juce::String(), juce::dontSendNotification);
             const bool editable = slot.bound() && ! slot.isToggle();
             minField.setEnabled (editable);
             maxField.setEnabled (editable);
-            minField.setTextToShowWhenEmpty (editable ? "min" : "", juce::Colours::grey);
-            maxField.setTextToShowWhenEmpty (editable ? "max" : "", juce::Colours::grey);
+
+            /*  The device's own RANGE greyed as the hint (PRD, UX: "RANGE from
+                the device shown greyed when overridden"); the user's values in
+                amber when they differ from it; clearing both goes back to it. */
+            const bool overridden = slot.rangeOverridden && deviceMin.has_value();
+            minField.setTextToShowWhenEmpty (editable ? (deviceMin.has_value() ? juce::String (*deviceMin) : juce::String ("min")) : juce::String(), juce::Colours::grey);
+            maxField.setTextToShowWhenEmpty (editable ? (deviceMax.has_value() ? juce::String (*deviceMax) : juce::String ("max")) : juce::String(), juce::Colours::grey);
+            const auto colour = overridden ? juce::Colours::orange : getLookAndFeel().findColour (juce::TextEditor::textColourId);
+
+            for (auto* e : { &minField, &maxField })
+            {
+                e->applyColourToAllText (colour, true);
+                e->setTooltip (deviceMin.has_value()
+                                   ? "The device's RANGE is " + juce::String (*deviceMin) + " .. " + juce::String (*deviceMax)
+                                       + (overridden ? "; yours stands. Clear both fields to go back to the device's." : ".")
+                                   : juce::String ("No RANGE from the device: enter min and max."));
+            }
         }
 
         void resized() override
@@ -63,6 +84,14 @@ namespace oqa::editor
             const auto& slot = table.instance.chunk().slots[row];
             const auto minText = minField.getText().trim();
             const auto maxText = maxField.getText().trim();
+
+            /*  Both cleared: back to the device's own range. */
+            if (minText.isEmpty() && maxText.isEmpty() && slot.rangeOverridden && deviceMin.has_value() && deviceMax.has_value())
+            {
+                table.instance.clearRangeOverride (row, *deviceMin, *deviceMax);
+                table.changed();
+                return;
+            }
 
             if (minText.isEmpty() || maxText.isEmpty())
                 return;
@@ -82,7 +111,47 @@ namespace oqa::editor
 
         SlotTable& table;
         int row = 0;
+        std::optional<double> deviceMin, deviceMax;
         juce::TextEditor minField, maxField;
+    };
+
+    /** The display name, edited in place: double-click, type, Enter. */
+    class SlotTable::NameEditor final : public juce::Component
+    {
+    public:
+        explicit NameEditor (SlotTable& owner) : table (owner)
+        {
+            label.setFont (juce::FontOptions (12.0f));
+            label.setEditable (false, true, false);
+            label.setTooltip ("The lane's name in the host; double-click to rename.");
+            label.onTextChange = [this]
+            {
+                const auto text = label.getText().trim();
+
+                if (text.isNotEmpty() && text != juce::String (table.instance.chunk().slots[row].displayName))
+                {
+                    table.instance.setDisplayName (row, text.toStdString());
+                    table.changed();
+                }
+            };
+            addAndMakeVisible (label);
+        }
+
+        void setRow (int newRow)
+        {
+            row = newRow;
+            const auto& slot = table.instance.chunk().slots[row];
+            label.setText (slot.bound() ? juce::String (slot.displayName) : juce::String ("(unbound)"), juce::dontSendNotification);
+            label.setEnabled (slot.bound());
+            label.setColour (juce::Label::textColourId, getLookAndFeel().findColour (juce::ListBox::textColourId).withAlpha (slot.bound() ? 1.0f : 0.5f));
+        }
+
+        void resized() override { label.setBounds (getLocalBounds()); }
+
+    private:
+        SlotTable& table;
+        int row = 0;
+        juce::Label label;
     };
 
     /** A combo box for the curve or the direction. */
@@ -181,7 +250,9 @@ namespace oqa::editor
                 }
 
                 std::string error;
-                table.instance.testSend (row, table.slotValue (row), error);
+
+                if (! table.instance.testSend (row, table.slotValue (row), error) && table.onNote != nullptr)
+                    table.onNote ("Test: " + juce::String (error));
             }
             else
             {
@@ -213,6 +284,18 @@ namespace oqa::editor
         importButton.onClick = [this] { if (onImport != nullptr) onImport(); };
         addAndMakeVisible (importButton);
 
+        clearStaleButton.setTooltip ("Unbind every slot whose path the device no longer serves (missing, retyped or moved). The lanes keep their automation.");
+        clearStaleButton.onClick = [this]
+        {
+            const auto cleared = instance.clearStale();
+
+            if (onNote != nullptr)
+                onNote (cleared > 0 ? juce::String (cleared) + " stale slot(s) unbound" : juce::String ("no stale slot"));
+
+            changed();
+        };
+        addAndMakeVisible (clearStaleButton);
+
         auto& header = table.getHeader();
         header.addColumn ("#", Column::index, 30, 30, 40);
         header.addColumn ("Name", Column::name, 150, 60, 400);
@@ -240,6 +323,8 @@ namespace oqa::editor
         importButton.setBounds (top.removeFromRight (80).reduced (0, 2));
         top.removeFromRight (4);
         exportButton.setBounds (top.removeFromRight (80).reduced (0, 2));
+        top.removeFromRight (4);
+        clearStaleButton.setBounds (top.removeFromRight (90).reduced (0, 2));
         title.setBounds (top);
         table.setBounds (area);
     }
@@ -268,6 +353,13 @@ namespace oqa::editor
     void SlotTable::refresh (const juce::var& registryStatus)
     {
         status = registryStatus;
+
+        bool anyStale = false;
+
+        for (int row = 0; row < instance.slotCount() && ! anyStale; ++row)
+            anyStale = slotStale (row);
+
+        clearStaleButton.setEnabled (anyStale);
         table.updateContent();
         table.repaint();
     }
@@ -319,30 +411,50 @@ namespace oqa::editor
             && static_cast<juce::int64> (device.getProperty ("udp_received", 0)) == 0;
     }
 
-    juce::Colour SlotTable::stateColour (int row) const
+    presentation::Standing SlotTable::standingOf (int row) const
     {
         const auto& slot = instance.chunk().slots[row];
+        const auto s = slotStatus (row);
+        const auto device = deviceStatus (slot.deviceIndex);
 
-        if (! slot.bound())
-            return juce::Colours::grey;
+        presentation::Standing out;
+        out.bound = slot.bound();
+        out.active = slot.active();
+        out.state = s.getProperty ("state", "").toString().toStdString();
+        out.detail = s.getProperty ("detail", "").toString().toStdString();
+        out.renamedTo = s.getProperty ("renamed_to", "").toString().toStdString();
+        out.deviceReachable = ! slot.bound() || deviceReachable (slot.deviceIndex);
+        out.waitingForPort = waitingForPort (slot);
+        out.deviceLastSeenMs = static_cast<juce::int64> (device.getProperty ("last_seen_ms", -1));
+        out.loopGuarded = static_cast<juce::int64> (device.getProperty ("loop_guarded", 0));
+        out.rateLimited = static_cast<juce::int64> (device.getProperty ("rate_limited", 0));
+        out.datagramsDropped = static_cast<juce::int64> (device.getProperty ("datagrams_dropped", 0));
+        return out;
+    }
 
-        if (! slot.active())
-            return juce::Colours::orange;
+    juce::Colour SlotTable::stateColour (int row) const
+    {
+        switch (presentation::shadeOf (standingOf (row)))
+        {
+            case presentation::Shade::grey:      return juce::Colours::grey;
+            case presentation::Shade::amber:     return juce::Colours::orange;
+            case presentation::Shade::red:       return juce::Colours::red;
+            case presentation::Shade::orangeRed: return juce::Colours::orangered;
+            case presentation::Shade::green:     return juce::Colours::limegreen;
+        }
 
-        /*  The registry's word against the device's tree (Phase 5a). */
-        if (slotStale (row))
-            return juce::Colours::red;
+        return juce::Colours::grey;
+    }
 
-        if (slotState (row) == "unauthorised")
-            return juce::Colours::orange;
+    juce::String SlotTable::getCellTooltip (int row, int column)
+    {
+        if (row < 0 || row >= instance.slotCount())
+            return {};
 
-        if (! deviceReachable (slot.deviceIndex))
-            return juce::Colours::orangered;
+        if (column == Column::index || column == Column::value || column == Column::path || column == Column::device)
+            return juce::String (presentation::tooltipOf (standingOf (row)));
 
-        if (waitingForPort (slot))
-            return juce::Colours::orange;
-
-        return juce::Colours::limegreen;
+        return {};
     }
 
     juce::String SlotTable::cellText (int row, int column) const
@@ -459,6 +571,20 @@ namespace oqa::editor
     {
         switch (column)
         {
+            case Column::name:
+            {
+                auto* editor = dynamic_cast<NameEditor*> (existing);
+
+                if (editor == nullptr)
+                {
+                    delete existing;
+                    editor = new NameEditor (*this);
+                }
+
+                editor->setRow (row);
+                return editor;
+            }
+
             case Column::range:
             {
                 auto* editor = dynamic_cast<RangeEditor*> (existing);

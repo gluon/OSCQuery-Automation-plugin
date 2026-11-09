@@ -144,6 +144,14 @@ namespace oqa::editor
         search.onTextChange = [this] { rebuild(); };
         addAndMakeVisible (search);
 
+        copyButton.setTooltip ("Copy the device's tree, as it serves it, as JSON: for a bug report to its maker.");
+        copyButton.onClick = [this]
+        {
+            if (tree.has_value())
+                juce::SystemClipboard::copyTextToClipboard (juce::JSON::toString (tree->toVar(), false));
+        };
+        addAndMakeVisible (copyButton);
+
         view.setDefaultOpenness (false);
         view.setRootItemVisible (false);
         addAndMakeVisible (view);
@@ -157,7 +165,9 @@ namespace oqa::editor
     void TreePane::resized()
     {
         auto area = getLocalBounds();
-        title.setBounds (area.removeFromTop (24));
+        auto top = area.removeFromTop (24);
+        copyButton.setBounds (top.removeFromRight (84).reduced (0, 2));
+        title.setBounds (top);
         search.setBounds (area.removeFromTop (26).reduced (0, 2));
         view.setBounds (area);
     }
@@ -167,6 +177,7 @@ namespace oqa::editor
         tree = std::move (newTree);
         shownHash = tree.has_value() ? juce::String (tree->treeHash()) : juce::String();
         deviceLabel = deviceName;
+        copyButton.setEnabled (tree.has_value());
         updateTitle();
         rebuild();
     }

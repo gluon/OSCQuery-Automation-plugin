@@ -333,6 +333,53 @@ namespace oqa::core
         return -1;
     }
 
+    int Instance::clearStale()
+    {
+        if (handle == nullptr)
+            return 0;
+
+        const auto status = juce::JSON::parse (juce::String (statusJson()));
+        std::vector<int> stale;
+
+        if (const auto* slots = status.getProperty ("slots", {}).getArray())
+        {
+            for (const auto& s : *slots)
+            {
+                const auto word = s.getProperty ("state", "").toString();
+
+                if (word == "missing" || word == "retyped" || word == "renamed")
+                    stale.push_back (static_cast<int> (s.getProperty ("id", -1)));
+            }
+        }
+
+        int cleared = 0;
+
+        for (const auto slot : stale)
+            if (slot >= 0 && slot < count && state.slots[slot].bound())
+            {
+                state.slots[slot].unbind();
+                state.slotExtras.erase (slot);
+                ++cleared;
+            }
+
+        if (cleared > 0)
+            push();
+
+        return cleared;
+    }
+
+    void Instance::clearRangeOverride (int slot, double deviceMin, double deviceMax)
+    {
+        if (slot < 0 || slot >= count || ! state.slots[slot].bound() || ! std::isfinite (deviceMin) || ! std::isfinite (deviceMax))
+            return;
+
+        auto& s = state.slots[slot];
+        s.rangeMin = deviceMin;
+        s.rangeMax = deviceMax;
+        s.rangeOverridden = false;
+        push();
+    }
+
     void Instance::setInstanceNumber (int number)
     {
         state.instanceNumber = std::clamp (number, 1, 9999);

@@ -44,6 +44,7 @@ namespace oqa::editor
         slots.onRebind = [this] (int slot) { rebind (slot); };
         slots.onExport = [this] { exportBindings(); };
         slots.onImport = [this] { importBindings(); };
+        slots.onNote = [this] (const juce::String& note) { editorNote = note; };
 
         status.setCoreNote (host.coreNote);
         status.onReceivePortChanged = [this] (int port)
@@ -123,11 +124,18 @@ namespace oqa::editor
             slots.refreshValues();
         }
 
-        /*  The selected device's tree, once the registry has it (or again if it changed). */
+        /*  The selected device's tree, once the registry has it (or again if
+            it changed): the status's live hash says whether, so the tree is
+            fetched and parsed only then, not every tick (6d-1). */
         const int selected = devices.selectedDevice();
 
         if (selected >= 0)
         {
+            const auto liveHash = statusVar.getProperty ("devices", {})[selected].getProperty ("tree_hash_live", "").toString();
+
+            if (liveHash.isNotEmpty() && tree.holds (liveHash))
+                return;
+
             if (const auto json = host.instance.deviceTreeJson (selected))
             {
                 std::string error;
@@ -212,8 +220,9 @@ namespace oqa::editor
 
         if (! ok)
         {
-            /*  Not a modal: the reason goes where the warnings go. The status
-                bar shows the instance's warnings on the next tick. */
+            /*  Not a modal: the reason goes where the warnings go, until the
+                next action (6d-1). */
+            editorNote = "bind refused: " + juce::String (why);
             return;
         }
 

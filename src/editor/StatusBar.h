@@ -22,8 +22,10 @@
     websocket state, last error"; devplan 3c: the plugin "says so in the status
     bar" when it runs on its own core). Four lines: the core's word (shared
     library at a path, or running alone and why); each device's state, bundles
-    out and values in per second since the last refresh, websocket state, the
-    loop guard's count, drops, and last error; the receive line (Phase 4: the
+    and messages out and values in per second (the registry's rates over the
+    last second, 6a-2, the same numbers the Monitor and the server show), the
+    websocket's state, the loop guard's count, drops, and the last error with
+    its age; the receive line (Phase 4: the
     UDP port a device without LISTEN is told, editable here, and this host's
     addresses beside it); the core's warnings.
 */
@@ -31,7 +33,6 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include <functional>
-#include <map>
 #include <vector>
 
 namespace oqa::editor
@@ -59,8 +60,5 @@ namespace oqa::editor
         juce::Label receiveLabel { {}, "Receive port" };
         juce::Label portField;
         int shownPortSetting = -1;
-
-        struct Seen { juce::int64 bundles = 0; juce::int64 received = 0; double atMs = 0.0; };
-        std::map<juce::String, Seen> lastSeen;
     };
 }

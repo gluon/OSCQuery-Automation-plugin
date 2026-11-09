@@ -38,7 +38,15 @@
 
     EXPORT AND IMPORT (Phase 5c) are two buttons by the title; the file is the
     state chunk itself. The editor does the choosing and the writing.
+
+    PHASE 6d-1: the name is edited in place (double-click); the range fields
+    show the device's own RANGE greyed as their hint when the user has
+    overridden it, and clearing both goes back to it; *Clear stale* unbinds
+    every stale slot; every row has a tooltip in the PRD's failure table's
+    words (SlotPresentation.h); a refused Test says why through onNote.
 */
+
+#include "SlotPresentation.h"
 
 #include <core/Instance.h>
 
@@ -73,6 +81,9 @@ namespace oqa::editor
         std::function<void()> onExport;
         std::function<void()> onImport;
 
+        /** A word for the editor's warnings line (a Test that failed, a stale clear's count). */
+        std::function<void (const juce::String&)> onNote;
+
         /** The registry's word on a bound slot: {id, state, detail, renamed_to}, or void. */
         juce::var slotStatus (int row) const;
 
@@ -96,6 +107,8 @@ namespace oqa::editor
         int getColumnAutoSizeWidth (int column) override;
 
         juce::String cellText (int row, int column) const;
+        juce::String getCellTooltip (int row, int column) override;
+        presentation::Standing standingOf (int row) const;
         juce::Colour stateColour (int row) const;
         juce::var deviceStatus (int deviceIndex) const;
         bool deviceReachable (int deviceIndex) const;
@@ -105,12 +118,14 @@ namespace oqa::editor
         class RangeEditor;
         class ChoiceEditor;
         class ButtonCell;
+        class NameEditor;
 
         core::Instance& instance;
         std::function<float (int)> slotValue;
         juce::var status;
 
         juce::Label title { {}, "Slots" };
+        juce::TextButton clearStaleButton { "Clear stale" };
         juce::TextButton exportButton { "Export..." };
         juce::TextButton importButton { "Import..." };
         juce::TableListBox table { "slots", this };

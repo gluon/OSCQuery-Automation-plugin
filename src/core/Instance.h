@@ -230,6 +230,17 @@ namespace oqa::core
         int instanceNumber() const noexcept { return state.instanceNumber; }
         void setInstanceNumber (int number);
 
+        /*  Unbind every slot the registry calls missing, retyped or renamed
+            (PRD, UX: "clear all stale"); not the unauthorised, which still
+            receive. Returns how many. Never asks the host to drop a lane's
+            automation (the 5b rule). */
+        int clearStale();
+
+        /*  Back to the device's own RANGE (the status's device_range_min/max,
+            handed in by the caller who shows them): the slot's range set and
+            `range_overridden` cleared. */
+        void clearRangeOverride (int slot, double deviceMin, double deviceMax);
+
         /** The registry's process-wide settings as JSON (direct_send, receive_port, gesture_timeout_ms...). */
         std::string settingsJson() const;
 

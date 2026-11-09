@@ -27,7 +27,8 @@
     on a leaf has the Node to bind with). A search term narrows the view to
     the paths (and descriptions) containing it, opened out. Clicking a leaf
     calls onLeafClicked with the node; what that means (bind the selected
-    slot) is the editor's business.
+    slot) is the editor's business. *Copy JSON* puts the tree as the device
+    serves it on the clipboard, for a bug report to its maker (PRD, UX, 6d-1).
 */
 
 #include <oscquery/tree/Tree.h>
@@ -74,6 +75,7 @@ namespace oqa::editor
         juce::String prompt;
 
         juce::Label title { {}, "No device selected" };
+        juce::TextButton copyButton { "Copy JSON" };
         juce::TextEditor search;
         juce::TreeView view;
         std::unique_ptr<juce::TreeViewItem> root;

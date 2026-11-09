@@ -16,6 +16,7 @@
 */
 
 #include "StatusBar.h"
+#include "SlotPresentation.h"
 
 namespace oqa::editor
 {
@@ -45,7 +46,6 @@ namespace oqa::editor
 
     void StatusBar::refresh (const juce::var& registryStatus, const std::vector<std::string>& warnings)
     {
-        const auto nowMs = juce::Time::getMillisecondCounterHiRes();
         juce::StringArray parts;
 
         if (const auto* devices = registryStatus.getProperty ("devices", {}).getArray())
@@ -56,27 +56,20 @@ namespace oqa::editor
                     continue;
 
                 const auto name = d.getProperty ("name", "?").toString();
-                const auto bundles = static_cast<juce::int64> (d.getProperty ("bundles_sent", 0));
-                auto& seen = lastSeen[name];
-                double perSecond = 0.0;
+                const auto rates = d.getProperty ("rates", {});
+                const auto bundlesPerSecond = static_cast<double> (rates.getProperty ("bundles_s", 0.0));
+                const auto messagesPerSecond = static_cast<double> (rates.getProperty ("messages_s", 0.0));
+                const auto receivedPerSecond = static_cast<double> (rates.getProperty ("received_s", 0.0))
+                                             + static_cast<double> (rates.getProperty ("udp_received_s", 0.0));
 
-                if (seen.atMs > 0.0 && nowMs > seen.atMs)
-                    perSecond = static_cast<double> (bundles - seen.bundles) * 1000.0 / (nowMs - seen.atMs);
-
-                seen.bundles = bundles;
-
-                const auto received = static_cast<juce::int64> (d.getProperty ("values_received", 0));
-                double receivedPerSecond = 0.0;
-
-                if (seen.atMs > 0.0 && nowMs > seen.atMs)
-                    receivedPerSecond = static_cast<double> (received - seen.received) * 1000.0 / (nowMs - seen.atMs);
-
-                seen.received = received;
-
+                /*  The websocket's state in the device's own words: unprobed,
+                    unreachable, reachable, tree loaded, listening, reconnecting,
+                    closed. */
                 juce::String part = name + ": " + d.getProperty ("state", "").toString();
 
                 if (static_cast<bool> (d.getProperty ("sender_ready", false)))
-                    part << ", " << juce::String (perSecond, 0) << " bundles/s to " << d.getProperty ("resolved", "").toString();
+                    part << ", " << juce::String (bundlesPerSecond, 0) << " bundles/s (" << juce::String (messagesPerSecond, 0)
+                         << " msg/s) to " << d.getProperty ("resolved", "").toString();
 
                 /*  Record: what comes in, and how (the websocket, or UDP for
                     a device without LISTEN), and the loop guard's count. */
@@ -101,14 +94,14 @@ namespace oqa::editor
                 const auto error = d.getProperty ("last_error", "").toString();
 
                 if (error.isNotEmpty())
-                    part << " (" << error << ")";
+                {
+                    const auto ago = static_cast<juce::int64> (d.getProperty ("last_error_ms_ago", -1));
+                    part << " (" << error << (ago >= 0 ? ", " + juce::String (presentation::agoWords (ago)) : juce::String()) << ")";
+                }
 
                 parts.add (part);
             }
         }
-
-        for (auto& [name, seen] : lastSeen)
-            seen.atMs = nowMs;
 
         devicesLine = parts.isEmpty() ? juce::String ("No device in this session") : parts.joinIntoString ("   |   ");
 
