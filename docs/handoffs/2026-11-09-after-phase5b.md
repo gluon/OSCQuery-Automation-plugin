@@ -23,8 +23,10 @@ For the next Claude Code session on this repository, and for the author. Read th
   registry for both formats, display scaling, keyboard focus), with the Phase 3, 4 and 5 rows in the
   same sitting. Install steps in the bench report. The farm has not run Phase 5b: `farm-check.sh`
   builds the CLAP and runs clap-validator now.
-- **CI:** see the devplan's Phase 5b record for the run that went green on three platforms. The macOS
-  runner caught the two-JUCE-copies failure (below) that Windows and Linux never showed.
+- **CI green on Linux, macOS and Windows** on `9b80600` (run 42625676758), clap-validator included.
+  The macOS runner caught the two-JUCE-copies failure (below) that Windows and Linux never showed;
+  the test executable still exports its JUCE symbols (2,845 externals), the module and the library
+  one each.
 
 ## Decided this session (the author, 2026-11-09)
 

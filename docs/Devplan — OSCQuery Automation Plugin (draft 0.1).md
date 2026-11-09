@@ -846,7 +846,12 @@ and [`docs/bench/2026-11-09-phase5b-clap.md`](bench/2026-11-09-phase5b-clap.md).
   is the audio thread's while the plugin is active and that `set_size` takes only what `adjust_size`
   returned. A deactivated instance has left the registry, so nothing streams to it. The realtime
   counters are per module, so the harness cannot count the module's allocations. The clap-validator
-  release zips for Linux and macOS wrap a tarball named 0.3.2 by the release's own tooling.
+  release zips for Linux and macOS wrap a tarball named 0.3.2 by the release's own tooling. The
+  macOS job's export listing, once the fix was in: the module and the library export one symbol
+  each, their `var` singletons "non-external (was a private external)"; the test executable exports
+  2,845, its singleton a *weak external*, which is the side dyld coalesced towards.
+- **CI green on Linux, macOS and Windows** on `9b80600` (run 42625676758): the CLAP suite passes on
+  all three, clap-validator 139 passed and 0 failed on the macOS runner, 138 on Windows and Linux.
 - *Still to fill, the author at the DAW:* the done-when's rows in Bitwig and REAPER over CLAP on this
   machine and the Mac mini (the Phase 3 and 4 done-whens, hide, rename, clear, module, VST3 ↔ CLAP
   chunk, one registry for both formats, display scaling, keyboard focus), with the Phase 3, 4 and 5
