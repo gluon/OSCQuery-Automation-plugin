@@ -251,6 +251,28 @@ TEST_CASE ("v1-empty: a session with nothing bound loads and writes back bare")
     CHECK (var.getProperty ("slots", {}).getArray()->isEmpty());
 }
 
+TEST_CASE ("v1-receive: three slots, one each way, read back as saved")
+{
+    const auto chunk = load ("v1-receive.json", 8);
+    CHECK (chunk.warnings.empty());
+    REQUIRE (chunk.devices.size() == 1);
+    CHECK (chunk.slots.boundCount() == 3);
+    CHECK (chunk.slots[0].direction == Direction::receive);
+    CHECK (chunk.slots[0].receives());
+    CHECK_FALSE (chunk.slots[0].sends());
+    CHECK (chunk.slots[1].direction == Direction::both);
+    CHECK (chunk.slots[1].sends());
+    CHECK (chunk.slots[1].receives());
+    CHECK (chunk.slots[2].direction == Direction::send);
+    CHECK_FALSE (chunk.slots[2].receives());
+    CHECK (chunk.slots[0].active());
+
+    std::string error;
+    const auto again = StateChunk::fromJson (chunk.toJson(), 8, error);
+    REQUIRE_MESSAGE (again.has_value(), error);
+    CHECK (again->slots[1].direction == Direction::both);
+}
+
 TEST_CASE ("a fresh chunk made from bound slots writes what the PRD lists")
 {
     std::string error;

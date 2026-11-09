@@ -32,10 +32,8 @@
 
 #include <doctest/doctest.h>
 
+#include "RegistryRig.h"
 #include "TestSupport.h"
-#include "support/WsTestClient.h"
-
-#include <MockDevice.h>
 
 #include <core/Instance.h>
 #include <core/registry/Registry.h>
@@ -61,98 +59,18 @@
 using namespace oqa::core;
 using namespace oqa::oscquery;
 using oqatest::waitUntil;
+using oqatest::Rig;
+using oqatest::bundlesReceived;
+using oqatest::messagesIn;
+using oqatest::isRangedFloat;
 
 namespace
 {
-    const OqaCoreApi* api() { return staticCoreApi(); }
+    const OqaCoreApi* api() { return oqatest::coreApi(); }
 
     /*  No thread of ours alive when main returns: the registry's devices are
         stopped after the last case. */
     const bool shutdownRegistered = (oqatest::registerShutdownHook ([] { Registry::shared().shutdown(); }), true);
-
-    struct Rig
-    {
-        oqatest::MockDevice mock;
-        Tree tree;
-
-        explicit Rig (oqatest::MockDevice::Options options = {}, const juce::var& fixtureTree = {})
-            : mock (options)
-        {
-            const auto root = fixtureTree.isVoid() ? juce::JSON::parse (oqatest::fixture ("trees/generic-device.json")) : fixtureTree;
-            REQUIRE (mock.loadTree (root));
-            REQUIRE (mock.start());
-
-            std::string error;
-            auto parsed = Tree::parse (root, error);
-            REQUIRE_MESSAGE (parsed.has_value(), error);
-            tree = *parsed;
-        }
-
-        DeviceRef device (const std::string& name) const
-        {
-            DeviceRef ref;
-            ref.name = name;
-            ref.lastHost = "127.0.0.1";
-            ref.lastPort = mock.httpPort();
-            return ref;
-        }
-
-        const Node& leafWhere (const std::function<bool (const Node&)>& predicate) const
-        {
-            for (const auto* leaf : tree.leaves())
-                if (predicate (*leaf))
-                    return *leaf;
-
-            FAIL ("the fixture has no such leaf");
-            return tree.root();
-        }
-
-        /** Wait until the registry can send to this mock from `instance`. */
-        void waitReady (const Instance& instance, int deviceIndex = 0) const
-        {
-            REQUIRE (waitUntil ([&]
-            {
-                const auto status = juce::JSON::parse (juce::String (instance.statusJson()));
-                const auto* devices = status.getProperty ("devices", {}).getArray();
-
-                if (devices == nullptr || deviceIndex >= devices->size())
-                    return false;
-
-                const auto& d = (*devices)[deviceIndex];
-                return static_cast<bool> (d.getProperty ("sender_ready", false)) && static_cast<bool> (d.getProperty ("tree_loaded", false));
-            }));
-        }
-    };
-
-    std::vector<osc::Packet> bundlesReceived (const oqatest::MockDevice& mock)
-    {
-        std::vector<osc::Packet> out;
-
-        for (const auto& datagram : mock.receivedOsc())
-        {
-            const auto decoded = osc::decode (datagram.data(), datagram.size());
-            REQUIRE_MESSAGE (decoded.ok, decoded.error);
-            out.push_back (decoded.packet);
-        }
-
-        return out;
-    }
-
-    std::size_t messagesIn (const std::vector<osc::Packet>& bundles)
-    {
-        std::size_t n = 0;
-
-        for (const auto& b : bundles)
-            n += b.isBundle() ? b.elements.size() : 1;
-
-        return n;
-    }
-
-    bool isRangedFloat (const Node& n)
-    {
-        const auto a = n.argument (0);
-        return n.type == "f" && n.bindableForSend() && a.range.has_value() && a.range->hasMinMax() && ! n.critical;
-    }
 }
 
 //==============================================================================

@@ -41,7 +41,9 @@
     VERSION 1 (2026-11-08). A changed signature or meaning bumps the version
     and every installed library is then refused by the exact match, falling
     back to the static copy. A purely additive function goes at the END of the
-    table with `size` telling a caller whether it is there.
+    table with `size` telling a caller whether it is there; the loader refuses
+    a table smaller than this header, so a plugin built with the Phase 4
+    entries beside a Phase 3 library runs on its own core and says so.
 */
 
 #include <stddef.h>
@@ -117,6 +119,17 @@ typedef struct OqaCoreApi
         device's thread and forget every instance. For a process that is
         ending; a test calls it before main returns. */
     void (*shutdown) (void);
+
+    /*  Additive, 2026-11-09 (Phase 4, record). Values the devices stream for
+        the instance's receiving slots wait in a ring inside the registry.
+        instanceSetReceiver: `wake (context)` is called on a registry thread, at
+        most once per message delivered, and must only signal (the shim
+        triggers an async update from it; nothing else). NULL clears it.
+        instancePollReceived: drains the ring, oldest first, into the caller's
+        arrays, up to `capacity`; returns how many. Scalars only: no allocation,
+        no lock, any thread. */
+    void (*instanceSetReceiver) (OqaInstance* instance, void (*wake) (void* context), void* context);
+    int (*instancePollReceived) (OqaInstance* instance, int* slots, float* values, int capacity);
 } OqaCoreApi;
 
 /*  The shared library's export. Declared with the export attribute only

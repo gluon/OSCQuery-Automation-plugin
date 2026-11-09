@@ -27,7 +27,9 @@ add_executable(oqa_core_tests
     ChangeRingTests.cpp
     TimeTagTests.cpp
     RateLimiterTests.cpp
+    RegistryRig.h
     RegistryTests.cpp
+    ReceiveTests.cpp
     LoaderTests.cpp)
 
 target_include_directories(oqa_core_tests PRIVATE "${CMAKE_SOURCE_DIR}/tests")

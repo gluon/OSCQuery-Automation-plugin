@@ -13,3 +13,4 @@ never a real product's namespace.
 | `v1-generic.json` | 1 | Two devices (one with an identity leaf, timetags on and an offset), a ranged float, a user-overridden range with the log curve, an `fff` as three consecutive slots, a toggle, an integer set to receive |
 | `v1-extras.json` | 1 | Fields this version does not know, at the top level, on a device and on a slot; a slot beyond 8 slots; a slot naming no device; an unknown scaling name |
 | `v1-empty.json` | 1 | A session with nothing bound |
+| `v1-receive.json` | 1 | One device; a read-only float set to receive, a ranged float set to both, a ranged float set to send (Phase 4: driven through the registry in `tests/core/ReceiveTests.cpp`) |

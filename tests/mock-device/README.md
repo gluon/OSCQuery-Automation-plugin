@@ -9,7 +9,9 @@ client's feet with `setValue`, `rename`, `remove`, `retype` and `add`, which sen
 `Options::websocket = false` is a device without a websocket; `hostInfoOnly` one that answers
 `?HOST_INFO` and nothing else; `notifyUnlisted` one that sends notifications it does not list (as
 WFS-DIY sends `PATH_CHANGED`); `oscTransport = "TCP"` one whose `OSC_PORT` is a TCP listener;
-`oscIp` one that states `OSC_IP`. `setValueBundle` streams one bundle frame, `closeAllConnections`
+`oscIp` one that states `OSC_IP`; `echoDelayMs` one that applies what it is sent over UDP and
+streams it back to its listeners that many milliseconds later, as a real device echoes (Phase 4's
+loop guard). `setValueBundle` streams one bundle frame, `closeAllConnections`
 drops every websocket client, and what arrives on `OSC_PORT` (datagrams, or a TCP stream's bytes)
 and as binary websocket frames is kept for a test to read back. `MockDevice.h` has the details.
 
@@ -23,5 +25,5 @@ curl "http://127.0.0.1:60068/?HOST_INFO"
 ```
 
 Flags: `--no-websocket`, `--extensions A,B,C`, `--host-info-only`, `--notify-unlisted`, `--tcp`,
-`--osc-ip IP`. It knows no namespace: every address it serves comes from the fixture or from the
+`--osc-ip IP`, `--echo-ms N`. It knows no namespace: every address it serves comes from the fixture or from the
 generator's counters.

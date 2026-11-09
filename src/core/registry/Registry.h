@@ -53,6 +53,20 @@
     sockets and the thread of a device the session once referred to are not
     worth the churn of closing on every releaseResources.
 
+    THE RECEIVE PATH (Phase 4, 2026-11-09). Every group's path is LISTENed on
+    its device, sending groups included: the stream is also what keeps the
+    arguments no slot drives at the device's current value. A value arrives on
+    the library's Device thread (never the audio thread): the groups at that
+    path are found, the arguments no slot drives are refreshed, a driven
+    argument echoing what was just sent is counted and dropped (the loop
+    guard), and the rest is scaled to 0-1 by the receiving slot and pushed into
+    its instance's incoming ring, with one wake to the instance's shim. Devices
+    without LISTEN are served by one UDP receiver per process (4b).
+
+    LOCK ORDER: the registry's lock, then a device entry's groups lock, or
+    either alone; never the reverse. received() copies the matching groups
+    under the groups lock, releases, and only then reaches the registry.
+
     This class is the implementation; RegistryApi.h is what a plugin binary
     calls through. The registry inside the shared library is the one every
     binary in the process shares; a binary that found no library uses its
@@ -80,6 +94,11 @@ namespace oqa::core
         int gatherDeadlineUs = 500;        ///< how long a device's thread waits for every instance's marker
         std::size_t mtu = 1400;            ///< bundles split above this
         int activeWindowMs = 1000;         ///< an instance that posted this recently is waited for
+
+        //  Phase 4 (2026-11-09): record.
+        int receivePort = 0;               ///< the UDP port for devices without LISTEN; 0 is ephemeral
+        double loopGuardMs = 50.0;         ///< a value echoed by the device this soon after a send is ignored
+        double gestureTimeoutMs = 200.0;   ///< the shim closes a host gesture after this much silence
 
         juce::var toVar() const;
 
@@ -122,6 +141,15 @@ namespace oqa::core
         //  The audio thread.
         void post (InstanceRecord* instance, int slot, float normalised) noexcept;
         void endBlock (InstanceRecord* instance) noexcept;
+
+        //==============================================================================
+        //  Record (Phase 4). Values the device streams for an instance's receiving
+        //  slots wait in the instance's incoming ring; `wake` is called on a
+        //  registry thread, at most once per message delivered, and must only
+        //  signal (the shim triggers an async update). pollReceived drains the
+        //  ring into the caller's arrays, oldest first: nothing allocated, no lock.
+        void setReceiver (InstanceRecord* instance, void (*wake) (void* context), void* context);
+        int pollReceived (InstanceRecord* instance, int* slots, float* values, int capacity) noexcept;
 
         //==============================================================================
         bool testSend (InstanceRecord* instance, int slot, float normalised, std::string& error);

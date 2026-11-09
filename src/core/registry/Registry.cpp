@@ -33,8 +33,12 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cmath>
+#include <functional>
+#include <limits>
 #include <map>
 #include <mutex>
+#include <set>
 #include <thread>
 #include <unordered_map>
 #include <unordered_set>
@@ -47,8 +51,15 @@ namespace oqa::core
     namespace
     {
         constexpr std::size_t ringCapacity = 8192;
+        constexpr std::size_t incomingCapacity = 4096;
         constexpr std::size_t datagramBufferBytes = 65536;
         constexpr std::uint16_t noSlot = 0xffff;
+
+        /** The steady clock in nanoseconds: what the loop guard measures with, on any thread. */
+        std::int64_t steadyNanos() noexcept
+        {
+            return std::chrono::duration_cast<std::chrono::nanoseconds> (std::chrono::steady_clock::now().time_since_epoch()).count();
+        }
 
         std::string keyOf (const std::string& name, const std::string& identityValue)
         {
@@ -107,6 +118,9 @@ namespace oqa::core
         o->setProperty ("gather_deadline_us", gatherDeadlineUs);
         o->setProperty ("mtu", static_cast<int> (mtu));
         o->setProperty ("active_window_ms", activeWindowMs);
+        o->setProperty ("receive_port", receivePort);
+        o->setProperty ("loop_guard_ms", loopGuardMs);
+        o->setProperty ("gesture_timeout_ms", gestureTimeoutMs);
         return juce::var (o);
     }
 
@@ -121,12 +135,16 @@ namespace oqa::core
         if (v.hasProperty ("gather_deadline_us")) gatherDeadlineUs = std::clamp (static_cast<int> (v["gather_deadline_us"]), 0, 20000);
         if (v.hasProperty ("mtu"))                mtu = static_cast<std::size_t> (std::clamp (static_cast<int> (v["mtu"]), 64, 65507));
         if (v.hasProperty ("active_window_ms"))   activeWindowMs = std::clamp (static_cast<int> (v["active_window_ms"]), 10, 60000);
+        if (v.hasProperty ("receive_port"))       receivePort = std::clamp (static_cast<int> (v["receive_port"]), 0, 65535);
+        if (v.hasProperty ("loop_guard_ms"))      loopGuardMs = std::clamp (static_cast<double> (v["loop_guard_ms"]), 0.0, 10000.0);
+        if (v.hasProperty ("gesture_timeout_ms")) gestureTimeoutMs = std::clamp (static_cast<double> (v["gesture_timeout_ms"]), 10.0, 60000.0);
     }
 
     //==============================================================================
     class DeviceEntry;
 
-    /*  One bound path of one instance: the message the device receives. */
+    /*  One bound path of one instance: the message the device receives, and
+        the one it streams back. */
     struct Group
     {
         std::uint32_t instanceId = 0;
@@ -135,17 +153,29 @@ namespace oqa::core
         bool critical = false;
         std::size_t limiterKey = 0;
 
-        /** Per argument: the slot driving it (a copy, for scaling), or unbound. */
+        /*  Per argument: the slot bound to it (a copy, for scaling), whether a
+            sending slot drives it, and the receiving slot's host parameter ID
+            (or -1). A slot whose direction is both is driven and received. */
         std::vector<Slot> slots;
         std::vector<bool> driven;
+        std::vector<int> receiver;
 
-        /** Per argument: the normalised value last posted by the audio thread. */
+        /** Per argument: the normalised value last posted by the audio thread (driven arguments). */
         std::unique_ptr<std::atomic<float>[]> known;
 
-        /** Per argument: the tree's VALUE at bind time, for arguments no slot drives. */
+        /*  Per argument: the device's value as last known, in its units: the
+            tree's at bind time, then whatever the device streams (written on
+            the Device thread, read on the network thread). `tags` says how it
+            goes on the wire; `initial` keeps the tree's value for an argument
+            of a type no slot binds (s, b...), which never changes. */
+        std::unique_ptr<std::atomic<double>[]> latest;
+        std::string tags;
         std::vector<Value> initial;
 
         std::atomic<bool> dirty { false };
+
+        /** When this group was last sent (steady clock): the loop guard's reference. 0: never. */
+        std::atomic<std::int64_t> lastSentNanos { 0 };
 
         std::size_t argCount() const noexcept { return slots.size(); }
 
@@ -155,8 +185,30 @@ namespace oqa::core
             if (driven[i])
                 return slots[i].deviceValue (known[i].load (std::memory_order_relaxed));
 
-            return initial[i];
+            const double v = latest[i].load (std::memory_order_relaxed);
+
+            switch (tags[i])
+            {
+                case 'f': return Value::float32 (static_cast<float> (v));
+                case 'i':
+                {
+                    constexpr double lo = static_cast<double> (std::numeric_limits<std::int32_t>::min());
+                    constexpr double hi = static_cast<double> (std::numeric_limits<std::int32_t>::max());
+                    return Value::int32 (static_cast<std::int32_t> (std::clamp (std::round (v), lo, hi)));
+                }
+                case 'T':
+                case 'F': return Value::boolean (v >= 0.5);
+                default:  return initial[i];
+            }
         }
+    };
+
+    /** One received value on its way to an instance's slot. */
+    struct Delivery
+    {
+        std::uint32_t instance = 0;
+        int slot = 0;
+        float normalised = 0.0f;
     };
 
     struct InstancePlan
@@ -179,19 +231,33 @@ namespace oqa::core
 
         std::vector<DeviceEntry*> deviceByIndex;                // the chunk's devices[], resolved (message thread)
         std::vector<std::string> warnings;
+        std::unique_ptr<StateChunk> lastChunk;                  // what the plan was built from, for a rebuild
 
         /** The direct-send path's buffer, this instance's own. */
         std::vector<std::uint8_t> directBuffer;
         std::atomic<std::uint64_t> directSent { 0 };
+
+        /*  Record: values from the devices for this instance's receiving
+            slots, drained by the shim through pollReceived; the wake it asked
+            for, called under the registry's lock so it cannot outlive the
+            instance. Full is a counted drop, as the send ring's is. */
+        ChangeRing<incomingCapacity> incoming;
+        void (*wake) (void* context) = nullptr;
+        void* wakeContext = nullptr;
+        std::atomic<std::uint64_t> received { 0 };
     };
 
     //==============================================================================
     class DeviceEntry final : private juce::Thread
     {
     public:
-        DeviceEntry (std::string keyIn, DeviceRef refIn, const RegistrySettings& settingsIn)
+        DeviceEntry (std::string keyIn, DeviceRef refIn, const RegistrySettings& settingsIn,
+                     std::function<void (std::vector<Delivery>&)> onReceivedIn,
+                     std::function<void (DeviceEntry&)> onTreeLoadedIn)
             : juce::Thread ("oqa device " + juce::String (refIn.name)),
-              key (std::move (keyIn)), ref (std::move (refIn)), settings (settingsIn)
+              key (std::move (keyIn)), ref (std::move (refIn)), settings (settingsIn),
+              onReceived (std::move (onReceivedIn)), onTreeLoaded (std::move (onTreeLoadedIn)),
+              guardMs (settingsIn.loopGuardMs)
         {
             buffer.resize (datagramBufferBytes);
             openDevice();
@@ -245,6 +311,7 @@ namespace oqa::core
 
             if (udp.send (instance.directBuffer.data(), size))
             {
+                group.lastSentNanos.store (steadyNanos(), std::memory_order_relaxed);
                 instance.directSent.fetch_add (1, std::memory_order_relaxed);
                 messagesSent.fetch_add (1, std::memory_order_relaxed);
                 return true;
@@ -255,15 +322,42 @@ namespace oqa::core
 
         //==============================================================================
         //  The message thread.
+
+        /*  The instance's groups replace its old ones; the device is then told
+            to LISTEN on every path any group holds and to IGNORE the ones none
+            does. Under the groups lock first, the device lock after, never
+            both: received() runs under the former alone. */
         void setGroups (std::uint32_t instanceId, std::vector<std::shared_ptr<Group>> incoming)
         {
-            const std::lock_guard<std::mutex> guard (groupsLock);
-            std::erase_if (allGroups, [instanceId] (const std::shared_ptr<Group>& g) { return g->instanceId == instanceId; });
+            std::set<std::string> before, after;
 
-            for (auto& g : incoming)
-                allGroups.push_back (std::move (g));
+            {
+                const std::lock_guard<std::mutex> guard (groupsLock);
 
-            groupsRevision.fetch_add (1, std::memory_order_release);
+                for (const auto& g : allGroups)
+                    before.insert (g->path);
+
+                std::erase_if (allGroups, [instanceId] (const std::shared_ptr<Group>& g) { return g->instanceId == instanceId; });
+
+                for (auto& g : incoming)
+                    allGroups.push_back (std::move (g));
+
+                for (const auto& g : allGroups)
+                    after.insert (g->path);
+
+                groupsRevision.fetch_add (1, std::memory_order_release);
+            }
+
+            withDevice ([&] (oscquery::Device& d)
+            {
+                for (const auto& path : after)
+                    if (before.count (path) == 0)
+                        (void) d.listen (path);
+
+                for (const auto& path : before)
+                    if (after.count (path) == 0)
+                        d.ignore (path);
+            });
         }
 
         void removeGroups (std::uint32_t instanceId)
@@ -275,6 +369,7 @@ namespace oqa::core
         {
             const std::lock_guard<std::mutex> guard (settingsLock);
             settings = s;
+            guardMs.store (s.loopGuardMs, std::memory_order_relaxed);
             settingsRevision.fetch_add (1, std::memory_order_release);
         }
 
@@ -350,6 +445,102 @@ namespace oqa::core
             return critical;
         }
 
+        /** The node's TYPE when the tree is loaded and has it; empty otherwise. */
+        std::string nodeTags (const std::string& path) const
+        {
+            std::string tags;
+
+            withDevice ([&] (const oscquery::Device& d)
+            {
+                if (! d.treeLoaded())
+                    return;
+
+                d.withTree ([&] (const oscquery::Tree& tree)
+                {
+                    if (const auto* node = tree.find (path))
+                        if (node->type.has_value())
+                            tags = *node->type;
+                });
+            });
+
+            return tags;
+        }
+
+        //==============================================================================
+        /*  A VALUE FROM THE DEVICE, on the library's Device thread (LISTEN) or
+            the UDP receiver's (4b). The groups at that path, copied under the
+            groups lock alone; then, per argument: the value the device holds is
+            remembered for the arguments no slot drives; a driven argument that
+            echoes what this device was just sent, within the guard window, is
+            counted and dropped; what a receiving slot wants is scaled to 0-1 and
+            handed to the registry for its instance. */
+        void received (const std::string& path, const oscquery::osc::Values& values)
+        {
+            std::vector<std::shared_ptr<Group>> matching;
+
+            {
+                const std::lock_guard<std::mutex> guard (groupsLock);
+
+                for (const auto& g : allGroups)
+                    if (g->path == path)
+                        matching.push_back (g);
+            }
+
+            valuesReceived.fetch_add (1, std::memory_order_relaxed);
+
+            if (matching.empty())
+            {
+                unmatchedReceived.fetch_add (1, std::memory_order_relaxed);
+                return;
+            }
+
+            const auto now = steadyNanos();
+            const auto guardNanos = static_cast<std::int64_t> (guardMs.load (std::memory_order_relaxed) * 1.0e6);
+            std::vector<Delivery> deliveries;
+
+            for (const auto& g : matching)
+            {
+                const auto n = std::min (values.size(), g->argCount());
+
+                for (std::size_t i = 0; i < n; ++i)
+                {
+                    const auto& v = values[i];
+                    const bool boolean = v.isBool();
+
+                    if (! boolean && ! (v.isNumber() && ! v.isNonFinite()))
+                        continue;
+
+                    if (! g->driven[i])
+                        g->latest[i].store (boolean ? (v.getBool() ? 1.0 : 0.0) : v.asDouble(), std::memory_order_relaxed);
+
+                    if (g->receiver[i] < 0)
+                        continue;
+
+                    const auto host = g->slots[i].hostValue (v);
+
+                    if (! host.has_value())
+                        continue;
+
+                    if (g->driven[i])
+                    {
+                        const auto sentAt = g->lastSentNanos.load (std::memory_order_relaxed);
+
+                        if (sentAt != 0 && now - sentAt < guardNanos
+                            && std::abs (*host - g->known[i].load (std::memory_order_relaxed)) <= 1.0e-4f)
+                        {
+                            loopGuarded.fetch_add (1, std::memory_order_relaxed);
+                            continue;
+                        }
+                    }
+
+                    deliveries.push_back ({ g->instanceId, g->receiver[i], *host });
+                }
+            }
+
+            if (! deliveries.empty() && onReceived)
+                onReceived (deliveries);
+        }
+
         juce::var status() const
         {
             auto* o = new juce::DynamicObject();
@@ -378,7 +569,24 @@ namespace oqa::core
                 }
 
                 o->setProperty ("last_error", juce::String (d.lastError()));
+
+                /*  Where record stands on this device: listening over the
+                    websocket; unsupported (no LISTEN in EXTENSIONS: the UDP
+                    receiver is the way, 4b); else pending. */
+                const auto info = d.hostInfo();
+                const char* listen = "pending";
+
+                if (info.has_value() && ! info->has ("LISTEN"))
+                    listen = "unsupported";
+                else if (state == oscquery::Device::State::Listening)
+                    listen = "listening";
+
+                o->setProperty ("listen", listen);
             });
+
+            o->setProperty ("values_received", static_cast<juce::int64> (valuesReceived.load()));
+            o->setProperty ("loop_guarded", static_cast<juce::int64> (loopGuarded.load()));
+            o->setProperty ("unmatched_received", static_cast<juce::int64> (unmatchedReceived.load()));
 
             o->setProperty ("sender_ready", senderReady.load());
             o->setProperty ("resolved", juce::String (udp.resolvedAddress()));
@@ -410,13 +618,48 @@ namespace oqa::core
             options.host = r.lastHost;
             options.port = r.lastPort;
 
+            /*  The paths to LISTEN on, taken before the device lock: the
+                groups lock is never taken under it. */
+            std::set<std::string> paths;
+
+            {
+                const std::lock_guard<std::mutex> groupsGuard (groupsLock);
+
+                for (const auto& g : allGroups)
+                    paths.insert (g->path);
+            }
+
             const std::lock_guard<std::mutex> guard (deviceLock);
 
             if (device != nullptr)
                 device->stop();
 
             device = std::make_unique<oscquery::Device> (options);
+
+            /*  The tree landing (or changing) is noted for the network thread,
+                which has the registry rebuild the plans that were made before
+                it: a Device thread never takes the device lock, which the
+                thread stopping that device holds. */
+            oscquery::Device::Callbacks callbacks;
+            callbacks.onValue = [this] (const std::string& path, const oscquery::osc::Values& values) { received (path, values); };
+            callbacks.onState = [this] (oscquery::Device::State state)
+            {
+                if (state == oscquery::Device::State::TreeLoaded || state == oscquery::Device::State::Listening)
+                {
+                    treeArrived.store (true, std::memory_order_release);
+                    wake.signal();
+                }
+            };
+            callbacks.onTreeChanged = [this] (const std::string&)
+            {
+                treeArrived.store (true, std::memory_order_release);
+                wake.signal();
+            };
+            device->setCallbacks (std::move (callbacks));
             device->start();
+
+            for (const auto& path : paths)
+                (void) device->listen (path);
 
             senderReady.store (false, std::memory_order_release);
             udp.close();
@@ -566,6 +809,14 @@ namespace oqa::core
 
             ensureSender();
 
+            /*  The loop guard's reference: what goes out now may come back
+                over LISTEN within the window. Stamped whether the send below
+                succeeds or not; an unsent value echoes nothing. */
+            const auto sentAt = steadyNanos();
+
+            for (auto* g : due)
+                g->lastSentNanos.store (sentAt, std::memory_order_relaxed);
+
             const bool timetags = ref.honoursTimetags;
             const auto tag = timetags ? ntpNow (ref.offsetMs) : immediateTimeTag;
 
@@ -700,6 +951,19 @@ namespace oqa::core
                 if (addressChanged.exchange (false, std::memory_order_acq_rel))
                     openDevice();
 
+                if (treeArrived.exchange (false, std::memory_order_acq_rel) && onTreeLoaded)
+                {
+                    const bool loaded = [this]
+                    {
+                        bool out = false;
+                        withDevice ([&] (const oscquery::Device& d) { out = d.treeLoaded(); });
+                        return out;
+                    }();
+
+                    if (loaded)
+                        onTreeLoaded (*this);
+                }
+
                 refreshSettings();
                 refreshGroups();
                 ensureSender();
@@ -748,6 +1012,8 @@ namespace oqa::core
         mutable std::mutex deviceLock;
         std::unique_ptr<oscquery::Device> device;
         std::atomic<bool> addressChanged { false };
+        std::atomic<bool> treeArrived { false };
+        std::function<void (DeviceEntry&)> onTreeLoaded;
 
         oscquery::net::RawUdpSender udp;
         std::unique_ptr<oscquery::net::TcpSender> tcp;
@@ -775,6 +1041,13 @@ namespace oqa::core
         std::atomic<std::uint64_t> unsent { 0 };
         std::atomic<std::uint64_t> refused { 0 };
         std::atomic<std::uint64_t> rounds { 0 };
+
+        //  Record.
+        std::function<void (std::vector<Delivery>&)> onReceived;
+        std::atomic<double> guardMs { 50.0 };
+        std::atomic<std::uint64_t> valuesReceived { 0 };
+        std::atomic<std::uint64_t> loopGuarded { 0 };
+        std::atomic<std::uint64_t> unmatchedReceived { 0 };
     };
 
     //==============================================================================
@@ -788,6 +1061,9 @@ namespace oqa::core
         RegistrySettings settings;
         std::atomic<bool> directSend { false };
 
+        void applyBindings (InstanceRecord* instance, const StateChunk& chunk);
+        void rebuildPlansFor (DeviceEntry* entry);
+
         DeviceEntry& entryFor (const DeviceRef& ref)
         {
             const auto key = keyOf (ref);
@@ -799,10 +1075,42 @@ namespace oqa::core
                 return *found->second;
             }
 
-            auto entry = std::make_unique<DeviceEntry> (key, ref, settings);
+            auto entry = std::make_unique<DeviceEntry> (key, ref, settings,
+                                                        [this] (std::vector<Delivery>& deliveries) { deliver (deliveries); },
+                                                        [this] (DeviceEntry& e) { rebuildPlansFor (&e); });
             auto& out = *entry;
             devices.emplace (key, std::move (entry));
             return out;
+        }
+
+        /*  Received values to their instances' rings, one wake per instance
+            touched. On a Device thread (or the UDP receiver's), under the
+            registry's lock, so the instance and its wake are alive for the
+            call; the wake only signals, by contract. */
+        void deliver (std::vector<Delivery>& deliveries)
+        {
+            const std::lock_guard<std::mutex> guard (lock);
+            InstanceRecord* last = nullptr;
+
+            for (const auto& d : deliveries)
+            {
+                const auto found = instances.find (d.instance);
+
+                if (found == instances.end())
+                    continue;
+
+                auto* instance = found->second.get();
+                instance->incoming.push ({ d.instance, static_cast<std::uint16_t> (d.slot), SlotChange::value, d.normalised });
+                instance->received.fetch_add (1, std::memory_order_relaxed);
+
+                if (instance != last)
+                {
+                    if (instance->wake != nullptr)
+                        instance->wake (instance->wakeContext);
+
+                    last = instance;
+                }
+            }
         }
     };
 
@@ -817,10 +1125,20 @@ namespace oqa::core
     {
         /*  Instances first (their plans point at devices), then the devices,
             each stopping its thread and its device. For a process that is
-            ending, or a test that wants no thread left when main returns. */
-        const std::lock_guard<std::mutex> guard (impl->lock);
-        impl->instances.clear();
-        impl->devices.clear();
+            ending, or a test that wants no thread left when main returns.
+            Taken out from under the lock before they are destroyed: a device
+            being stopped may be mid-delivery, waiting for that very lock. */
+        std::map<std::uint32_t, std::unique_ptr<InstanceRecord>> instances;
+        std::map<std::string, std::unique_ptr<DeviceEntry>> devices;
+
+        {
+            const std::lock_guard<std::mutex> guard (impl->lock);
+            instances.swap (impl->instances);
+            devices.swap (impl->devices);
+        }
+
+        instances.clear();
+        devices.clear();
     }
 
     Registry& Registry::shared()
@@ -884,6 +1202,25 @@ namespace oqa::core
             return false;
         }
 
+        instance->lastChunk = std::make_unique<StateChunk> (chunk);
+        impl->applyBindings (instance, chunk);
+        return true;
+    }
+
+    /*  THE PLAN, built from the chunk under the registry's lock: on the message
+        thread from setBindings, and again from a device's network thread when
+        its tree lands after the bindings did (a reload), so a group planned
+        short of the node's argument count is planned whole. The values the
+        audio thread last posted carry over from the plan being replaced, so
+        nothing is re-sent for the rebuild alone. */
+    void Registry::Impl::applyBindings (InstanceRecord* instance, const StateChunk& chunk)
+    {
+        std::map<std::pair<DeviceEntry*, std::string>, std::shared_ptr<Group>> previous;
+
+        if (const auto* live = instance->plan.load (std::memory_order_acquire))
+            for (const auto& g : live->groups)
+                previous[std::make_pair (g->device, g->path)] = g;
+
         instance->warnings.clear();
         instance->deviceByIndex.clear();
 
@@ -896,7 +1233,7 @@ namespace oqa::core
                 continue;
             }
 
-            instance->deviceByIndex.push_back (&impl->entryFor (ref));
+            instance->deviceByIndex.push_back (&entryFor (ref));
         }
 
         auto plan = std::make_unique<InstancePlan>();
@@ -910,13 +1247,10 @@ namespace oqa::core
             if (! slot.bound() || slot.hostParamId < 0 || slot.hostParamId >= instance->slotCount)
                 continue;
 
-            if (! slot.sends())
-                continue;
-
             if (! slot.active())
             {
                 instance->warnings.push_back ("slot " + std::to_string (slot.hostParamId) + " (" + slot.path
-                                              + ") has no range yet and does not send");
+                                              + ") has no range yet and neither sends nor receives");
                 continue;
             }
 
@@ -938,7 +1272,7 @@ namespace oqa::core
                 group->instanceId = instance->id;
                 group->device = entry;
                 group->path = slot.path;
-                group->limiterKey = impl->nextLimiterKey++;
+                group->limiterKey = nextLimiterKey++;
                 group->critical = entry->nodeIsCritical (slot.path);
             }
 
@@ -948,32 +1282,71 @@ namespace oqa::core
             {
                 group->slots.resize (arg + 1);
                 group->driven.resize (arg + 1, false);
+                group->receiver.resize (arg + 1, -1);
             }
 
             group->slots[arg] = slot;
-            group->driven[arg] = true;
             group->critical = group->critical || slot.critical;
-            plan->groupOfSlot[static_cast<std::size_t> (slot.hostParamId)] = group.get();
-            plan->argOfSlot[static_cast<std::size_t> (slot.hostParamId)] = static_cast<std::uint16_t> (arg);
+
+            if (slot.sends())
+            {
+                /*  Only a sending slot is posted by the audio thread. */
+                group->driven[arg] = true;
+                plan->groupOfSlot[static_cast<std::size_t> (slot.hostParamId)] = group.get();
+                plan->argOfSlot[static_cast<std::size_t> (slot.hostParamId)] = static_cast<std::uint16_t> (arg);
+            }
+
+            if (slot.receives())
+                group->receiver[arg] = slot.hostParamId;
         }
 
         std::map<DeviceEntry*, std::vector<std::shared_ptr<Group>>> perDevice;
 
         for (auto& [key, group] : groups)
         {
-            const auto n = group->argCount();
+            /*  The message carries every argument of the node when the tree
+                says how many; before the tree is in (a reload), the bound ones. */
+            group->tags = group->device->nodeTags (group->path);
+            const auto bound = group->argCount();
+            const auto n = std::max (bound, group->tags.size());
+
+            group->slots.resize (n);
+            group->driven.resize (n, false);
+            group->receiver.resize (n, -1);
+
+            if (group->tags.size() < n)
+            {
+                group->tags.resize (n, 'f');
+
+                for (std::size_t i = 0; i < bound; ++i)
+                    if (group->driven[i] || group->receiver[i] >= 0)
+                        group->tags[i] = group->slots[i].type;
+            }
+
             group->known = std::make_unique<std::atomic<float>[]> (n);
+            group->latest = std::make_unique<std::atomic<double>[]> (n);
             group->initial = group->device->initialValues (group->path, n);
 
             for (std::size_t i = 0; i < n; ++i)
             {
+                const auto& v = group->initial[i];
+                group->latest[i].store (v.isBool() ? (v.getBool() ? 1.0 : 0.0) : v.asDouble(), std::memory_order_relaxed);
+
                 /*  Start from where the device is, so the first block only
-                    sends what the host actually moved. */
+                    sends what the host actually moved; on a rebuild, from
+                    what the audio thread last posted. */
                 float start = 0.0f;
 
                 if (group->driven[i])
-                    if (const auto host = group->slots[i].hostValue (group->initial[i]))
+                {
+                    if (const auto host = group->slots[i].hostValue (v))
                         start = *host;
+
+                    const auto was = previous.find (std::make_pair (group->device, group->path));
+
+                    if (was != previous.end() && i < was->second->argCount() && was->second->driven[i])
+                        start = was->second->known[i].load (std::memory_order_relaxed);
+                }
 
                 group->known[i].store (start, std::memory_order_relaxed);
             }
@@ -986,7 +1359,7 @@ namespace oqa::core
         }
 
         /*  Every device this instance used before learns its new groups (or none). */
-        for (auto& [key, entry] : impl->devices)
+        for (auto& [key, entry] : devices)
         {
             auto found = perDevice.find (entry.get());
             entry->setGroups (instance->id, found == perDevice.end() ? std::vector<std::shared_ptr<Group>> {} : found->second);
@@ -994,7 +1367,22 @@ namespace oqa::core
 
         instance->plan.store (plan.get(), std::memory_order_release);
         instance->plans.push_back (std::move (plan));
-        return true;
+    }
+
+    void Registry::Impl::rebuildPlansFor (DeviceEntry* entry)
+    {
+        const std::lock_guard<std::mutex> guard (lock);
+
+        for (auto& [id, instance] : instances)
+        {
+            if (instance->lastChunk == nullptr)
+                continue;
+
+            if (std::find (instance->deviceByIndex.begin(), instance->deviceByIndex.end(), entry) == instance->deviceByIndex.end())
+                continue;
+
+            applyBindings (instance.get(), *instance->lastChunk);
+        }
     }
 
     bool Registry::setBindingsJson (InstanceRecord* instance, std::string_view chunkJson, std::string& error)
@@ -1063,6 +1451,39 @@ namespace oqa::core
                 a non-blocking wake, once per block per device. */
             device->wake.signal();
         }
+    }
+
+    //==============================================================================
+    void Registry::setReceiver (InstanceRecord* instance, void (*wake) (void* context), void* context)
+    {
+        if (instance == nullptr)
+            return;
+
+        const std::lock_guard<std::mutex> guard (impl->lock);
+
+        if (impl->instances.count (instance->id) == 0)
+            return;
+
+        instance->wake = wake;
+        instance->wakeContext = context;
+    }
+
+    int Registry::pollReceived (InstanceRecord* instance, int* slots, float* values, int capacity) noexcept
+    {
+        if (instance == nullptr || slots == nullptr || values == nullptr || capacity <= 0)
+            return 0;
+
+        int n = 0;
+        SlotChange change;
+
+        while (n < capacity && instance->incoming.pop (change))
+        {
+            slots[n] = change.slot;
+            values[n] = change.normalised;
+            ++n;
+        }
+
+        return n;
     }
 
     //==============================================================================
@@ -1142,6 +1563,9 @@ namespace oqa::core
 
                 o->setProperty ("warnings", warnings);
                 o->setProperty ("direct_sent", static_cast<juce::int64> (instance->directSent.load()));
+                o->setProperty ("received", static_cast<juce::int64> (instance->received.load()));
+                o->setProperty ("received_dropped", static_cast<juce::int64> (instance->incoming.dropped()));
+                o->setProperty ("plans", static_cast<int> (instance->plans.size()));
             }
             else
             {

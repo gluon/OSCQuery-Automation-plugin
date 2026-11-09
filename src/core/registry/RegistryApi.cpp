@@ -172,6 +172,16 @@ namespace
         Registry::shared().shutdown();
     }
 
+    void instanceSetReceiver (OqaInstance* instance, void (*wake) (void* context), void* context)
+    {
+        Registry::shared().setReceiver (recordOf (instance), wake, context);
+    }
+
+    int instancePollReceived (OqaInstance* instance, int* slots, float* values, int capacity)
+    {
+        return Registry::shared().pollReceived (recordOf (instance), slots, values, capacity);
+    }
+
     const OqaCoreApi table {
         OQA_CORE_ABI_VERSION,
         sizeof (OqaCoreApi),
@@ -188,7 +198,9 @@ namespace
         settingsSetJson,
         settingsJson,
         freeString,
-        shutdownRegistry
+        shutdownRegistry,
+        instanceSetReceiver,
+        instancePollReceived
     };
 }
 

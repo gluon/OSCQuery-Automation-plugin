@@ -90,6 +90,12 @@ namespace oqatest
 
             /** Emitted as OSC_IP when not empty; absent otherwise, as most devices. */
             juce::String oscIp;
+
+            /*  At or above zero: a device that applies what it is sent and
+                streams it back to its LISTENers after this many milliseconds,
+                as a real one echoes (Phase 4's loop guard). Below zero: off.
+                UDP only; messages of f, i, T and F, and bundles of them. */
+            int echoDelayMs = -1;
         };
 
         MockDevice();

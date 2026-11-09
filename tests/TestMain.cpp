@@ -71,6 +71,32 @@ namespace oqatest
 }
 
 //==============================================================================
+#if defined (_WIN32)
+ #include <windows.h>
+
+namespace
+{
+    /*  A crashed case says WHERE: doctest reports the signal and nothing more,
+        and there is no debugger on the CI runners. First chance, so it runs
+        before doctest's own filter; the backtrace is JUCE's, with symbols in
+        a Debug build. */
+    LONG WINAPI printBacktraceOnCrash (EXCEPTION_POINTERS* info)
+    {
+        if (info != nullptr && info->ExceptionRecord != nullptr
+            && info->ExceptionRecord->ExceptionCode == EXCEPTION_ACCESS_VIOLATION)
+        {
+            std::cerr << "ACCESS VIOLATION on thread " << GetCurrentThreadId() << ":" << std::endl
+                      << juce::SystemStats::getStackBacktrace() << std::endl;
+        }
+
+        return EXCEPTION_CONTINUE_SEARCH;
+    }
+
+    const bool crashHandlerInstalled = (AddVectoredExceptionHandler (1, printBacktraceOnCrash), true);
+}
+#endif
+
+//==============================================================================
 int main (int argc, char** argv)
 {
     /*  JUCE is initialised once, for the whole process. go.dot learnt on macOS

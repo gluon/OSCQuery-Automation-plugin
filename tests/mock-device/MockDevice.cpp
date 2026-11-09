@@ -33,6 +33,7 @@
 
 #include <atomic>
 #include <cstring>
+#include <functional>
 #include <map>
 #include <mutex>
 #include <set>
@@ -280,9 +281,16 @@ namespace oqatest
                         continue;
 
                     const auto readAt = std::chrono::steady_clock::now();
-                    const std::lock_guard<std::mutex> guard (lock);
-                    oscDatagrams.emplace_back (buffer.begin(), buffer.begin() + got);
-                    oscTimes.push_back (readAt);
+
+                    {
+                        const std::lock_guard<std::mutex> guard (lock);
+                        oscDatagrams.emplace_back (buffer.begin(), buffer.begin() + got);
+                        oscTimes.push_back (readAt);
+                    }
+
+                    if (options.echoDelayMs >= 0)
+                        scheduleEcho (decodeForEcho (buffer.data(), static_cast<std::size_t> (got)));
+
                     continue;
                 }
 
@@ -315,6 +323,141 @@ namespace oqatest
             }
         }
 
+        //==============================================================================
+        //  The echo (Options::echoDelayMs): what arrives over UDP is applied and
+        //  streamed back after the delay, on a thread of its own per datagram,
+        //  joined at stop. A decoder for the four types a slot binds, enough for
+        //  the loop guard's test; anything else in a message drops the message.
+        using EchoValues = std::vector<std::pair<juce::String, juce::Array<juce::var>>>;
+        std::vector<std::thread> echoThreads;        // under lock
+        std::function<void (const EchoValues&)> applyEcho;
+
+        static EchoValues decodeForEcho (const std::uint8_t* data, std::size_t size)
+        {
+            EchoValues out;
+
+            const auto readPadded = [&] (std::size_t& pos, juce::String& text) -> bool
+            {
+                const auto* begin = data + pos;
+                const auto* end = static_cast<const std::uint8_t*> (std::memchr (begin, 0, size - pos));
+
+                if (end == nullptr)
+                    return false;
+
+                text = juce::String::fromUTF8 (reinterpret_cast<const char*> (begin), static_cast<int> (end - begin));
+                pos += static_cast<std::size_t> (end - begin) + 1;
+                pos = (pos + 3) & ~std::size_t (3);
+                return pos <= size;
+            };
+
+            const auto readInt = [&] (std::size_t& pos, std::int32_t& value) -> bool
+            {
+                if (pos + 4 > size)
+                    return false;
+
+                value = static_cast<std::int32_t> ((std::uint32_t (data[pos]) << 24) | (std::uint32_t (data[pos + 1]) << 16)
+                                                 | (std::uint32_t (data[pos + 2]) << 8) | std::uint32_t (data[pos + 3]));
+                pos += 4;
+                return true;
+            };
+
+            if (size >= 16 && std::memcmp (data, "#bundle", 8) == 0)
+            {
+                std::size_t pos = 16;
+
+                while (pos + 4 <= size)
+                {
+                    std::int32_t length = 0;
+                    readInt (pos, length);
+
+                    if (length <= 0 || pos + static_cast<std::size_t> (length) > size)
+                        break;
+
+                    const auto inner = decodeForEcho (data + pos, static_cast<std::size_t> (length));
+                    out.insert (out.end(), inner.begin(), inner.end());
+                    pos += static_cast<std::size_t> (length);
+                }
+
+                return out;
+            }
+
+            std::size_t pos = 0;
+            juce::String address, tags;
+
+            if (! readPadded (pos, address) || ! readPadded (pos, tags) || ! tags.startsWith (","))
+                return out;
+
+            juce::Array<juce::var> values;
+
+            for (int i = 1; i < tags.length(); ++i)
+            {
+                switch (tags[i])
+                {
+                    case 'f':
+                    {
+                        std::int32_t bits = 0;
+
+                        if (! readInt (pos, bits))
+                            return out;
+
+                        float value = 0.0f;
+                        std::memcpy (&value, &bits, sizeof (value));
+                        values.add (static_cast<double> (value));
+                        break;
+                    }
+                    case 'i':
+                    {
+                        std::int32_t value = 0;
+
+                        if (! readInt (pos, value))
+                            return out;
+
+                        values.add (static_cast<int> (value));
+                        break;
+                    }
+                    case 'T': values.add (true); break;
+                    case 'F': values.add (false); break;
+                    default: return out;
+                }
+            }
+
+            out.emplace_back (address, std::move (values));
+            return out;
+        }
+
+        void scheduleEcho (EchoValues values)
+        {
+            if (values.empty() || ! applyEcho)
+                return;
+
+            const std::lock_guard<std::mutex> guard (lock);
+            echoThreads.emplace_back ([this, values = std::move (values)]
+            {
+                const auto until = std::chrono::steady_clock::now() + std::chrono::milliseconds (options.echoDelayMs);
+
+                while (! oscStopping.load() && std::chrono::steady_clock::now() < until)
+                    std::this_thread::sleep_for (std::chrono::milliseconds (1));
+
+                if (! oscStopping.load())
+                    applyEcho (values);
+            });
+        }
+
+        void joinEchoes()
+        {
+            std::vector<std::thread> threads;
+
+            {
+                const std::lock_guard<std::mutex> guard (lock);
+                threads.swap (echoThreads);
+            }
+
+            for (auto& t : threads)
+                if (t.joinable())
+                    t.join();
+        }
+
+        //==============================================================================
         juce::var hostInfo() const
         {
             auto* info = new juce::DynamicObject();
@@ -589,6 +732,11 @@ namespace oqatest
         }
 
         impl->oscStopping.store (false);
+        impl->applyEcho = [this] (const Impl::EchoValues& values)
+        {
+            for (const auto& entry : values)
+                (void) setValue (entry.first, entry.second);
+        };
         impl->oscThread = std::thread ([this] { impl->readOsc(); });
 
         impl->server = std::make_unique<SimpleWebSocketServer>();
@@ -636,6 +784,8 @@ namespace oqatest
 
         if (impl->oscThread.joinable())
             impl->oscThread.join();
+
+        impl->joinEchoes();
 
         impl->osc.reset();
         impl->oscListener.reset();

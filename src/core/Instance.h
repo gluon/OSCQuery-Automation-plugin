@@ -32,6 +32,9 @@
                              device touched
       the editor             bind, unbind, ranges, curves, directions, names;
                              the Test button; the device's tree; the status
+      record (Phase 4)       the registry wakes the shim once per message
+                             received; the shim polls the values on the
+                             message thread and pushes them to the host
 
     The registry is reached through an OqaCoreApi table: the shared core
     library's when the loader found one, this binary's own otherwise. The
@@ -48,6 +51,8 @@
 
 #include <atomic>
 #include <cstdint>
+#include <functional>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -109,8 +114,28 @@ namespace oqa::core
 
         /*  `normalised[i]` is slot i's host value. Posts what moved since the
             last block (everything, the first block after a change of
-            bindings), then ends the block. */
+            bindings), then ends the block. A value equal to the last one
+            received from the device for that slot is not posted: a slot whose
+            direction is both does not echo the device back to itself. */
         void processBlock (const float* normalised, int valueCount) noexcept OQA_AUDIO_THREAD;
+
+        //==============================================================================
+        //  Record (Phase 4). Values the devices stream for this instance's
+        //  receiving slots wait in the registry; `wake` is called on a registry
+        //  thread, at most once per message, and must only signal (the shim
+        //  triggers an async update). pollReceived, on the message thread,
+        //  drains them oldest first and remembers each slot's last.
+
+        void setReceiveWake (std::function<void()> wake);
+
+        /** Calls `apply (slot, normalised)` for each value waiting, oldest first; returns how many. */
+        int pollReceived (const std::function<void (int slot, float normalised)>& apply);
+
+        /** The last value received for a slot, as 0-1; nullopt until one has. Any thread. */
+        std::optional<float> lastReceived (int slot) const noexcept;
+
+        /** Whether the registry this instance runs on has the receive entries (an older shared library has not). */
+        bool canReceive() const noexcept;
 
         //==============================================================================
         //  The editor.
@@ -128,7 +153,9 @@ namespace oqa::core
 
     private:
         void push();
+        void registerWake();
         std::string takeError (char* text) const;
+        static void wakeTrampoline (void* context);
 
         const OqaCoreApi* api;
         int count;
@@ -142,5 +169,9 @@ namespace oqa::core
         //  The audio thread's own.
         std::vector<float> lastPosted;
         std::atomic<bool> postEverything { true };
+
+        //  Record: written on the message thread, read by the audio thread and the editor.
+        std::function<void()> receiveWake;
+        std::unique_ptr<std::atomic<float>[]> received;
     };
 }

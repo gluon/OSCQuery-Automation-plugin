@@ -23,6 +23,7 @@
         oqa-mock-device (--fixture <tree.json> | --generate <leaves>) [--port N]
                         [--name "Some name"] [--no-websocket] [--extensions A,B,C]
                         [--host-info-only] [--notify-unlisted] [--tcp] [--osc-ip IP]
+                        [--echo-ms N]
 
     Prints one line, "oqa-mock-device http <port> osc <port>", once it answers,
     then serves until interrupted (Ctrl-C or SIGTERM). --generate serves a
@@ -47,7 +48,7 @@ namespace
     {
         std::cerr << "usage: oqa-mock-device (--fixture <tree.json> | --generate <leaves>) [--port N] [--name NAME]\n"
                      "                       [--no-websocket] [--extensions A,B,C] [--host-info-only]\n"
-                     "                       [--notify-unlisted] [--tcp] [--osc-ip IP]\n";
+                     "                       [--notify-unlisted] [--tcp] [--osc-ip IP] [--echo-ms N]\n";
         return 64;
     }
 }
@@ -88,6 +89,8 @@ int main (int argc, char** argv)
             options.oscTransport = "TCP";
         else if (arg == "--osc-ip" && hasValue)
             options.oscIp = juce::String (argv[++i]);
+        else if (arg == "--echo-ms" && hasValue)
+            options.echoDelayMs = juce::String (argv[++i]).getIntValue();
         else
             return usage();
     }
