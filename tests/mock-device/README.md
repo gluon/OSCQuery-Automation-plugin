@@ -11,7 +11,9 @@ client's feet with `setValue`, `rename`, `remove`, `retype` and `add`, which sen
 WFS-DIY sends `PATH_CHANGED`); `oscTransport = "TCP"` one whose `OSC_PORT` is a TCP listener;
 `oscIp` one that states `OSC_IP`; `echoDelayMs` one that applies what it is sent over UDP and
 streams it back to its listeners that many milliseconds later, as a real device echoes (Phase 4's
-loop guard). `setValueBundle` streams one bundle frame, `closeAllConnections`
+loop guard); `setFeedbackTarget` names a host and port every value is also sent to as UDP OSC, as
+a device told a client's address does (Phase 4's receiver for devices without LISTEN).
+`setValueBundle` streams one bundle frame, `closeAllConnections`
 drops every websocket client, and what arrives on `OSC_PORT` (datagrams, or a TCP stream's bytes)
 and as binary websocket frames is kept for a test to read back. `MockDevice.h` has the details.
 

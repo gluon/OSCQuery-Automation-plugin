@@ -30,6 +30,7 @@ add_executable(oqa_core_tests
     RegistryRig.h
     RegistryTests.cpp
     ReceiveTests.cpp
+    UdpReceiveTests.cpp
     LoaderTests.cpp)
 
 target_include_directories(oqa_core_tests PRIVATE "${CMAKE_SOURCE_DIR}/tests")

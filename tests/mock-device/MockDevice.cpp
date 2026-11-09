@@ -677,6 +677,27 @@ namespace oqatest
             for (auto it = listeners.begin(); it != listeners.end();)
                 it = isAtOrUnder (it->first, path) ? listeners.erase (it) : std::next (it);
         }
+
+        //==============================================================================
+        //  The feedback target (setFeedbackTarget): a UDP OSC copy of every value
+        //  this device streams, sent from OSC_PORT's own socket.
+        juce::String feedbackHost;          // under lock
+        int feedbackPort = 0;               // under lock
+
+        void sendFeedback (const juce::MemoryBlock& packet)
+        {
+            juce::String host;
+            int port = 0;
+
+            {
+                const std::lock_guard<std::mutex> guard (lock);
+                host = feedbackHost;
+                port = feedbackPort;
+            }
+
+            if (port > 0 && osc != nullptr)
+                (void) osc->write (host, port, packet.getData(), static_cast<int> (packet.getSize()));
+        }
     };
 
     //==============================================================================
@@ -864,7 +885,15 @@ namespace oqatest
         for (const auto& id : ids)
             impl->sendBinaryTo (id, bundle);
 
+        impl->sendFeedback (bundle);
         return true;
+    }
+
+    void MockDevice::setFeedbackTarget (const juce::String& host, int port)
+    {
+        const std::lock_guard<std::mutex> guard (impl->lock);
+        impl->feedbackHost = host;
+        impl->feedbackPort = port;
     }
 
     void MockDevice::closeAllConnections()
@@ -916,6 +945,7 @@ namespace oqatest
         for (const auto& id : ids)
             impl->sendBinaryTo (id, packet);
 
+        impl->sendFeedback (packet);
         return true;
     }
 

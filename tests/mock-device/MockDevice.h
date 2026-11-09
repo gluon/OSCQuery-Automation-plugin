@@ -161,6 +161,12 @@ namespace oqatest
             device rebooting would. Listeners go with them. */
         void closeAllConnections();
 
+        /*  Where this device also sends its values as UDP OSC, as a device
+            told a client's address does (Phase 4: devices without LISTEN):
+            setValue and setValueBundle send there too, from OSC_PORT. Port 0
+            turns it off. UDP transport only. */
+        void setFeedbackTarget (const juce::String& host, int port);
+
         /** Every binary frame received over the websocket, in order: the OSC a
             client sends a device this way (spec draft L3, L4). */
         std::vector<std::vector<std::uint8_t>> receivedWebsocketOsc() const;

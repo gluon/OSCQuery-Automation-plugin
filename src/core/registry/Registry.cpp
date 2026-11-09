@@ -26,6 +26,7 @@
 #include <oscquery/Device.h>
 #include <oscquery/net/RawUdpSender.h>
 #include <oscquery/net/TcpSender.h>
+#include <oscquery/net/UdpEndpoint.h>
 #include <oscquery/osc/Bundler.h>
 #include <oscquery/osc/Codec.h>
 #include <oscquery/osc/FixedEncoder.h>
@@ -261,6 +262,7 @@ namespace oqa::core
         {
             buffer.resize (datagramBufferBytes);
             openDevice();
+            stopReplaced();
 
             /*  Realtime where the system allows it: woken about once a block,
                 busy for tens of microseconds. The budget declared is small on
@@ -279,10 +281,18 @@ namespace oqa::core
             wake.signal();
             stopThread (3000);
 
-            const std::lock_guard<std::mutex> guard (deviceLock);
+            /*  Never joined under the device lock: the Device thread may be
+                mid-delivery, waiting for the registry's lock, whose holder may
+                want this device lock. */
+            std::unique_ptr<oscquery::Device> old;
 
-            if (device != nullptr)
-                device->stop();
+            {
+                const std::lock_guard<std::mutex> guard (deviceLock);
+                old = std::move (device);
+            }
+
+            if (old != nullptr)
+                old->stop();
         }
 
         const std::string key;
@@ -467,6 +477,47 @@ namespace oqa::core
         }
 
         //==============================================================================
+        //  For the registry's UDP receiver (4b).
+
+        /** Whether any group of any instance sits at `path`. */
+        bool hasGroupAt (const std::string& path) const
+        {
+            const std::lock_guard<std::mutex> guard (groupsLock);
+
+            for (const auto& g : allGroups)
+                if (g->path == path)
+                    return true;
+
+            return false;
+        }
+
+        /** True while the websocket streams: UDP feedback is not this device's way then. */
+        bool isListening() const
+        {
+            bool out = false;
+            withDevice ([&] (const oscquery::Device& d) { out = d.state() == oscquery::Device::State::Listening; });
+            return out;
+        }
+
+        /** The address OSC is sent to, as resolved; empty until the sender is open. */
+        std::string oscIp() const
+        {
+            const std::lock_guard<std::mutex> guard (settingsLock);
+            return resolvedOscIp;
+        }
+
+        void receivedUdp (const std::string& path, const oscquery::osc::Values& values)
+        {
+            udpReceived.fetch_add (1, std::memory_order_relaxed);
+            received (path, values);
+        }
+
+        void udpIgnoredWhileListening()
+        {
+            udpIgnored.fetch_add (1, std::memory_order_relaxed);
+        }
+
+        //==============================================================================
         /*  A VALUE FROM THE DEVICE, on the library's Device thread (LISTEN) or
             the UDP receiver's (4b). The groups at that path, copied under the
             groups lock alone; then, per argument: the value the device holds is
@@ -587,6 +638,8 @@ namespace oqa::core
             o->setProperty ("values_received", static_cast<juce::int64> (valuesReceived.load()));
             o->setProperty ("loop_guarded", static_cast<juce::int64> (loopGuarded.load()));
             o->setProperty ("unmatched_received", static_cast<juce::int64> (unmatchedReceived.load()));
+            o->setProperty ("udp_received", static_cast<juce::int64> (udpReceived.load()));
+            o->setProperty ("udp_ignored", static_cast<juce::int64> (udpIgnored.load()));
 
             o->setProperty ("sender_ready", senderReady.load());
             o->setProperty ("resolved", juce::String (udp.resolvedAddress()));
@@ -631,9 +684,10 @@ namespace oqa::core
 
             const std::lock_guard<std::mutex> guard (deviceLock);
 
-            if (device != nullptr)
-                device->stop();
-
+            /*  The device being replaced is stopped by the caller through
+                stopReplaced(), once this lock is released: stop() joins its
+                thread, never under this lock (see the destructor). */
+            stopping = std::move (device);
             device = std::make_unique<oscquery::Device> (options);
 
             /*  The tree landing (or changing) is noted for the network thread,
@@ -664,6 +718,20 @@ namespace oqa::core
             senderReady.store (false, std::memory_order_release);
             udp.close();
             tcp.reset();
+
+            const std::lock_guard<std::mutex> settingsGuard (settingsLock);
+            resolvedOscIp.clear();
+        }
+
+        /** The device openDevice() replaced, for stopReplaced(). */
+        std::unique_ptr<oscquery::Device> stopping;
+
+        void stopReplaced()
+        {
+            if (stopping != nullptr)
+                stopping->stop();
+
+            stopping.reset();
         }
 
         /*  Once HOST_INFO is in: the UDP sender to OSC_IP (else the HTTP host)
@@ -704,6 +772,21 @@ namespace oqa::core
             else if (! udp.open (oscHost, info->oscPort, error))
             {
                 return;
+            }
+
+            {
+                /*  The address as resolved, less the port and any brackets:
+                    what a datagram's sender is matched against (4b). */
+                auto text = tcp != nullptr ? oscHost : udp.resolvedAddress();
+                const auto colon = text.rfind (':');
+
+                if (colon != std::string::npos && text.find (':') == colon)
+                    text = text.substr (0, colon);
+                else if (! text.empty() && text.front() == '[' && colon != std::string::npos && colon >= 2)
+                    text = text.substr (1, colon - 2);
+
+                const std::lock_guard<std::mutex> guard (settingsLock);
+                resolvedOscIp = text;
             }
 
             senderReady.store (true, std::memory_order_release);
@@ -949,7 +1032,10 @@ namespace oqa::core
                     break;
 
                 if (addressChanged.exchange (false, std::memory_order_acq_rel))
+                {
                     openDevice();
+                    stopReplaced();
+                }
 
                 if (treeArrived.exchange (false, std::memory_order_acq_rel) && onTreeLoaded)
                 {
@@ -1048,6 +1134,9 @@ namespace oqa::core
         std::atomic<std::uint64_t> valuesReceived { 0 };
         std::atomic<std::uint64_t> loopGuarded { 0 };
         std::atomic<std::uint64_t> unmatchedReceived { 0 };
+        std::atomic<std::uint64_t> udpReceived { 0 };
+        std::atomic<std::uint64_t> udpIgnored { 0 };
+        std::string resolvedOscIp;              // under settingsLock
     };
 
     //==============================================================================
@@ -1063,6 +1152,169 @@ namespace oqa::core
 
         void applyBindings (InstanceRecord* instance, const StateChunk& chunk);
         void rebuildPlansFor (DeviceEntry* entry);
+
+        //==============================================================================
+        /*  THE UDP RECEIVER (4b; PRD: "the plugin opens a UDP listener and shows
+            its port in the editor; the user enters that port in the device's
+            own configuration"). One per process, started once any instance has
+            a receiving slot or the setting names a port, bound to
+            settings.receivePort (0: ephemeral), rebound when that changes,
+            stopped at shutdown. A datagram's messages are routed to the devices
+            holding a group at the path and not streaming over a websocket
+            (LISTEN is their way); several of those are told apart by the
+            sender's address against each device's resolved OSC address, and
+            what is still ambiguous goes to all of them, counted. Started and
+            stopped outside the registry's lock: its handler takes that lock. */
+        oscquery::net::UdpEndpoint receiver;
+        int receiverPort = -1;                              // the port it was started for; -1 never
+        std::atomic<std::uint64_t> udpDatagrams { 0 };
+        std::atomic<std::uint64_t> udpRefused { 0 };
+        std::atomic<std::uint64_t> udpUnrouted { 0 };
+        std::atomic<std::uint64_t> udpAmbiguous { 0 };
+
+        bool anyReceivingSlot() const           // under lock
+        {
+            for (const auto& [id, instance] : instances)
+                if (const auto* plan = instance->plan.load (std::memory_order_acquire))
+                    for (const auto& g : plan->groups)
+                        for (const auto r : g->receiver)
+                            if (r >= 0)
+                                return true;
+
+            return false;
+        }
+
+        /** Decide under the lock, act outside it. Message thread. */
+        void reconcileReceiver()
+        {
+            bool wanted = false;
+            int port = 0;
+
+            {
+                const std::lock_guard<std::mutex> guard (lock);
+                port = settings.receivePort;
+                wanted = receiver.isRunning() || anyReceivingSlot() || port > 0;
+            }
+
+            if (! wanted)
+                return;
+
+            if (receiver.isRunning() && receiverPort == port)
+                return;
+
+            receiver.stop();
+            receiverPort = port;
+            (void) receiver.start (port, [this] (oscquery::net::Datagram datagram) { onDatagram (std::move (datagram)); });
+        }
+
+        void onDatagram (oscquery::net::Datagram datagram)
+        {
+            udpDatagrams.fetch_add (1, std::memory_order_relaxed);
+            const auto decoded = oscquery::osc::decode (datagram.bytes.data(), datagram.bytes.size());
+
+            if (! decoded.ok)
+            {
+                udpRefused.fetch_add (1, std::memory_order_relaxed);
+                return;
+            }
+
+            route (decoded.packet, datagram.senderIp);
+        }
+
+        void route (const oscquery::osc::Packet& packet, const std::string& senderIp)
+        {
+            if (packet.isBundle())
+            {
+                for (const auto& element : packet.elements)
+                    route (element, senderIp);
+
+                return;
+            }
+
+            std::vector<DeviceEntry*> candidates;
+            std::vector<DeviceEntry*> listening;
+
+            {
+                const std::lock_guard<std::mutex> guard (lock);
+
+                for (auto& [key, entry] : devices)
+                {
+                    if (! entry->hasGroupAt (packet.address))
+                        continue;
+
+                    (entry->isListening() ? listening : candidates).push_back (entry.get());
+                }
+            }
+
+            if (candidates.empty())
+            {
+                if (listening.empty())
+                    udpUnrouted.fetch_add (1, std::memory_order_relaxed);
+
+                for (auto* entry : listening)
+                    entry->udpIgnoredWhileListening();
+
+                return;
+            }
+
+            if (candidates.size() > 1)
+            {
+                std::vector<DeviceEntry*> fromSender;
+
+                for (auto* entry : candidates)
+                    if (entry->oscIp() == senderIp)
+                        fromSender.push_back (entry);
+
+                if (! fromSender.empty())
+                    candidates = fromSender;
+
+                if (candidates.size() > 1)
+                    udpAmbiguous.fetch_add (1, std::memory_order_relaxed);
+            }
+
+            /*  Outside the lock: a delivery takes it. Entries live as long as
+                the registry, and shutdown stops this receiver first. */
+            for (auto* entry : candidates)
+                entry->receivedUdp (packet.address, packet.args);
+        }
+
+        /*  This host's own IPv4 addresses, for the user to type into the device
+            beside the port. Windows lists the multicast groups it has joined
+            among a machine's addresses (the library's Discovery found this):
+            a group is not an interface. Link-local (169.254) stays, last: a
+            venue network without DHCP lives there. */
+        static juce::var ownAddresses()
+        {
+            std::vector<std::string> addresses;
+
+            for (const auto& address : juce::IPAddress::getAllAddresses (false))
+            {
+                if (address.isNull() || address.address[0] >= 224)
+                    continue;
+
+                const auto text = address.toString().toStdString();
+
+                if (text.empty() || text.rfind ("127.", 0) == 0)
+                    continue;
+
+                addresses.push_back (text);
+            }
+
+            std::sort (addresses.begin(), addresses.end(), [] (const std::string& x, const std::string& y)
+            {
+                const bool xLocal = x.rfind ("169.254.", 0) == 0;
+                const bool yLocal = y.rfind ("169.254.", 0) == 0;
+                return xLocal != yLocal ? yLocal : x < y;
+            });
+            addresses.erase (std::unique (addresses.begin(), addresses.end()), addresses.end());
+
+            juce::Array<juce::var> out;
+
+            for (const auto& text : addresses)
+                out.add (juce::String (text));
+
+            return out;
+        }
 
         DeviceEntry& entryFor (const DeviceRef& ref)
         {
@@ -1128,6 +1380,9 @@ namespace oqa::core
             ending, or a test that wants no thread left when main returns.
             Taken out from under the lock before they are destroyed: a device
             being stopped may be mid-delivery, waiting for that very lock. */
+        impl->receiver.stop();
+        impl->receiverPort = -1;
+
         std::map<std::uint32_t, std::unique_ptr<InstanceRecord>> instances;
         std::map<std::string, std::unique_ptr<DeviceEntry>> devices;
 
@@ -1194,16 +1449,20 @@ namespace oqa::core
             return false;
         }
 
-        const std::lock_guard<std::mutex> guard (impl->lock);
-
-        if (impl->instances.count (instance->id) == 0)
         {
-            error = "the instance is not registered";
-            return false;
+            const std::lock_guard<std::mutex> guard (impl->lock);
+
+            if (impl->instances.count (instance->id) == 0)
+            {
+                error = "the instance is not registered";
+                return false;
+            }
+
+            instance->lastChunk = std::make_unique<StateChunk> (chunk);
+            impl->applyBindings (instance, chunk);
         }
 
-        instance->lastChunk = std::make_unique<StateChunk> (chunk);
-        impl->applyBindings (instance, chunk);
+        impl->reconcileReceiver();
         return true;
     }
 
@@ -1579,6 +1838,15 @@ namespace oqa::core
         }
 
         o->setProperty ("devices", devices);
+
+        /*  The UDP receiver: the port to type into a device without LISTEN,
+            beside this host's addresses; 0 while it is not running. */
+        o->setProperty ("receive_port", impl->receiver.isRunning() ? impl->receiver.boundPort() : 0);
+        o->setProperty ("receive_addresses", Impl::ownAddresses());
+        o->setProperty ("udp_datagrams", static_cast<juce::int64> (impl->udpDatagrams.load()));
+        o->setProperty ("udp_refused", static_cast<juce::int64> (impl->udpRefused.load()));
+        o->setProperty ("udp_unrouted", static_cast<juce::int64> (impl->udpUnrouted.load()));
+        o->setProperty ("udp_ambiguous", static_cast<juce::int64> (impl->udpAmbiguous.load()));
         return juce::var (o);
     }
 
@@ -1597,12 +1865,16 @@ namespace oqa::core
 
     void Registry::setSettings (const RegistrySettings& settings)
     {
-        const std::lock_guard<std::mutex> guard (impl->lock);
-        impl->settings = settings;
-        impl->directSend.store (settings.directSend, std::memory_order_relaxed);
+        {
+            const std::lock_guard<std::mutex> guard (impl->lock);
+            impl->settings = settings;
+            impl->directSend.store (settings.directSend, std::memory_order_relaxed);
 
-        for (auto& [key, entry] : impl->devices)
-            entry->setSettings (settings);
+            for (auto& [key, entry] : impl->devices)
+                entry->setSettings (settings);
+        }
+
+        impl->reconcileReceiver();
     }
 
     RegistrySettings Registry::settings() const
