@@ -90,12 +90,40 @@ namespace oqa::core
 
         /** Replace everything from a saved chunk; false with the reason when it is not one. */
         bool loadState (std::string_view json, std::string& error);
-        std::string saveState() const;
+
+        /*  The chunk as JSON. A device the registry has since found or been
+            pointed at elsewhere is saved at that address (Phase 5b: "each
+            instance writes the new address into its own chunk on the next
+            save"), so the session reopens where the device was last. */
+        std::string saveState();
 
         /*  A device for slots to point at: its index in the chunk, reusing an
-            entry with the same name and identity value. */
+            entry with the same name and identity value. A known device added
+            again at another address is pointed there, process-wide (5b). */
         int addDevice (const DeviceRef& device);
         void setDeviceTiming (int deviceIndex, bool honoursTimetags, double offsetMs);
+
+        //==============================================================================
+        //  Re-identification (Phase 5b).
+
+        /*  Point the device at an address by hand: the chunk, then the registry,
+            where every instance referring to the device follows. The device is
+            used whatever NAME answers there, with a warning. */
+        bool pointDevice (int deviceIndex, const std::string& host, int port);
+
+        /*  The read-only leaf whose value tells this device from another of the
+            same NAME, and the value as the editor read it (identityText); nullopt
+            clears both. Changes the device's key in the registry. */
+        void setDeviceIdentity (int deviceIndex, std::optional<std::string> path, std::optional<std::string> value);
+
+        /** Whether the registry this instance runs on has the Finder entries (an older shared library has not). */
+        bool canFind() const noexcept;
+
+        /** Start the registry's Finder (the editor opened). */
+        void finderEnsure();
+
+        /** A typed host and port for the Finder to probe and list under the status's `found`. */
+        void finderAddManual (const std::string& host, int port);
 
         /*  The hash of the device's tree as the editor shows it, written at every
             bind and rebind (Phase 5a): what the registry compares the live tree

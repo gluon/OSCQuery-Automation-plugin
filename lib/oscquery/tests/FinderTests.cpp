@@ -30,6 +30,7 @@
 
 #include "TestSupport.h"
 #include "MockDevice.h"
+#include "support/MdnsResponder.h"
 #include "support/WsTestClient.h"
 
 #include <oscquery/Finder.h>
@@ -69,110 +70,9 @@ namespace
         std::string name() const { return device.options().name.toStdString(); }
     };
 
-    /*  A responder on loopback answering every PTR question about the service
-        with the instances it was given: PTR, then SRV, TXT and A as additional
-        records, as a real responder does. */
-    struct Responder
-    {
-        struct Instance { std::string label; std::string hostLabel; int port; };
-
-        explicit Responder (std::vector<Instance> toAnnounce) : instances (std::move (toAnnounce))
-        {
-            REQUIRE (socket.bindToPort (0, "127.0.0.1"));
-            thread = std::thread ([this] { run(); });
-        }
-
-        ~Responder()
-        {
-            stopping.store (true);
-            thread.join();
-            socket.shutdown();
-        }
-
-        int port() const { return socket.getBoundPort(); }
-
-        std::vector<std::uint8_t> answerFor() const
-        {
-            const auto service = mdns::nameOf ("_oscjson._tcp.local");
-            std::vector<mdns::Record> answers, additionals;
-
-            for (const auto& each : instances)
-            {
-                mdns::Name instance { each.label };
-                instance.insert (instance.end(), service.begin(), service.end());
-                const mdns::Name host { each.hostLabel, "local" };
-
-                mdns::Record ptr;
-                ptr.name = service;
-                ptr.type = mdns::type::ptr;
-                ptr.ttl = 120;
-                ptr.target = instance;
-                answers.push_back (ptr);
-
-                mdns::Record srv;
-                srv.name = instance;
-                srv.type = mdns::type::srv;
-                srv.cacheFlush = true;
-                srv.ttl = 120;
-                srv.port = static_cast<std::uint16_t> (each.port);
-                srv.target = host;
-                additionals.push_back (srv);
-
-                mdns::Record txt;
-                txt.name = instance;
-                txt.type = mdns::type::txt;
-                txt.cacheFlush = true;
-                txt.ttl = 120;
-                txt.txt = { "txtvers=1" };
-                additionals.push_back (txt);
-
-                mdns::Record a;
-                a.name = host;
-                a.type = mdns::type::a;
-                a.cacheFlush = true;
-                a.ttl = 120;
-                a.address = { 127, 0, 0, 1 };
-                additionals.push_back (a);
-            }
-
-            return mdns::encodeResponse (answers, additionals);
-        }
-
-        void run()
-        {
-            std::vector<std::uint8_t> buffer (9000);
-            const auto service = mdns::nameOf ("_oscjson._tcp.local");
-
-            while (! stopping.load())
-            {
-                if (socket.waitUntilReady (true, 20) != 1)
-                    continue;
-
-                juce::String fromIp;
-                int fromPort = 0;
-                const auto got = socket.read (buffer.data(), static_cast<int> (buffer.size()), false, fromIp, fromPort);
-                const auto message = got > 0 ? mdns::decode (buffer.data(), static_cast<std::size_t> (got)) : std::nullopt;
-
-                if (! message || message->response)
-                    continue;
-
-                for (const auto& question : message->questions)
-                {
-                    if (question.type == mdns::type::ptr && mdns::sameName (question.name, service))
-                    {
-                        const auto bytes = answerFor();
-                        socket.write (fromIp, fromPort, bytes.data(), static_cast<int> (bytes.size()));
-                        break;
-                    }
-                }
-            }
-        }
-
-        std::vector<Instance> instances;
-        juce::DatagramSocket socket { false };
-        std::atomic<bool> stopping { false };
-        std::thread thread;
-    };
+    /*  The responder lives in tests/support since Phase 5b (the core's
+        re-identification tests announce moved devices with it). */
+    using Responder = oqatest::MdnsResponder;
 
     Finder::Options manualOnly()
     {

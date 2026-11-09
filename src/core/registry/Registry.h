@@ -75,6 +75,20 @@
     `tree_hash` against the live tree's is one warning line. PATH_REMOVED and
     PATH_RENAMED rebuild the plans live, as the tree landing does.
 
+    RE-IDENTIFICATION (Phase 5b, 2026-11-09; PRD "Reopening a session"). A
+    device entry drives nothing until the device at its address is confirmed:
+    HOST_INFO's NAME is the chunk's and, when the chunk names an identity leaf,
+    that leaf reads the stored value. A mismatch, or no answer, sets the entry
+    searching: the resolver, one normal-priority thread per registry, owns the
+    process-wide Finder (DNS-SD plus typed addresses), takes the candidates
+    whose NAME is the chunk's, tells them apart by the identity leaf, then by
+    tree hash, adopts the one left and leaves several or none unresolved with
+    the candidates in the status for the user to pick from. A device pointed
+    at by hand (deviceSetAddress) is used whatever NAME answers, with a warning
+    line. The resolver snapshots under the registry's lock, does its HTTP
+    outside it, and re-takes it to apply; its reads go through throwaway
+    Devices, never the entry's.
+
     LOCK ORDER: the registry's lock, then a device entry's groups lock, or
     either alone; never the reverse. received() copies the matching groups
     under the groups lock, releases, and only then reaches the registry.
@@ -86,6 +100,8 @@
 */
 
 #include <core/StateChunk.h>
+
+#include <oscquery/Finder.h>
 
 #include <juce_core/juce_core.h>
 
@@ -174,6 +190,18 @@ namespace oqa::core
 
         bool setDeviceAddress (const std::string& name, const std::string& identityValue,
                                const std::string& host, int port);
+
+        //==============================================================================
+        //  The Finder (5b): one per process, in the resolver.
+
+        /** Start browsing and probing now (an editor opened); otherwise it starts with the first search. */
+        void finderEnsure();
+
+        /** A typed host and port, probed and listed under `found` in the status, and a candidate for every search. */
+        void finderAddManual (const std::string& host, int port);
+
+        /** For tests: where DNS-SD is asked. Restarts the Finder when it runs. */
+        void setFinderOptions (const oscquery::Finder::Options& options);
 
         void setSettings (const RegistrySettings& settings);
         RegistrySettings settings() const;

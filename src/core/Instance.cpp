@@ -197,8 +197,41 @@ namespace oqa::core
         return true;
     }
 
-    std::string Instance::saveState() const
+    std::string Instance::saveState()
     {
+        /*  Where the registry has each device now: a confirmed or pointed
+            address that is not the chunk's replaces it. */
+        if (handle != nullptr)
+        {
+            const auto status = juce::JSON::parse (juce::String (statusJson()));
+
+            if (const auto* devices = status.getProperty ("devices", {}).getArray())
+            {
+                for (int i = 0; i < devices->size() && i < static_cast<int> (state.devices.size()); ++i)
+                {
+                    const auto& d = (*devices)[i];
+
+                    if (! d.isObject())
+                        continue;
+
+                    const auto resolution = d.getProperty ("resolution", "").toString();
+
+                    if (resolution != "confirmed" && resolution != "pointed")
+                        continue;
+
+                    const auto host = d.getProperty ("host", "").toString().toStdString();
+                    const auto port = static_cast<int> (d.getProperty ("port", 0));
+
+                    if (host.empty() || port <= 0)
+                        continue;
+
+                    auto& ref = state.devices[static_cast<std::size_t> (i)];
+                    ref.lastHost = host;
+                    ref.lastPort = port;
+                }
+            }
+        }
+
         return state.toJson();
     }
 
@@ -207,6 +240,7 @@ namespace oqa::core
         for (std::size_t i = 0; i < state.devices.size(); ++i)
             if (state.devices[i].name == device.name && state.devices[i].identityValue == device.identityValue)
             {
+                const bool moved = state.devices[i].lastHost != device.lastHost || state.devices[i].lastPort != device.lastPort;
                 state.devices[i].lastHost = device.lastHost;
                 state.devices[i].lastPort = device.lastPort;
 
@@ -214,12 +248,73 @@ namespace oqa::core
                     state.devices[i].treeHash = device.treeHash;
 
                 push();
+
+                /*  The registry keeps the address it first had for a device
+                    it knows; adding the device again elsewhere is pointing it. */
+                if (moved && handle != nullptr && ! device.lastHost.empty() && device.lastPort > 0)
+                    api->deviceSetAddress (device.name.c_str(), device.identityValue.value_or (std::string()).c_str(),
+                                           device.lastHost.c_str(), device.lastPort);
+
                 return static_cast<int> (i);
             }
 
         state.devices.push_back (device);
         push();
         return static_cast<int> (state.devices.size()) - 1;
+    }
+
+    bool Instance::pointDevice (int deviceIndex, const std::string& host, int port)
+    {
+        if (deviceIndex < 0 || deviceIndex >= static_cast<int> (state.devices.size()) || host.empty() || port <= 0)
+            return false;
+
+        auto& ref = state.devices[static_cast<std::size_t> (deviceIndex)];
+        ref.lastHost = host;
+        ref.lastPort = port;
+        push();
+
+        if (handle == nullptr)
+            return true;
+
+        return api->deviceSetAddress (ref.name.c_str(), ref.identityValue.value_or (std::string()).c_str(), host.c_str(), port) == 0;
+    }
+
+    void Instance::setDeviceIdentity (int deviceIndex, std::optional<std::string> path, std::optional<std::string> value)
+    {
+        if (deviceIndex < 0 || deviceIndex >= static_cast<int> (state.devices.size()))
+            return;
+
+        auto& ref = state.devices[static_cast<std::size_t> (deviceIndex)];
+
+        if (path.has_value() && path->empty())
+            path.reset();
+
+        if (! path.has_value())
+            value.reset();
+
+        if (ref.identityPath == path && ref.identityValue == value)
+            return;
+
+        ref.identityPath = std::move (path);
+        ref.identityValue = std::move (value);
+        push();
+    }
+
+    bool Instance::canFind() const noexcept
+    {
+        return tableHas (api, &OqaCoreApi::finderEnsure) && tableHas (api, &OqaCoreApi::finderAddManual);
+    }
+
+    void Instance::finderEnsure()
+    {
+        if (canFind())
+            api->finderEnsure();
+    }
+
+    void Instance::finderAddManual (const std::string& host, int port)
+    {
+        if (canFind() && ! host.empty() && port > 0)
+            api->finderAddManual (host.c_str(), port);
     }
 
     void Instance::setDeviceTiming (int deviceIndex, bool honoursTimetags, double offsetMs)

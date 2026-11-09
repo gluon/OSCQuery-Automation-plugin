@@ -262,6 +262,7 @@ TEST_CASE ("stale: a chunk reopened against a tree missing one of its paths has 
     auto root = juce::JSON::parse (oqatest::fixture ("trees/generic-device.json"));
     REQUIRE (removeFromTree (root, gone.fullPath));
     Rig shrunk ({}, root);
+    shrunk.mock.setName ("stale-reopen");          // the same device, as its NAME says (5b)
 
     auto saved = juce::JSON::parse (juce::String (chunkJson));
     auto* device = saved["devices"].getArray()->getReference (0).getDynamicObject();

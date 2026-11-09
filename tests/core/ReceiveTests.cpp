@@ -565,6 +565,7 @@ TEST_CASE ("receive: the audio path allocates nothing with receiving slots in th
 TEST_CASE ("receive: a saved chunk with receiving slots records through the registry (tests/state/v1-receive.json)")
 {
     Rig rig;
+    rig.mock.setName ("Generic Mock");             // the fixture's device, as its NAME says (5b)
 
     /*  The fixture was saved against another address; the session moved. */
     auto saved = juce::JSON::parse (juce::File (juce::String (OQA_TEST_STATE_DIR)).getChildFile ("v1-receive.json"));

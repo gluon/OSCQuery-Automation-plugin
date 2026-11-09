@@ -936,6 +936,12 @@ namespace oqatest
         impl->options.allowList = std::move (allowList);
     }
 
+    void MockDevice::setName (const juce::String& name)
+    {
+        const std::lock_guard<std::mutex> guard (impl->lock);
+        impl->options.name = name;
+    }
+
     void MockDevice::closeAllConnections()
     {
         if (impl->server == nullptr)

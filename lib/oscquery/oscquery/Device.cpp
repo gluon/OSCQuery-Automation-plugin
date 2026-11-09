@@ -130,6 +130,13 @@ namespace oqa::oscquery
         std::atomic<bool> wsOpen { false };
         bool wsEverOpened = false;
 
+        /*  The paths LISTENed, and read once, since this open: a subscription
+            made as the websocket opens is in the set onOpened sends and in a
+            listenNow event behind it, and must not be read twice (found by the
+            plugin's Phase 5b, which LISTENs once the device is confirmed,
+            close to the open). Worker thread only. */
+        std::set<std::string> onWire;
+
         //  Backoff; worker thread only.
         int backoffMs = 500;
         bool attemptPending = false;
@@ -550,6 +557,7 @@ namespace oqa::oscquery
             ws->stop();
             ws.reset();
             wsOpen = false;
+            onWire.clear();
         }
 
         //==============================================================================
@@ -565,7 +573,7 @@ namespace oqa::oscquery
                 case Event::Kind::text:       onText (event.text); break;
                 case Event::Kind::binary:     onBinary (event.bytes); break;
                 case Event::Kind::listenNow:  listenNow (event.text); break;
-                case Event::Kind::ignoreNow:  sendText (commandJson ("IGNORE", event.text)); break;
+                case Event::Kind::ignoreNow:  ignoreNow (event.text); break;
                 case Event::Kind::sendBinary: sendBinaryNow (event.bytes); break;
             }
         }
@@ -575,13 +583,19 @@ namespace oqa::oscquery
             subscription made before the open waits for onOpened to do both. */
         void listenNow (const std::string& path)
         {
-            if (! wsOpen)
+            if (! wsOpen || ! onWire.insert (path).second)
                 return;
 
             sendText (commandJson ("LISTEN", path));
 
             if (auto values = readValue (path))
                 deliver (path, *values);
+        }
+
+        void ignoreNow (const std::string& path)
+        {
+            onWire.erase (path);
+            sendText (commandJson ("IGNORE", path));
         }
 
         void onOpened()
@@ -608,6 +622,8 @@ namespace oqa::oscquery
                 need not push the current value on LISTEN, and WFS-DIY does not,
                 so the first value a lane sees would otherwise be the first
                 change after the connection rather than where the fader is. */
+            onWire = paths;
+
             for (const auto& path : paths)
                 sendText (commandJson ("LISTEN", path));
 
@@ -619,6 +635,7 @@ namespace oqa::oscquery
         void onClosed()
         {
             wsOpen = false;
+            onWire.clear();
 
             State current;
 
@@ -697,10 +714,16 @@ namespace oqa::oscquery
             deliverPacket (result.packet);
         }
 
+        /*  The device stopped streaming these (PATH_REMOVED, PATH_RENAMED): out
+            of the subscriptions, and off the wire's record, so a LISTEN on the
+            path once it is back goes out again. Worker thread (onText). */
         void dropSubscriptionsUnder (const std::string& path)
         {
             for (auto it = subscriptions.begin(); it != subscriptions.end();)
                 it = isAtOrUnder (*it, path) ? subscriptions.erase (it) : std::next (it);
+
+            for (auto it = onWire.begin(); it != onWire.end();)
+                it = isAtOrUnder (*it, path) ? onWire.erase (it) : std::next (it);
         }
 
         void onText (const std::string& text)

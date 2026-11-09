@@ -179,6 +179,11 @@ namespace oqatest
         /** Replaces Options::allowList while running: the device's client table edited under the client's feet. */
         void setAllowList (std::optional<juce::StringArray> allowList);
 
+        /*  Replaces HOST_INFO's NAME. For a test rig that names the device the
+            session refers to (Phase 5 compares NAME on reopen); set before the
+            client asks, as a device's name is its own. */
+        void setName (const juce::String& name);
+
         /** Every binary frame received over the websocket, in order: the OSC a
             client sends a device this way (spec draft L3, L4). */
         std::vector<std::vector<std::uint8_t>> receivedWebsocketOsc() const;

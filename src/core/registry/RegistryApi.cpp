@@ -182,6 +182,17 @@ namespace
         return Registry::shared().pollReceived (recordOf (instance), slots, values, capacity);
     }
 
+    void finderEnsure()
+    {
+        Registry::shared().finderEnsure();
+    }
+
+    void finderAddManual (const char* host, int port)
+    {
+        if (host != nullptr)
+            Registry::shared().finderAddManual (host, port);
+    }
+
     const OqaCoreApi table {
         OQA_CORE_ABI_VERSION,
         sizeof (OqaCoreApi),
@@ -200,7 +211,9 @@ namespace
         freeString,
         shutdownRegistry,
         instanceSetReceiver,
-        instancePollReceived
+        instancePollReceived,
+        finderEnsure,
+        finderAddManual
     };
 }
 

@@ -116,6 +116,7 @@ TEST_CASE ("loader: the shared library built here loads, is version 1, and runs 
     REQUIRE (leaf != nullptr);
 
     Instance one (loaded.api, 4, "via the library, sending");
+    mock.setName ("loader-mock");                  // the registry drives a device only once NAME is the chunk's (5b)
     DeviceRef ref;
     ref.name = "loader-mock";
     ref.lastHost = "127.0.0.1";

@@ -107,8 +107,9 @@ typedef struct OqaCoreApi
     int (*deviceSetAddress) (const char* name, const char* identityValue, const char* host, int port);
 
     /*  Global settings as JSON: direct_send, default_rate_hz, resend_ms,
-        gather_deadline_us, mtu, active_window_ms. Fields absent keep their
-        value. 0 on success. */
+        gather_deadline_us, mtu, active_window_ms, and since Phase 4
+        receive_port, loop_guard_ms, gesture_timeout_ms. Fields absent keep
+        their value. 0 on success. */
     int (*settingsSetJson) (const char* json, char** error);
     char* (*settingsJson) (void);
 
@@ -130,6 +131,14 @@ typedef struct OqaCoreApi
         no lock, any thread. */
     void (*instanceSetReceiver) (OqaInstance* instance, void (*wake) (void* context), void* context);
     int (*instancePollReceived) (OqaInstance* instance, int* slots, float* values, int capacity);
+
+    /*  Additive, 2026-11-09 (Phase 5b, re-identification). The registry's
+        Finder, one per process: finderEnsure starts it browsing DNS-SD and
+        probing (an editor opened; otherwise it starts with the first device
+        to look for); finderAddManual adds a typed host and port, probed like
+        the rest. What it lists is the status JSON's `found`. */
+    void (*finderEnsure) (void);
+    void (*finderAddManual) (const char* host, int port);
 } OqaCoreApi;
 
 /*  The shared library's export. Declared with the export attribute only

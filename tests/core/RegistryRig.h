@@ -64,8 +64,13 @@ namespace oqatest
             tree = *parsed;
         }
 
-        oqa::core::DeviceRef device (const std::string& name) const
+        /*  The session's reference to this mock. The mock takes the name too:
+            since Phase 5b the registry drives a device only once HOST_INFO's
+            NAME is the chunk's. */
+        oqa::core::DeviceRef device (const std::string& name)
         {
+            mock.setName (juce::String (name));
+
             oqa::core::DeviceRef ref;
             ref.name = name;
             ref.lastHost = "127.0.0.1";

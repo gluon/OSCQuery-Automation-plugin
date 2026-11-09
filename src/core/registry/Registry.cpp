@@ -17,6 +17,7 @@
 
 #include <core/registry/Registry.h>
 
+#include <core/Identity.h>
 #include <core/registry/ChangeRing.h>
 #include <core/registry/Wake.h>
 #include <core/rt/RtCheck.h>
@@ -106,6 +107,85 @@ namespace oqa::core
             }
 
             return node;
+        }
+
+        //==============================================================================
+        //  Re-identification (5b).
+
+        /*  Where an entry stands with the device at its address. `checking`:
+            no HOST_INFO yet, or not compared yet; `confirmed`: NAME and the
+            identity leaf agree; `mismatch`: something else answers there;
+            `searching`: nothing answers, or a mismatch, and no candidate by
+            NAME has turned up; `unresolved`: candidates by NAME exist and the
+            identity leaf and the tree hash leave none or several; `pointed`:
+            the user pointed by hand, and whatever answers is used. */
+        enum class Resolution { checking, confirmed, mismatch, searching, unresolved, pointed };
+
+        const char* resolutionName (Resolution r) noexcept
+        {
+            switch (r)
+            {
+                case Resolution::checking:   return "checking";
+                case Resolution::confirmed:  return "confirmed";
+                case Resolution::mismatch:   return "mismatch";
+                case Resolution::searching:  return "searching";
+                case Resolution::unresolved: return "unresolved";
+                case Resolution::pointed:    return "pointed";
+            }
+
+            return "checking";
+        }
+
+        /** A device found under the chunk's NAME while searching, and what told it apart. */
+        struct CandidateInfo
+        {
+            std::string host;
+            int port = 0;
+            std::string identity;       // the identity leaf's value there, when read
+            bool identityMatch = false;
+            bool hashKnown = false;
+            bool hashMatch = false;
+        };
+
+        constexpr int resolverHttpTimeoutMs = 3000;
+
+        /*  Blocking reads through a throwaway Device, never started: the
+            resolver's thread only. The identity leaf is read without a tree,
+            so a number comes back as a double; identityText spells both sides
+            the same way. */
+        std::optional<std::string> readIdentity (const std::string& host, int port, const std::string& path)
+        {
+            oscquery::Device::Options options;
+            options.host = host;
+            options.port = port;
+            options.httpTimeoutMs = resolverHttpTimeoutMs;
+            options.openWebsocket = false;
+
+            oscquery::Device probe (options);
+            const auto values = probe.readValue (path);
+
+            if (! values.has_value() || values->empty())
+                return std::nullopt;
+
+            return identityText (*values);
+        }
+
+        std::optional<std::string> fetchTreeHash (const std::string& host, int port)
+        {
+            oscquery::Device::Options options;
+            options.host = host;
+            options.port = port;
+            options.httpTimeoutMs = resolverHttpTimeoutMs;
+            options.openWebsocket = false;
+
+            oscquery::Device probe (options);
+
+            if (! probe.probe() || ! probe.fetchTree())
+                return std::nullopt;
+
+            std::string hash;
+            probe.withTree ([&] (const oscquery::Tree& tree) { hash = tree.treeHash(); });
+            return hash;
         }
     }
 
@@ -293,11 +373,12 @@ namespace oqa::core
     public:
         DeviceEntry (std::string keyIn, DeviceRef refIn, const RegistrySettings& settingsIn,
                      std::function<void (std::vector<Delivery>&)> onReceivedIn,
-                     std::function<void (DeviceEntry&)> onTreeLoadedIn)
+                     std::function<void (DeviceEntry&)> onRebuildIn,
+                     std::function<void()> onNeedsResolverIn)
             : juce::Thread ("oqa device " + juce::String (refIn.name)),
               key (std::move (keyIn)), ref (std::move (refIn)), settings (settingsIn),
-              onReceived (std::move (onReceivedIn)), onTreeLoaded (std::move (onTreeLoadedIn)),
-              guardMs (settingsIn.loopGuardMs)
+              onRebuild (std::move (onRebuildIn)), onNeedsResolver (std::move (onNeedsResolverIn)),
+              onReceived (std::move (onReceivedIn)), guardMs (settingsIn.loopGuardMs)
         {
             buffer.resize (datagramBufferBytes);
             openDevice();
@@ -397,11 +478,16 @@ namespace oqa::core
                 groupsRevision.fetch_add (1, std::memory_order_release);
             }
 
+            /*  LISTEN waits for the device to be confirmed (5b): listenAll()
+                then subscribes every group's path. IGNORE goes at once. */
+            const bool confirmed = useDevice.load (std::memory_order_acquire);
+
             withDevice ([&] (oscquery::Device& d)
             {
-                for (const auto& path : after)
-                    if (before.count (path) == 0)
-                        (void) d.listen (path);
+                if (confirmed)
+                    for (const auto& path : after)
+                        if (before.count (path) == 0)
+                            (void) d.listen (path);
 
                 for (const auto& path : before)
                     if (after.count (path) == 0)
@@ -422,16 +508,260 @@ namespace oqa::core
             settingsRevision.fetch_add (1, std::memory_order_release);
         }
 
-        void setAddress (const std::string& host, int port)
+        /*  Point the entry elsewhere: by the user's hand (used whatever NAME
+            answers, with a warning) or by the resolver (confirmed like any
+            address). The network thread opens the new Device. */
+        void setAddress (const std::string& host, int port, bool byHand)
         {
             {
                 const std::lock_guard<std::mutex> guard (settingsLock);
                 ref.lastHost = host;
                 ref.lastPort = port;
+                handPointed = byHand;
+                resolution = Resolution::checking;
+                resolutionNoteText.clear();
+                candidates.clear();
             }
 
+            useDevice.store (false, std::memory_order_release);
             addressChanged.store (true, std::memory_order_release);
             wake.signal();
+        }
+
+        //==============================================================================
+        //  Re-identification (5b). identify() and search() run on the resolver's
+        //  thread, their HTTP through throwaway Devices, no registry lock held.
+
+        bool needsIdentify() const noexcept { return identifyPending.load (std::memory_order_acquire); }
+
+        bool needsSearch() const
+        {
+            const std::lock_guard<std::mutex> guard (settingsLock);
+            return resolution == Resolution::mismatch || resolution == Resolution::searching || resolution == Resolution::unresolved;
+        }
+
+        /** The warning line the instance's status carries for this device, when there is one. */
+        std::string resolutionNote() const
+        {
+            const std::lock_guard<std::mutex> guard (settingsLock);
+            return resolutionNoteText;
+        }
+
+        /*  HOST_INFO is in at the current address: is it the device the chunk
+            means? NAME must be the chunk's; the identity leaf, when the chunk
+            names one, must read the stored value. A hand-pointed device passes
+            whatever answers, with a note. */
+        void identify()
+        {
+            if (! identifyPending.exchange (false, std::memory_order_acq_rel))
+                return;
+
+            std::optional<oscquery::HostInfo> info;
+            std::string host;
+            int port = 0;
+
+            withDevice ([&] (const oscquery::Device& d)
+            {
+                info = d.hostInfo();
+                host = d.options().host;
+                port = d.options().port;
+            });
+
+            if (! info.has_value())
+                return;
+
+            const auto r = reference();
+            const auto where = host + ":" + std::to_string (port);
+            std::string live;
+            std::string why;
+
+            if (r.identityPath.has_value() && ! r.identityPath->empty())
+            {
+                const auto read = readIdentity (host, port, *r.identityPath);
+                live = read.value_or (std::string());
+
+                if (! read.has_value())
+                    why = "its identity leaf " + *r.identityPath + " cannot be read";
+                else if (live != r.identityValue.value_or (std::string()))
+                    why = "its identity leaf " + *r.identityPath + " reads '" + live + "', not '" + r.identityValue.value_or (std::string()) + "'";
+            }
+
+            if (info->name != r.name)
+                why = "it answers as '" + info->name + "', not '" + r.name + "'" + (why.empty() ? "" : "; " + why);
+
+            bool pointed = false;
+            Resolution next = Resolution::confirmed;
+            std::string note;
+
+            {
+                const std::lock_guard<std::mutex> guard (settingsLock);
+                pointed = handPointed;
+
+                if (pointed)
+                {
+                    next = Resolution::pointed;
+
+                    if (! why.empty())
+                        note = "device \"" + r.name + "\" pointed at " + where + ": " + why;
+                }
+                else if (! why.empty())
+                {
+                    next = Resolution::mismatch;
+                    note = "device \"" + r.name + "\" at " + where + ": " + why + "; looking for it";
+                }
+
+                resolution = next;
+                answeredName = info->name;
+                identityLive = live;
+                resolutionNoteText = note;
+
+                if (pointed)
+                    candidates.clear();
+            }
+
+            if (next == Resolution::confirmed || next == Resolution::pointed)
+            {
+                useDevice.store (true, std::memory_order_release);
+                listenAll();
+                wake.signal();                  // the network thread opens the sender
+            }
+            else
+            {
+                useDevice.store (false, std::memory_order_release);
+
+                if (onNeedsResolver)
+                    onNeedsResolver();          // a search
+            }
+
+            /*  The slots' standing changed (pending to ok, or to the mismatch's words). */
+            if (onRebuild)
+                onRebuild (*this);
+        }
+
+        /*  Among what the Finder lists: the devices answering as the chunk's
+            NAME, elsewhere than the address that failed; told apart by the
+            identity leaf when the chunk names one, then by the tree hash when
+            the chunk has one. One left is adopted; none or several stay for
+            the user, listed in the status. */
+        void search (const std::vector<oscquery::Finder::Candidate>& found)
+        {
+            DeviceRef r;
+
+            {
+                const std::lock_guard<std::mutex> guard (settingsLock);
+
+                if (resolution != Resolution::mismatch && resolution != Resolution::searching && resolution != Resolution::unresolved)
+                    return;
+
+                r = ref;
+            }
+
+            std::vector<const oscquery::Finder::Candidate*> byName;
+
+            for (const auto& c : found)
+                if (c.reachable && c.hostInfo.has_value() && c.hostInfo->name == r.name
+                    && ! (c.host == r.lastHost && c.port == r.lastPort))
+                    byName.push_back (&c);
+
+            if (byName.empty())
+            {
+                const std::lock_guard<std::mutex> guard (settingsLock);
+
+                if (resolution == Resolution::unresolved)
+                {
+                    resolution = Resolution::searching;
+                    candidates.clear();
+                }
+
+                return;
+            }
+
+            std::vector<CandidateInfo> infos;
+            std::vector<std::size_t> matching;
+            const bool byIdentity = r.identityPath.has_value() && ! r.identityPath->empty();
+
+            for (const auto* c : byName)
+            {
+                CandidateInfo info;
+                info.host = c->host;
+                info.port = c->port;
+
+                if (byIdentity)
+                {
+                    const auto read = readIdentity (c->host, c->port, *r.identityPath);
+                    info.identity = read.value_or (std::string());
+                    info.identityMatch = read.has_value() && info.identity == r.identityValue.value_or (std::string());
+                }
+                else
+                {
+                    info.identityMatch = true;
+                }
+
+                if (info.identityMatch)
+                    matching.push_back (infos.size());
+
+                infos.push_back (std::move (info));
+            }
+
+            if (matching.size() > 1 && ! r.treeHash.empty())
+            {
+                std::vector<std::size_t> byHash;
+
+                for (const auto i : matching)
+                {
+                    auto& info = infos[i];
+                    const auto hash = fetchTreeHash (info.host, info.port);
+                    info.hashKnown = hash.has_value();
+                    info.hashMatch = hash.has_value() && *hash == r.treeHash;
+
+                    if (info.hashMatch)
+                        byHash.push_back (i);
+                }
+
+                matching = byHash;
+            }
+
+            if (matching.size() == 1)
+            {
+                const auto& chosen = infos[matching.front()];
+                setAddress (chosen.host, chosen.port, false);
+
+                /*  Kept after the move: how the choice was made. */
+                const std::lock_guard<std::mutex> guard (settingsLock);
+                candidates = infos;
+                return;
+            }
+
+            {
+                const std::lock_guard<std::mutex> guard (settingsLock);
+                resolution = Resolution::unresolved;
+                candidates = infos;
+                resolutionNoteText = "device \"" + r.name + "\": " + std::to_string (byName.size()) + " found under its name, "
+                                   + (matching.empty() ? std::string ("none") : std::to_string (matching.size())) + " matching; point at one";
+            }
+
+            /*  The instances' warnings carry the note. */
+            if (onRebuild)
+                onRebuild (*this);
+        }
+
+        /** LISTEN on every group's path, once the device is confirmed. Groups lock, then device lock, never nested. */
+        void listenAll()
+        {
+            std::set<std::string> paths;
+
+            {
+                const std::lock_guard<std::mutex> guard (groupsLock);
+
+                for (const auto& g : allGroups)
+                    paths.insert (g->path);
+            }
+
+            withDevice ([&] (oscquery::Device& d)
+            {
+                for (const auto& path : paths)
+                    (void) d.listen (path);
+            });
         }
 
         void setTiming (bool honoursTimetags, double offsetMs)
@@ -473,6 +803,23 @@ namespace oqa::core
         {
             SlotCheck out;
             out.detail = "waiting for the tree";
+
+            /*  Until the device is confirmed (5b) nothing is known of its tree
+                worth acting on: pending, with the resolution's words. */
+            if (! useDevice.load (std::memory_order_acquire))
+            {
+                const std::lock_guard<std::mutex> guard (settingsLock);
+
+                switch (resolution)
+                {
+                    case Resolution::mismatch:   out.detail = "the device at the address answers as '" + answeredName + "'"; break;
+                    case Resolution::searching:  out.detail = "the device is being looked for"; break;
+                    case Resolution::unresolved: out.detail = "the device is unresolved: point at it"; break;
+                    default:                     out.detail = "waiting for the device to be identified"; break;
+                }
+
+                return out;
+            }
 
             withDevice ([&] (const oscquery::Device& d)
             {
@@ -816,6 +1163,34 @@ namespace oqa::core
 
             o->setProperty ("last_seen_ms", static_cast<juce::int64> (lastSeenMs()));
 
+            /*  Where the entry stands with the device at its address (5b), and
+                the devices found under its NAME while it is unresolved. */
+            {
+                const std::lock_guard<std::mutex> guard (settingsLock);
+                o->setProperty ("resolution", resolutionName (resolution));
+                o->setProperty ("answered_name", juce::String (answeredName));
+                o->setProperty ("identity_path", r.identityPath.has_value() ? juce::var (juce::String (*r.identityPath)) : juce::var());
+                o->setProperty ("identity_live", juce::String (identityLive));
+                o->setProperty ("resolution_note", juce::String (resolutionNoteText));
+                o->setProperty ("hand_pointed", handPointed);
+
+                juce::Array<juce::var> list;
+
+                for (const auto& c : candidates)
+                {
+                    auto* entry = new juce::DynamicObject();
+                    entry->setProperty ("host", juce::String (c.host));
+                    entry->setProperty ("port", c.port);
+                    entry->setProperty ("identity", juce::String (c.identity));
+                    entry->setProperty ("identity_match", c.identityMatch);
+                    entry->setProperty ("hash_known", c.hashKnown);
+                    entry->setProperty ("hash_match", c.hashMatch);
+                    list.add (juce::var (entry));
+                }
+
+                o->setProperty ("candidates", list);
+            }
+
             o->setProperty ("values_received", static_cast<juce::int64> (valuesReceived.load()));
             o->setProperty ("loop_guarded", static_cast<juce::int64> (loopGuarded.load()));
             o->setProperty ("unmatched_received", static_cast<juce::int64> (unmatchedReceived.load()));
@@ -882,7 +1257,37 @@ namespace oqa::core
                 using State = oscquery::Device::State;
 
                 if (state == State::Reachable || state == State::TreeLoaded || state == State::Listening)
+                {
                     noteSeen();
+
+                    /*  HOST_INFO is in: the resolver compares NAME and the
+                        identity leaf before anything is sent (5b). */
+                    if (! identified.load (std::memory_order_acquire))
+                    {
+                        identifyPending.store (true, std::memory_order_release);
+
+                        if (onNeedsResolver)
+                            onNeedsResolver();
+                    }
+                }
+
+                if (state == State::Unreachable)
+                {
+                    /*  Nothing answers: not this device's address any more,
+                        until it answers again. The resolver searches. */
+                    {
+                        const std::lock_guard<std::mutex> guard (settingsLock);
+
+                        if (resolution != Resolution::unresolved)
+                            resolution = Resolution::searching;
+                    }
+
+                    useDevice.store (false, std::memory_order_release);
+                    identified.store (false, std::memory_order_release);
+
+                    if (onNeedsResolver)
+                        onNeedsResolver();
+                }
 
                 if (state == State::TreeLoaded || state == State::Listening)
                 {
@@ -925,11 +1330,15 @@ namespace oqa::core
                 const std::lock_guard<std::mutex> guard (settingsLock);
                 lastCallbackError = message;
             };
+            /*  Nothing is LISTENed before the device is confirmed (5b):
+                identify() subscribes every group's path then. */
+            identified.store (false, std::memory_order_release);
+            identifyPending.store (false, std::memory_order_release);
+            useDevice.store (false, std::memory_order_release);
+            (void) paths;
+
             device->setCallbacks (std::move (callbacks));
             device->start();
-
-            for (const auto& path : paths)
-                (void) device->listen (path);
 
             senderReady.store (false, std::memory_order_release);
             udp.close();
@@ -939,6 +1348,8 @@ namespace oqa::core
             resolvedOscIp.clear();
             liveTreeHash.clear();
             lastCallbackError.clear();
+            answeredName.clear();
+            identityLive.clear();
         }
 
         void noteSeen() noexcept
@@ -1044,6 +1455,10 @@ namespace oqa::core
         void ensureSender()
         {
             if (senderReady.load (std::memory_order_relaxed))
+                return;
+
+            //  Not until the device at the address is the one the chunk means (5b).
+            if (! useDevice.load (std::memory_order_acquire))
                 return;
 
             std::optional<oscquery::HostInfo> info;
@@ -1342,7 +1757,7 @@ namespace oqa::core
                     stopReplaced();
                 }
 
-                if (treeArrived.exchange (false, std::memory_order_acq_rel) && onTreeLoaded)
+                if (treeArrived.exchange (false, std::memory_order_acq_rel) && onRebuild)
                 {
                     const bool loaded = [this]
                     {
@@ -1354,7 +1769,7 @@ namespace oqa::core
                     if (loaded)
                     {
                         refreshTreeHash();
-                        onTreeLoaded (*this);
+                        onRebuild (*this);
                     }
                 }
 
@@ -1407,7 +1822,19 @@ namespace oqa::core
         std::unique_ptr<oscquery::Device> device;
         std::atomic<bool> addressChanged { false };
         std::atomic<bool> treeArrived { false };
-        std::function<void (DeviceEntry&)> onTreeLoaded;
+        std::function<void (DeviceEntry&)> onRebuild;          // the registry rebuilds this device's instances' plans
+        std::function<void()> onNeedsResolver;                 // wakes the resolver's thread
+
+        //  Re-identification (5b): under settingsLock unless atomic.
+        Resolution resolution = Resolution::checking;
+        std::string answeredName;
+        std::string identityLive;
+        std::string resolutionNoteText;
+        bool handPointed = false;
+        std::vector<CandidateInfo> candidates;
+        std::atomic<bool> useDevice { false };                 // confirmed or pointed: send and LISTEN
+        std::atomic<bool> identified { false };                // compared since this Device answered
+        std::atomic<bool> identifyPending { false };
 
         oscquery::net::RawUdpSender udp;
         std::unique_ptr<oscquery::net::TcpSender> tcp;
@@ -1467,6 +1894,144 @@ namespace oqa::core
 
         void applyBindings (InstanceRecord* instance, const StateChunk& chunk);
         void rebuildPlansFor (DeviceEntry* entry);
+
+        //==============================================================================
+        /*  THE RESOLVER (5b): one normal-priority thread, woken by the entries
+            (HOST_INFO in, nothing answering) and by the editor, ticking every
+            second besides. It identifies each entry that asks, and for the
+            entries searching it owns the process-wide Finder and offers them
+            its candidates. Entries live as long as the registry and shutdown()
+            stops this thread first, so the pointers it snapshots hold. */
+        struct Resolver final : private juce::Thread
+        {
+            explicit Resolver (Impl& ownerIn) : juce::Thread ("oqa resolver"), owner (ownerIn)
+            {
+                startThread (Priority::normal);
+            }
+
+            ~Resolver() override
+            {
+                stopNow();
+            }
+
+            void stopNow()
+            {
+                signalThreadShouldExit();
+                wake.signal();
+                stopThread (5000);
+
+                const std::lock_guard<std::mutex> guard (finderLock);
+                finder.stop();
+                finderRunning = false;
+            }
+
+            void poke() { wake.signal(); }
+
+            /** Start the Finder with the options at hand; a no-op once it runs. Any thread but under no registry lock. */
+            void ensureFinder()
+            {
+                const std::lock_guard<std::mutex> guard (finderLock);
+
+                if (finderRunning)
+                    return;
+
+                finderRunning = finder.start (finderOptions);
+            }
+
+            void addManual (const std::string& host, int port)
+            {
+                ensureFinder();
+                const std::lock_guard<std::mutex> guard (finderLock);
+                finder.addManual (host, port);
+                finder.refresh();
+                wake.signal();
+            }
+
+            void setOptions (const oscquery::Finder::Options& options)
+            {
+                const std::lock_guard<std::mutex> guard (finderLock);
+                finderOptions = options;
+
+                if (finderRunning)
+                {
+                    finder.stop();
+                    finderRunning = finder.start (finderOptions);
+                }
+            }
+
+            std::vector<oscquery::Finder::Candidate> found() const
+            {
+                const std::lock_guard<std::mutex> guard (finderLock);
+                return finderRunning ? finder.candidates() : std::vector<oscquery::Finder::Candidate> {};
+            }
+
+            bool running() const
+            {
+                const std::lock_guard<std::mutex> guard (finderLock);
+                return finderRunning;
+            }
+
+            void run() override
+            {
+                while (! threadShouldExit())
+                {
+                    (void) wake.waitFor (std::chrono::milliseconds (1000));
+                    wake.drain();
+
+                    if (threadShouldExit())
+                        break;
+
+                    tick();
+                }
+            }
+
+            void tick()
+            {
+                std::vector<DeviceEntry*> entries;
+
+                {
+                    const std::lock_guard<std::mutex> guard (owner.lock);
+
+                    for (auto& [key, entry] : owner.devices)
+                        entries.push_back (entry.get());
+                }
+
+                bool anySearching = false;
+
+                for (auto* entry : entries)
+                {
+                    if (threadShouldExit())
+                        return;
+
+                    entry->identify();
+                    anySearching = anySearching || entry->needsSearch();
+                }
+
+                if (! anySearching)
+                    return;
+
+                ensureFinder();
+                const auto candidates = found();
+
+                for (auto* entry : entries)
+                {
+                    if (threadShouldExit())
+                        return;
+
+                    if (entry->needsSearch())
+                        entry->search (candidates);
+                }
+            }
+
+            Impl& owner;
+            Wake wake;
+            mutable std::mutex finderLock;
+            oscquery::Finder finder;
+            oscquery::Finder::Options finderOptions;
+            bool finderRunning = false;
+        };
+
+        std::unique_ptr<Resolver> resolver;
 
         //==============================================================================
         /*  THE UDP RECEIVER (4b; PRD: "the plugin opens a UDP listener and shows
@@ -1645,7 +2210,8 @@ namespace oqa::core
 
             auto entry = std::make_unique<DeviceEntry> (key, ref, settings,
                                                         [this] (std::vector<Delivery>& deliveries) { deliver (deliveries); },
-                                                        [this] (DeviceEntry& e) { rebuildPlansFor (&e); });
+                                                        [this] (DeviceEntry& e) { rebuildPlansFor (&e); },
+                                                        [this] { if (resolver != nullptr) resolver->poke(); });
             auto& out = *entry;
             devices.emplace (key, std::move (entry));
             return out;
@@ -1682,7 +2248,10 @@ namespace oqa::core
         }
     };
 
-    Registry::Registry() : impl (std::make_unique<Impl>()) {}
+    Registry::Registry() : impl (std::make_unique<Impl>())
+    {
+        impl->resolver = std::make_unique<Impl::Resolver> (*impl);
+    }
 
     Registry::~Registry()
     {
@@ -1691,11 +2260,15 @@ namespace oqa::core
 
     void Registry::shutdown()
     {
-        /*  Instances first (their plans point at devices), then the devices,
+        /*  The resolver first (it holds entry pointers), then the receiver,
+            then instances (their plans point at devices), then the devices,
             each stopping its thread and its device. For a process that is
             ending, or a test that wants no thread left when main returns.
             Taken out from under the lock before they are destroyed: a device
             being stopped may be mid-delivery, waiting for that very lock. */
+        if (impl->resolver != nullptr)
+            impl->resolver->stopNow();
+
         impl->receiver.stop();
         impl->receiverPort = -1;
 
@@ -1819,6 +2392,10 @@ namespace oqa::core
 
             if (! ref.treeHash.empty() && ! live.empty() && ref.treeHash != live)
                 instance->warnings.push_back ("device \"" + ref.name + "\": the tree changed since the bind");
+
+            /*  Re-identification's word on this device (5b), when it has one. */
+            if (const auto note = entry.resolutionNote(); ! note.empty())
+                instance->warnings.push_back (note);
         }
 
         auto plan = std::make_unique<InstancePlan>();
@@ -2200,6 +2777,36 @@ namespace oqa::core
 
         o->setProperty ("devices", devices);
 
+        /*  The Finder's list (5b): what DNS-SD found and what was typed, each
+            probed, for the editor's device list and the Monitor. */
+        {
+            juce::Array<juce::var> found;
+            const auto now = std::chrono::steady_clock::now();
+
+            if (impl->resolver != nullptr)
+            {
+                for (const auto& c : impl->resolver->found())
+                {
+                    auto* f = new juce::DynamicObject();
+                    f->setProperty ("name", juce::String (c.name));
+                    f->setProperty ("host", juce::String (c.host));
+                    f->setProperty ("port", c.port);
+                    f->setProperty ("manual", c.manual);
+                    f->setProperty ("advertised", c.advertised);
+                    f->setProperty ("probed", c.probed);
+                    f->setProperty ("reachable", c.reachable);
+                    f->setProperty ("error", juce::String (c.error));
+                    f->setProperty ("last_seen_ms", c.lastSeen == std::chrono::steady_clock::time_point {}
+                                                        ? juce::int64 (-1)
+                                                        : static_cast<juce::int64> (std::chrono::duration_cast<std::chrono::milliseconds> (now - c.lastSeen).count()));
+                    found.add (juce::var (f));
+                }
+            }
+
+            o->setProperty ("found", found);
+            o->setProperty ("finder_running", impl->resolver != nullptr && impl->resolver->running());
+        }
+
         /*  The UDP receiver: the port to type into a device without LISTEN,
             beside this host's addresses; 0 while it is not running. */
         o->setProperty ("receive_port", impl->receiver.isRunning() ? impl->receiver.boundPort() : 0);
@@ -2220,8 +2827,26 @@ namespace oqa::core
         if (found == impl->devices.end() || host.empty() || port <= 0)
             return false;
 
-        found->second->setAddress (host, port);
+        found->second->setAddress (host, port, true);
         return true;
+    }
+
+    void Registry::finderEnsure()
+    {
+        if (impl->resolver != nullptr)
+            impl->resolver->ensureFinder();
+    }
+
+    void Registry::finderAddManual (const std::string& host, int port)
+    {
+        if (impl->resolver != nullptr && ! host.empty() && port > 0)
+            impl->resolver->addManual (host, port);
+    }
+
+    void Registry::setFinderOptions (const oscquery::Finder::Options& options)
+    {
+        if (impl->resolver != nullptr)
+            impl->resolver->setOptions (options);
     }
 
     void Registry::setSettings (const RegistrySettings& settings)
