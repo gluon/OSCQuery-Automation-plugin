@@ -141,12 +141,14 @@ namespace oqa::clapshim
         return true;
     }
 
-    void ClapPlugin::paramsFlush (const clap_input_events_t* in, const clap_output_events_t*) noexcept
+    void ClapPlugin::paramsFlush (const clap_input_events_t* in, const clap_output_events_t* out) noexcept
     {
         /*  Not processing (or the host chose flush): the events still land,
-            and what moved still goes to the device, so a knob turned while
-            the transport is idle reaches it. */
+            what the devices streamed goes out, and what moved still goes to
+            the device, so a knob turned while the transport is idle reaches
+            it. Never concurrent with process (clap/ext/params.h). */
         applyEvents (in);
+        drainReceived (out);
         postValues();
     }
 

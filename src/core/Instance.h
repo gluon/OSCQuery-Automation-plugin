@@ -171,6 +171,11 @@ namespace oqa::core
         /** Calls `apply (slot, normalised)` for each value waiting, oldest first; returns how many. */
         int pollReceived (const std::function<void (int slot, float normalised)>& apply);
 
+        /*  The same with a function pointer and a context, for a caller on
+            the audio thread (the CLAP shim drains in process and flush): no
+            std::function, nothing allocated here. */
+        int pollReceived (void (*apply) (int slot, float normalised, void* context), void* context) noexcept;
+
         /** The last value received for a slot, as 0-1; nullopt until one has. Any thread. */
         std::optional<float> lastReceived (int slot) const noexcept;
 

@@ -25,12 +25,17 @@
     Touch, Latch or Write it records what arrives between the two gesture
     events, as it would a hand on a fader.
 
-    Pure bookkeeping, per slot, on one thread (the shim's message thread):
-    which slots have a gesture open and when each last received. The shim
-    turns the answers into the format's calls (JUCE: beginChangeGesture,
-    setValueNotifyingHost, endChangeGesture; the CLAP shim's out-events in
-    Phase 5b). No clock of its own: the caller passes the time, so a test
-    needs no waiting.
+    Pure bookkeeping, per slot, on one thread (the JUCE shim's message
+    thread; the CLAP shim's audio thread, Phase 5b): which slots have a
+    gesture open and when each last received. The shim turns the answers into
+    the format's calls (JUCE: beginChangeGesture, setValueNotifyingHost,
+    endChangeGesture; CLAP: PARAM_GESTURE_BEGIN, PARAM_VALUE and
+    PARAM_GESTURE_END out-events). No clock of its own: the caller passes the
+    time, so a test needs no waiting.
+
+    Two spellings of each callback: a std::function for the message thread,
+    a function pointer with a context for the audio thread, where a lambda
+    too big for std::function's own buffer would allocate.
 */
 
 #include <functional>
@@ -53,9 +58,11 @@ namespace oqa::core
         /*  Close every gesture that has had no value for longer than
             `timeoutMs`, calling `close (slot)` for each; returns how many. */
         int expire (double nowMs, double timeoutMs, const std::function<void (int slot)>& close);
+        int expire (double nowMs, double timeoutMs, void (*close) (int slot, void* context), void* context) noexcept;
 
         /** Close every open gesture, calling `close (slot)` for each; returns how many. */
         int closeAll (const std::function<void (int slot)>& close);
+        int closeAll (void (*close) (int slot, void* context), void* context) noexcept;
 
         bool isOpen (int slot) const noexcept;
         int openCount() const noexcept;

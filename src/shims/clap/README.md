@@ -16,8 +16,12 @@ extension (`ClapParams.cpp`: one 0–1 parameter per slot, `CLAP_PARAM_IS_HIDDEN
 `module` from the device NAME and the path's container, text in device units, `rescan (INFO)` when
 the bindings change, `clear()` by the rule of 2026-11-09), and `StatusExtension.h`, a vendor
 extension answering the instance's status and the settings as JSON for the test host and for
-diagnosis without the editor. To come: record as out-events (5b-3), the JUCE editor in the host's
-window (5b-4), the loader reusing a core already in the process (5b-5).
+diagnosis without the editor. **5b-3** record (`ClapRecord.cpp`): the values a device streams are
+drained on the audio thread in `process` and `flush` into `PARAM_GESTURE_BEGIN`, `PARAM_VALUE` and
+`PARAM_GESTURE_END` out-events, the gesture closed after `gesture_timeout_ms`; the registry's wake
+asks the host to flush, and the 50 ms timer keeps asking while a gesture is open and the host is not
+processing. To come: the JUCE editor in the host's window (5b-4), the loader reusing a core already
+in the process (5b-5).
 
 `tests/clap/` is a host of our own that loads the built module and drives it through the C API;
 clap-validator runs on it in CI.

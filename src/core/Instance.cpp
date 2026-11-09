@@ -105,7 +105,7 @@ namespace oqa::core
         registerWake();
     }
 
-    int Instance::pollReceived (const std::function<void (int, float)>& apply)
+    int Instance::pollReceived (void (*apply) (int, float, void*), void* context) noexcept
     {
         if (handle == nullptr || ! canReceive())
             return 0;
@@ -124,8 +124,8 @@ namespace oqa::core
                 {
                     received[static_cast<std::size_t> (slots[i])].store (values[i], std::memory_order_relaxed);
 
-                    if (apply)
-                        apply (slots[i], values[i]);
+                    if (apply != nullptr)
+                        apply (slots[i], values[i], context);
                 }
             }
 
@@ -134,6 +134,19 @@ namespace oqa::core
             if (n < 64)
                 return total;
         }
+    }
+
+    int Instance::pollReceived (const std::function<void (int, float)>& apply)
+    {
+        if (! apply)
+            return pollReceived (nullptr, nullptr);
+
+        auto trampoline = [] (int slot, float normalised, void* context)
+        {
+            (*static_cast<const std::function<void (int, float)>*> (context)) (slot, normalised);
+        };
+
+        return pollReceived (trampoline, const_cast<std::function<void (int, float)>*> (&apply));
     }
 
     std::optional<float> Instance::lastReceived (int slot) const noexcept

@@ -33,6 +33,7 @@ add_library(oqa_clap MODULE
     ClapPlugin.h
     ClapPlugin.cpp
     ClapParams.cpp
+    ClapRecord.cpp
     StatusExtension.h
     $<TARGET_OBJECTS:oqa_core>
     $<TARGET_OBJECTS:oqa_oscquery>)

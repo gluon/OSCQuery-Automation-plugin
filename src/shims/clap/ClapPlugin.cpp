@@ -46,13 +46,27 @@ namespace oqa::clapshim
           values (new std::atomic<float>[static_cast<std::size_t> (slotCount)]),
           scratch (static_cast<std::size_t> (slotCount), 0.0f),
           standing (static_cast<std::size_t> (slotCount)),
+          gestures (slotCount),
+          endPending (new std::atomic<bool>[static_cast<std::size_t> (slotCount)]),
           statusExtension {
               [] (const clap_plugin_t* p) -> const char* { auto& me = self (p); me.statusText = me.core.statusJson(); return me.statusText.c_str(); },
               [] (const clap_plugin_t* p) -> const char* { auto& me = self (p); me.settingsText = me.core.settingsJson(); return me.settingsText.c_str(); },
           }
     {
         for (int i = 0; i < slotCount; ++i)
+        {
             values[static_cast<std::size_t> (i)].store (0.0f, std::memory_order_relaxed);
+            endPending[static_cast<std::size_t> (i)].store (false, std::memory_order_relaxed);
+        }
+
+        /*  Record: the registry wakes us once per message a device streams,
+            on a thread of its own; the host is asked to flush, and the values
+            are drained into out-events there or in the next process. */
+        core.setReceiveWake ([this]
+        {
+            if (_host.canUseParams() && ! isProcessing())
+                _host.paramsRequestFlush();
+        });
     }
 
     ClapPlugin::~ClapPlugin()
@@ -68,6 +82,7 @@ namespace oqa::clapshim
     {
         core.connect();
         recordStanding();
+        refreshSettings();
         shownRevision = core.revision();
 
         if (_host.canUseTimerSupport())
@@ -85,6 +100,17 @@ namespace oqa::clapshim
 
     void ClapPlugin::deactivate() noexcept
     {
+        /*  A gesture a device left open ends: the host hears the END at the
+            next flush, which it is asked for. Not processing here, so the
+            tracker is ours to touch. */
+        if (gestures.closeAll ([] (int slot, void* context) { static_cast<ClapPlugin*> (context)->endPending[static_cast<std::size_t> (slot)].store (true, std::memory_order_relaxed); }, this) > 0)
+        {
+            openGestures.store (0, std::memory_order_relaxed);
+
+            if (_host.canUseParams())
+                _host.paramsRequestFlush();
+        }
+
         core.disconnect();
     }
 
@@ -131,6 +157,7 @@ namespace oqa::clapshim
         const core::rt::ScopedRealtimeCheck region;
 
         applyEvents (process->in_events);
+        drainReceived (process->out_events);
 
         /*  Audio: nothing. Where the host gave output buffers of its own,
             the input is copied over; in place, there is nothing to do. */
@@ -237,8 +264,15 @@ namespace oqa::clapshim
     //==============================================================================
     void ClapPlugin::onTimer (clap_id) noexcept
     {
+        /*  A gesture open while the host is not processing closes only in a
+            flush, so one is asked for until it has. */
+        if (openGestures.load (std::memory_order_relaxed) > 0 && ! isProcessing() && _host.canUseParams())
+            _host.paramsRequestFlush();
+
         if (++ticks % slowEveryTicks != 0)
             return;
+
+        refreshSettings();
 
         /*  A binding made by anything but a state load (the editor, Phase
             5b-4; a future headless path) renames too. The clear rule reads

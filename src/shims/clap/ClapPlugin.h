@@ -29,9 +29,10 @@
       process, flush      the parameter events are applied (the last value
                           of each slot in the block; decided 2026-11-09, the
                           sample-accurate send waits for a device that
-                          honours timetags), audio passes through untouched,
-                          the slots' values go to the core, which posts what
-                          moved and ends the block
+                          honours timetags), what the devices streamed goes
+                          out as events (below), audio passes through
+                          untouched, the slots' values go to the core, which
+                          posts what moved and ends the block
       params              one per slot, id = slot index, 0-1, AUTOMATABLE;
                           HIDDEN while unbound (the PRD's "hidden where the
                           format allows"); name = display name; module =
@@ -52,6 +53,19 @@
                           unbind, never on rebinding a live slot. The shim
                           keeps each slot's last standing from the status for
                           that.
+      record (5b-3)       the registry wakes us once per message a device
+                          streams for a receiving slot, on a thread of its
+                          own; the wake asks the host to flush. In process or
+                          in that flush, on the audio thread, the values are
+                          drained (lock-free; devplan Phase 5b) into
+                          out-events: PARAM_GESTURE_BEGIN on a gesture's first
+                          value, PARAM_VALUE, PARAM_GESTURE_END once the
+                          gesture has been idle for gesture_timeout_ms (the
+                          one clock read per block, an exception to the
+                          lipogram as the wake notify is). Whether a lane
+                          records is the host's mode, as the PRD decides. The
+                          50 ms timer asks for a flush while a gesture is open
+                          and the host is not processing, so it closes.
       state               the core's JSON chunk over clap_istream and
                           clap_ostream, the parameters' values in it
 
@@ -66,6 +80,7 @@
 #include "StatusExtension.h"
 
 #include <core/Instance.h>
+#include <core/receive/Gesture.h>
 #include <core/registry/RegistryLoader.h>
 
 #include <clap/helpers/plugin.hh>
@@ -129,13 +144,16 @@ namespace oqa::clapshim
 
     private:
         static constexpr std::uint32_t timerPeriodMs = 50;
-        static constexpr int slowEveryTicks = 5;     ///< the revision poll and the status, every 250 ms
+        static constexpr int slowEveryTicks = 5;     ///< the revision poll, the status and the settings, every 250 ms
 
-        /** This plugin from its clap_plugin, for the extension's trampolines. */
+        /** This plugin from its clap_plugin, for the extensions' trampolines. */
         static ClapPlugin& self (const clap_plugin_t* plugin) noexcept;
 
         /** Apply the parameter events of a list: each slot's last value. Audio thread, or main when inactive. */
         void applyEvents (const clap_input_events_t* in) noexcept;
+
+        /** What the devices streamed, as gesture and value events (ClapRecord.cpp). Same threads. */
+        void drainReceived (const clap_output_events_t* out) noexcept;
 
         /** The values to the core: what moved is posted, the block ended. */
         void postValues() noexcept;
@@ -147,6 +165,9 @@ namespace oqa::clapshim
 
         /** Each slot's binding and standing as of now, for the next bindingsChanged. Main thread. */
         void recordStanding() noexcept;
+
+        /** The registry's settings this shim reads (gesture_timeout_ms). Main thread. */
+        void refreshSettings() noexcept;
 
         const core::LoadedCore& loaded;
         const int count;
@@ -171,6 +192,13 @@ namespace oqa::clapshim
         int ticks = 0;
 
         clap_id timerId = CLAP_INVALID_ID;
+
+        //  Record (5b-3). The tracker is the audio thread's while processing,
+        //  the main thread's otherwise (deactivate, flush); never both.
+        core::GestureTracker gestures;
+        std::unique_ptr<std::atomic<bool>[]> endPending;     ///< gestures closed outside a flush, their END owed
+        std::atomic<int> openGestures { 0 };
+        std::atomic<double> gestureTimeoutMs { 200.0 };
 
         //  The status extension's strings, kept until the next call.
         std::string statusText, settingsText;

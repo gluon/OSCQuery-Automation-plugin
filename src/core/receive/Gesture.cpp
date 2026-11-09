@@ -42,7 +42,7 @@ namespace oqa::core
         return true;
     }
 
-    int GestureTracker::expire (double nowMs, double timeoutMs, const std::function<void (int)>& close)
+    int GestureTracker::expire (double nowMs, double timeoutMs, void (*close) (int, void*), void* context) noexcept
     {
         int closed = 0;
 
@@ -54,14 +54,14 @@ namespace oqa::core
             open[i] = false;
             ++closed;
 
-            if (close)
-                close (static_cast<int> (i));
+            if (close != nullptr)
+                close (static_cast<int> (i), context);
         }
 
         return closed;
     }
 
-    int GestureTracker::closeAll (const std::function<void (int)>& close)
+    int GestureTracker::closeAll (void (*close) (int, void*), void* context) noexcept
     {
         int closed = 0;
 
@@ -73,11 +73,29 @@ namespace oqa::core
             open[i] = false;
             ++closed;
 
-            if (close)
-                close (static_cast<int> (i));
+            if (close != nullptr)
+                close (static_cast<int> (i), context);
         }
 
         return closed;
+    }
+
+    namespace
+    {
+        void callFunction (int slot, void* context)
+        {
+            (*static_cast<const std::function<void (int)>*> (context)) (slot);
+        }
+    }
+
+    int GestureTracker::expire (double nowMs, double timeoutMs, const std::function<void (int)>& close)
+    {
+        return expire (nowMs, timeoutMs, close ? &callFunction : nullptr, const_cast<std::function<void (int)>*> (&close));
+    }
+
+    int GestureTracker::closeAll (const std::function<void (int)>& close)
+    {
+        return closeAll (close ? &callFunction : nullptr, const_cast<std::function<void (int)>*> (&close));
     }
 
     bool GestureTracker::isOpen (int slot) const noexcept
