@@ -482,6 +482,25 @@ namespace oqatest
 
         //==============================================================================
         //  HTTP, on the server's thread.
+
+        /** `node` (a deep copy) with every leaf's ACCESS less its write bit, down the subtree. */
+        static juce::var clampedToRead (juce::var node)
+        {
+            if (auto* object = node.getDynamicObject())
+            {
+                if (object->hasProperty ("TYPE"))
+                    object->setProperty ("ACCESS", static_cast<int> (object->getProperty ("ACCESS")) & 1);
+                else if (object->hasProperty ("ACCESS"))
+                    object->setProperty ("ACCESS", static_cast<int> (object->getProperty ("ACCESS")) & 1);
+
+                if (auto* contents = object->getProperty ("CONTENTS").getDynamicObject())
+                    for (auto& child : contents->getProperties())
+                        contents->setProperty (child.name, clampedToRead (child.value));
+            }
+
+            return node;
+        }
+
         static SimpleWeb::StatusCode statusCodeFor (int status)
         {
             switch (status)
@@ -537,7 +556,22 @@ namespace oqatest
 
             {
                 const std::lock_guard<std::mutex> guard (lock);
-                const auto node = findIn (root, path);
+                auto node = findIn (root, path);
+
+                /*  ACCESS as reported to this client (C6): a stranger to the
+                    allow-list sees the leaves read-only, on a copy. */
+                if (node.isObject() && options.allowList.has_value())
+                {
+                    /*  The server is dual-stack: an IPv4 client arrives as the
+                        mapped IPv6 form (::ffff:a.b.c.d); the list is spelled IPv4. */
+                    auto client = juce::String (request->remote_endpoint().address().to_string());
+
+                    if (client.startsWithIgnoreCase ("::ffff:"))
+                        client = client.fromFirstOccurrenceOf (":", false, false).fromLastOccurrenceOf (":", false, false);
+
+                    if (! options.allowList->contains (client))
+                        node = clampedToRead (node.clone());
+                }
 
                 if (! node.isObject())
                 {
@@ -894,6 +928,12 @@ namespace oqatest
         const std::lock_guard<std::mutex> guard (impl->lock);
         impl->feedbackHost = host;
         impl->feedbackPort = port;
+    }
+
+    void MockDevice::setAllowList (std::optional<juce::StringArray> allowList)
+    {
+        const std::lock_guard<std::mutex> guard (impl->lock);
+        impl->options.allowList = std::move (allowList);
     }
 
     void MockDevice::closeAllConnections()

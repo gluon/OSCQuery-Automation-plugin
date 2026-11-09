@@ -97,6 +97,11 @@ namespace oqa::core
         int addDevice (const DeviceRef& device);
         void setDeviceTiming (int deviceIndex, bool honoursTimetags, double offsetMs);
 
+        /*  The hash of the device's tree as the editor shows it, written at every
+            bind and rebind (Phase 5a): what the registry compares the live tree
+            with for the PRD's "the device changed since the bind" notice. */
+        void setDeviceTreeHash (int deviceIndex, const std::string& hash);
+
         bool bind (int slot, const oscquery::Node& node, std::size_t argument, int deviceIndex, std::string& why);
         bool bindAll (int firstSlot, const oscquery::Node& node, int deviceIndex, std::string& why);
         void unbind (int slot);

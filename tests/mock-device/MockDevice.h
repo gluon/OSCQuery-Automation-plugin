@@ -48,6 +48,7 @@
 #include <chrono>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -96,6 +97,14 @@ namespace oqatest
                 as a real one echoes (Phase 4's loop guard). Below zero: off.
                 UDP only; messages of f, i, T and F, and bundles of them. */
             int echoDelayMs = -1;
+
+            /*  Per-client ACCESS (spec draft C6; Phase 5). Set: a request from
+                an address not listed sees every leaf's ACCESS clamped to read
+                (3 -> 1, 2 -> 0) in the tree, a subtree and `?ACCESS`, as a
+                device's client table refuses a stranger writes; the stored
+                tree is untouched, so node() still says what the owner sees.
+                Unset: every client sees the tree's ACCESS. */
+            std::optional<juce::StringArray> allowList;
         };
 
         MockDevice();
@@ -166,6 +175,9 @@ namespace oqatest
             setValue and setValueBundle send there too, from OSC_PORT. Port 0
             turns it off. UDP transport only. */
         void setFeedbackTarget (const juce::String& host, int port);
+
+        /** Replaces Options::allowList while running: the device's client table edited under the client's feet. */
+        void setAllowList (std::optional<juce::StringArray> allowList);
 
         /** Every binary frame received over the websocket, in order: the OSC a
             client sends a device this way (spec draft L3, L4). */

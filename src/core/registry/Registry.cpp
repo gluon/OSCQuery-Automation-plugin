@@ -220,6 +220,44 @@ namespace oqa::core
         std::vector<std::shared_ptr<Group>> groups;
     };
 
+    /*  WHAT THE TREE SAYS OF A BOUND SLOT (Phase 5a; PRD "Reopening a session"
+        step 3 and the failure-states table). Pending until the device's tree is
+        in; then ok, or stale (the path is gone, retyped, or moved: the slot keeps
+        its lane and joins no group), or unauthorised (ACCESS as reported to this
+        client excludes what the slot's direction wants: it still receives when
+        it may). Never stored in the chunk: a device repaired later un-stales the
+        slot by itself. */
+    enum class SlotState { pending, ok, missing, retyped, renamed, unauthorised };
+
+    const char* slotStateName (SlotState s) noexcept
+    {
+        switch (s)
+        {
+            case SlotState::pending:      return "pending";
+            case SlotState::ok:           return "ok";
+            case SlotState::missing:      return "missing";
+            case SlotState::retyped:      return "retyped";
+            case SlotState::renamed:      return "renamed";
+            case SlotState::unauthorised: return "unauthorised";
+        }
+
+        return "pending";
+    }
+
+    struct SlotCheck
+    {
+        SlotState state = SlotState::pending;
+        std::string detail;
+        std::string renamedTo;
+        bool mayDrive = true;       // a sending slot joins its group's driven arguments
+        bool mayReceive = true;     // a receiving slot is delivered to
+
+        bool stale() const noexcept
+        {
+            return state == SlotState::missing || state == SlotState::retyped || state == SlotState::renamed;
+        }
+    };
+
     class Registry::InstanceRecord
     {
     public:
@@ -233,6 +271,7 @@ namespace oqa::core
         std::vector<DeviceEntry*> deviceByIndex;                // the chunk's devices[], resolved (message thread)
         std::vector<std::string> warnings;
         std::unique_ptr<StateChunk> lastChunk;                  // what the plan was built from, for a rebuild
+        std::map<int, SlotCheck> slotChecks;                    // per bound slot, by host parameter ID (5a)
 
         /** The direct-send path's buffer, this instance's own. */
         std::vector<std::uint8_t> directBuffer;
@@ -402,6 +441,127 @@ namespace oqa::core
             ref.offsetMs = offsetMs;
         }
 
+        /** The chunk's hash of this device's tree at bind time, when the chunk has one. */
+        void setTreeHash (const std::string& hash)
+        {
+            if (hash.empty())
+                return;
+
+            const std::lock_guard<std::mutex> guard (settingsLock);
+            ref.treeHash = hash;
+        }
+
+        /** The live tree's hash, computed by the network thread when the tree lands; empty before. */
+        std::string treeHash() const
+        {
+            const std::lock_guard<std::mutex> guard (settingsLock);
+            return liveTreeHash;
+        }
+
+        /** Milliseconds since the device last said anything (HTTP, websocket or UDP); -1 never. */
+        std::int64_t lastSeenMs() const noexcept
+        {
+            const auto seen = lastSeenNanos.load (std::memory_order_relaxed);
+            return seen == 0 ? -1 : std::max<std::int64_t> (0, (steadyNanos() - seen) / 1000000);
+        }
+
+        //==============================================================================
+        /*  THE CHECK OF A BOUND SLOT against the tree (5a). Under the device
+            lock and the Device's own; the renames under their own lock, alone.
+            Called under the registry's lock from applyBindings. */
+        SlotCheck check (const Slot& slot) const
+        {
+            SlotCheck out;
+            out.detail = "waiting for the tree";
+
+            withDevice ([&] (const oscquery::Device& d)
+            {
+                if (! d.treeLoaded())
+                    return;
+
+                d.withTree ([&] (const oscquery::Tree& tree)
+                {
+                    const auto* node = tree.find (slot.path);
+
+                    if (node == nullptr)
+                    {
+                        if (! ancestorsLoaded (tree, slot.path))
+                        {
+                            out.detail = "the device has not served this part of its tree yet";
+                            return;
+                        }
+
+                        const auto target = renamedTo (slot.path);
+
+                        if (! target.empty())
+                        {
+                            out.state = SlotState::renamed;
+                            out.renamedTo = target;
+                            out.detail = "moved to " + target;
+                        }
+                        else
+                        {
+                            out.state = SlotState::missing;
+                            out.detail = "the path is not in the tree";
+                        }
+
+                        return;
+                    }
+
+                    forgetRename (slot.path);
+
+                    if (node->isContainer())
+                    {
+                        out.state = SlotState::missing;
+                        out.detail = "the path is a container now";
+                        return;
+                    }
+
+                    const auto arg = static_cast<std::size_t> (std::max (0, slot.argIndex));
+                    const auto& type = *node->type;
+
+                    if (arg >= type.size())
+                    {
+                        out.state = SlotState::retyped;
+                        out.detail = "TYPE '" + type + "' has no argument " + std::to_string (arg);
+                        return;
+                    }
+
+                    const auto isToggle = [] (char c) { return c == 'T' || c == 'F'; };
+
+                    if (type[arg] != slot.type && ! (isToggle (type[arg]) && isToggle (slot.type)))
+                    {
+                        out.state = SlotState::retyped;
+                        out.detail = std::string ("TYPE '") + slot.type + "' is now '" + type[arg] + "'";
+                        return;
+                    }
+
+                    const auto access = std::to_string (node->effectiveAccess());
+                    out.mayDrive = slot.sends() && node->bindableForSend();
+                    out.mayReceive = slot.receives() && node->bindableForRecord();
+
+                    if (slot.sends() && ! node->bindableForSend())
+                    {
+                        out.state = SlotState::unauthorised;
+                        out.detail = "ACCESS " + access + ": read-only for this client";
+                        return;
+                    }
+
+                    if (slot.receives() && ! slot.sends() && ! node->bindableForRecord())
+                    {
+                        out.state = SlotState::unauthorised;
+                        out.detail = "ACCESS " + access + ": not readable for this client";
+                        return;
+                    }
+
+                    out.state = SlotState::ok;
+                    out.detail.clear();
+                });
+            });
+
+            return out;
+        }
+
         DeviceRef reference() const
         {
             const std::lock_guard<std::mutex> guard (settingsLock);
@@ -537,6 +697,7 @@ namespace oqa::core
                         matching.push_back (g);
             }
 
+            noteSeen();
             valuesReceived.fetch_add (1, std::memory_order_relaxed);
 
             if (matching.empty())
@@ -619,7 +780,15 @@ namespace oqa::core
                     o->setProperty ("osc_port", info->oscPort);
                 }
 
-                o->setProperty ("last_error", juce::String (d.lastError()));
+                auto error = d.lastError();
+
+                if (error.empty())
+                {
+                    const std::lock_guard<std::mutex> guard (settingsLock);
+                    error = lastCallbackError;
+                }
+
+                o->setProperty ("last_error", juce::String (error));
 
                 /*  Where record stands on this device: listening over the
                     websocket; unsupported (no LISTEN in EXTENSIONS: the UDP
@@ -634,6 +803,18 @@ namespace oqa::core
 
                 o->setProperty ("listen", listen);
             });
+
+            /*  Re-identification's words (5a): the chunk's hash of the tree at
+                bind time against the live tree's, and when the device last
+                said anything. */
+            {
+                const std::lock_guard<std::mutex> guard (settingsLock);
+                o->setProperty ("tree_hash", juce::String (r.treeHash));
+                o->setProperty ("tree_hash_live", juce::String (liveTreeHash));
+                o->setProperty ("tree_changed", ! r.treeHash.empty() && ! liveTreeHash.empty() && r.treeHash != liveTreeHash);
+            }
+
+            o->setProperty ("last_seen_ms", static_cast<juce::int64> (lastSeenMs()));
 
             o->setProperty ("values_received", static_cast<juce::int64> (valuesReceived.load()));
             o->setProperty ("loop_guarded", static_cast<juce::int64> (loopGuarded.load()));
@@ -698,7 +879,12 @@ namespace oqa::core
             callbacks.onValue = [this] (const std::string& path, const oscquery::osc::Values& values) { received (path, values); };
             callbacks.onState = [this] (oscquery::Device::State state)
             {
-                if (state == oscquery::Device::State::TreeLoaded || state == oscquery::Device::State::Listening)
+                using State = oscquery::Device::State;
+
+                if (state == State::Reachable || state == State::TreeLoaded || state == State::Listening)
+                    noteSeen();
+
+                if (state == State::TreeLoaded || state == State::Listening)
                 {
                     treeArrived.store (true, std::memory_order_release);
                     wake.signal();
@@ -706,8 +892,38 @@ namespace oqa::core
             };
             callbacks.onTreeChanged = [this] (const std::string&)
             {
+                noteSeen();
                 treeArrived.store (true, std::memory_order_release);
                 wake.signal();
+            };
+
+            /*  A path gone or moved (5a): the library has already patched its
+                tree and dropped its subscriptions under the path; the plans
+                are rebuilt so the slots there show stale, a rename remembered
+                for the one-click rebind. On the Device's thread, which never
+                takes the device lock: the renames have their own. */
+            callbacks.onPathRemoved = [this] (const std::string&)
+            {
+                noteSeen();
+                treeArrived.store (true, std::memory_order_release);
+                wake.signal();
+            };
+            callbacks.onPathRenamed = [this] (const std::string& oldPath, const std::string& newPath)
+            {
+                noteSeen();
+
+                {
+                    const std::lock_guard<std::mutex> guard (renamesLock);
+                    renames[oldPath] = newPath;
+                }
+
+                treeArrived.store (true, std::memory_order_release);
+                wake.signal();
+            };
+            callbacks.onError = [this] (const std::string& message)
+            {
+                const std::lock_guard<std::mutex> guard (settingsLock);
+                lastCallbackError = message;
             };
             device->setCallbacks (std::move (callbacks));
             device->start();
@@ -721,6 +937,95 @@ namespace oqa::core
 
             const std::lock_guard<std::mutex> settingsGuard (settingsLock);
             resolvedOscIp.clear();
+            liveTreeHash.clear();
+            lastCallbackError.clear();
+        }
+
+        void noteSeen() noexcept
+        {
+            lastSeenNanos.store (steadyNanos(), std::memory_order_relaxed);
+        }
+
+        /*  Whether every container above `path` that exists has been served:
+            a path missing under one the device sent without CONTENTS is not
+            known missing. */
+        static bool ancestorsLoaded (const oscquery::Tree& tree, const std::string& path)
+        {
+            auto parent = path;
+
+            while (! parent.empty())
+            {
+                const auto slash = parent.rfind ('/');
+
+                if (slash == std::string::npos)
+                    break;
+
+                parent = slash == 0 ? std::string ("/") : parent.substr (0, slash);
+
+                if (const auto* node = tree.find (parent))
+                    return node->loaded;
+
+                if (parent == "/")
+                    break;
+            }
+
+            return true;
+        }
+
+        /** Where `path` went, following PATH_RENAMED of it or of a container above it; empty when nowhere. */
+        std::string renamedTo (const std::string& path) const
+        {
+            const std::lock_guard<std::mutex> guard (renamesLock);
+            auto current = path;
+
+            for (int hops = 0; hops < 16; ++hops)
+            {
+                std::string next;
+
+                for (const auto& [from, to] : renames)
+                {
+                    if (current == from)
+                    {
+                        next = to;
+                        break;
+                    }
+
+                    if (current.size() > from.size() && current.compare (0, from.size(), from) == 0 && current[from.size()] == '/')
+                    {
+                        next = to + current.substr (from.size());
+                        break;
+                    }
+                }
+
+                if (next.empty() || next == current)
+                    break;
+
+                current = next;
+            }
+
+            return current == path ? std::string() : current;
+        }
+
+        /** The tree holds `path` again: no rename of it is worth remembering. */
+        void forgetRename (const std::string& path) const
+        {
+            const std::lock_guard<std::mutex> guard (renamesLock);
+            renames.erase (path);
+        }
+
+        /** The network thread, when the tree lands or changes: the hash the status and the notice compare. */
+        void refreshTreeHash()
+        {
+            std::string hash;
+
+            withDevice ([&] (const oscquery::Device& d)
+            {
+                if (d.treeLoaded())
+                    d.withTree ([&] (const oscquery::Tree& tree) { hash = tree.treeHash(); });
+            });
+
+            const std::lock_guard<std::mutex> guard (settingsLock);
+            liveTreeHash = hash;
         }
 
         /** The device openDevice() replaced, for stopReplaced(). */
@@ -1047,7 +1352,10 @@ namespace oqa::core
                     }();
 
                     if (loaded)
+                    {
+                        refreshTreeHash();
                         onTreeLoaded (*this);
+                    }
                 }
 
                 refreshSettings();
@@ -1137,6 +1445,13 @@ namespace oqa::core
         std::atomic<std::uint64_t> udpReceived { 0 };
         std::atomic<std::uint64_t> udpIgnored { 0 };
         std::string resolvedOscIp;              // under settingsLock
+
+        //  Re-identification and stale slots (5a).
+        std::string liveTreeHash;               // under settingsLock
+        std::string lastCallbackError;          // under settingsLock
+        std::atomic<std::int64_t> lastSeenNanos { 0 };
+        mutable std::mutex renamesLock;
+        mutable std::map<std::string, std::string> renames;     // PATH_RENAMED old -> new, under renamesLock
     };
 
     //==============================================================================
@@ -1324,6 +1639,7 @@ namespace oqa::core
             if (found != devices.end())
             {
                 found->second->setTiming (ref.honoursTimetags, ref.offsetMs);
+                found->second->setTreeHash (ref.treeHash);
                 return *found->second;
             }
 
@@ -1482,6 +1798,7 @@ namespace oqa::core
 
         instance->warnings.clear();
         instance->deviceByIndex.clear();
+        instance->slotChecks.clear();
 
         for (const auto& ref : chunk.devices)
         {
@@ -1492,7 +1809,16 @@ namespace oqa::core
                 continue;
             }
 
-            instance->deviceByIndex.push_back (&entryFor (ref));
+            auto& entry = entryFor (ref);
+            instance->deviceByIndex.push_back (&entry);
+
+            /*  The PRD's one-line notice (step 4 of reopening): the tree is not
+                what it was when the slots were bound. The chunk's own hash
+                against the live one, so each instance speaks for its binds. */
+            const auto live = entry.treeHash();
+
+            if (! ref.treeHash.empty() && ! live.empty() && ref.treeHash != live)
+                instance->warnings.push_back ("device \"" + ref.name + "\": the tree changed since the bind");
         }
 
         auto plan = std::make_unique<InstancePlan>();
@@ -1522,6 +1848,23 @@ namespace oqa::core
             }
 
             auto* entry = instance->deviceByIndex[static_cast<std::size_t> (slot.deviceIndex)];
+
+            /*  Against the tree (5a): a stale slot keeps its lane and joins no
+                group; an unauthorised one drives nothing but may still receive;
+                a pending one (no tree yet) is planned as before and re-checked
+                when the tree lands. */
+            const auto check = entry->check (slot);
+            instance->slotChecks[slot.hostParamId] = check;
+
+            if (check.stale())
+                continue;
+
+            const bool drives = slot.sends() && (check.state != SlotState::unauthorised || check.mayDrive);
+            const bool receives = slot.receives() && (check.state != SlotState::unauthorised || check.mayReceive);
+
+            if (! drives && ! receives)
+                continue;
+
             const auto groupKey = std::make_pair (slot.deviceIndex, slot.path);
             auto& group = groups[groupKey];
 
@@ -1547,7 +1890,7 @@ namespace oqa::core
             group->slots[arg] = slot;
             group->critical = group->critical || slot.critical;
 
-            if (slot.sends())
+            if (drives)
             {
                 /*  Only a sending slot is posted by the audio thread. */
                 group->driven[arg] = true;
@@ -1555,7 +1898,7 @@ namespace oqa::core
                 plan->argOfSlot[static_cast<std::size_t> (slot.hostParamId)] = static_cast<std::uint16_t> (arg);
             }
 
-            if (slot.receives())
+            if (receives)
                 group->receiver[arg] = slot.hostParamId;
         }
 
@@ -1821,6 +2164,24 @@ namespace oqa::core
                     warnings.add (juce::String (w));
 
                 o->setProperty ("warnings", warnings);
+
+                /*  Every bound slot's standing against its device's tree (5a). */
+                juce::Array<juce::var> slots;
+
+                for (const auto& [id, check] : instance->slotChecks)
+                {
+                    auto* s = new juce::DynamicObject();
+                    s->setProperty ("id", id);
+                    s->setProperty ("state", slotStateName (check.state));
+                    s->setProperty ("detail", juce::String (check.detail));
+
+                    if (! check.renamedTo.empty())
+                        s->setProperty ("renamed_to", juce::String (check.renamedTo));
+
+                    slots.add (juce::var (s));
+                }
+
+                o->setProperty ("slots", slots);
                 o->setProperty ("direct_sent", static_cast<juce::int64> (instance->directSent.load()));
                 o->setProperty ("received", static_cast<juce::int64> (instance->received.load()));
                 o->setProperty ("received_dropped", static_cast<juce::int64> (instance->incoming.dropped()));

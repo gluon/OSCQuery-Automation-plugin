@@ -63,6 +63,18 @@
     its instance's incoming ring, with one wake to the instance's shim. Devices
     without LISTEN are served by one UDP receiver per process (4b).
 
+    STALE SLOTS (Phase 5a, 2026-11-09). When a plan is built and the device's
+    tree is in, every bound slot is checked against it: the path exists, is a
+    leaf, has the slot's argument with the slot's TYPE, and ACCESS as reported
+    to this client allows what the direction wants. A slot whose path is gone,
+    retyped or moved (PATH_RENAMED remembered per device) is stale: it keeps
+    its lane and its name in the host and joins no group, so nothing is sent
+    or LISTENed for it; a slot the device lets this client only read drives
+    nothing but still receives. The standing of every bound slot is in the
+    instance's status (`slots`), with where a moved path went; the chunk's
+    `tree_hash` against the live tree's is one warning line. PATH_REMOVED and
+    PATH_RENAMED rebuild the plans live, as the tree landing does.
+
     LOCK ORDER: the registry's lock, then a device entry's groups lock, or
     either alone; never the reverse. received() copies the matching groups
     under the groups lock, releases, and only then reaches the registry.

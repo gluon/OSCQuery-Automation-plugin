@@ -32,7 +32,8 @@ add_executable(oqa_core_tests
     ReceiveTests.cpp
     UdpReceiveTests.cpp
     GestureTests.cpp
-    LoaderTests.cpp)
+    LoaderTests.cpp
+    StaleTests.cpp)
 
 target_include_directories(oqa_core_tests PRIVATE "${CMAKE_SOURCE_DIR}/tests")
 target_include_directories(oqa_core_tests SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/ThirdParty/doctest")

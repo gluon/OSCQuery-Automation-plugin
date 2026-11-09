@@ -232,6 +232,20 @@ namespace oqa::core
         push();
     }
 
+    void Instance::setDeviceTreeHash (int deviceIndex, const std::string& hash)
+    {
+        if (deviceIndex < 0 || deviceIndex >= static_cast<int> (state.devices.size()))
+            return;
+
+        auto& device = state.devices[static_cast<std::size_t> (deviceIndex)];
+
+        if (device.treeHash == hash)
+            return;
+
+        device.treeHash = hash;
+        push();
+    }
+
     bool Instance::bind (int slot, const oscquery::Node& node, std::size_t argument, int deviceIndex, std::string& why)
     {
         if (slot < 0 || slot >= count)
