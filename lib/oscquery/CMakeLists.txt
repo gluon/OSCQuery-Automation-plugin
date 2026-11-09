@@ -78,7 +78,13 @@ add_library(oqa_oscquery STATIC
 
     # The per-user recents store, a juce::PropertiesFile at the standard location.
     oscquery/Recents.h
-    oscquery/Recents.cpp)
+    oscquery/Recents.cpp
+
+    # An OSCQuery server over a Tree (Phase 6b-1): HTTP, websocket, OSC in over both and UDP,
+    # LISTEN, the PATH_* notifications, ACCESS per client. The plugin's own server sits on it.
+    oscquery/server/AccessPolicy.h
+    oscquery/server/OscQueryServer.h
+    oscquery/server/OscQueryServer.cpp)
 add_library(oqa::oscquery ALIAS oqa_oscquery)
 
 set_target_properties(oqa_oscquery PROPERTIES POSITION_INDEPENDENT_CODE ON)

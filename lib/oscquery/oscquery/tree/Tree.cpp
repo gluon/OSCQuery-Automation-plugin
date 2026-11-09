@@ -749,6 +749,11 @@ namespace oqa::oscquery
         return juce::SHA256 (text.data(), text.size()).toHexString().toStdString();
     }
 
+    juce::var Tree::toVar (const Node& node)
+    {
+        return nodeToVar (node);
+    }
+
     juce::var Tree::toVar() const
     {
         return nodeToVar (rootNode);

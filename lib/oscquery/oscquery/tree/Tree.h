@@ -105,6 +105,9 @@ namespace oqa::oscquery
         /** The tree as JSON in `GET /` shape, extras included. */
         juce::var toVar() const;
 
+        /** One node and its descendants in the same shape (a subtree GET, C7). */
+        static juce::var toVar (const Node& node);
+
     private:
         Node rootNode;
     };

@@ -33,6 +33,7 @@ add_executable(oqa_oscquery_tests
     RawUdpSenderTests.cpp
     RecentsTests.cpp
     LargeTreeTests.cpp
+    ServerTests.cpp
     "${CMAKE_SOURCE_DIR}/tests/support/TreeGen.h")
 
 target_include_directories(oqa_oscquery_tests PRIVATE "${CMAKE_SOURCE_DIR}/tests")
